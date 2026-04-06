@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#09090f">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<title>Ome365</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+SC:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="app">
+  <transition name="toast-fade">
+    <div v-if="toastMsg" class="global-toast" :class="toastType">{{toastMsg}}</div>
+  </transition>
+
+  <!-- Loading overlay -->
+  <div v-if="loading && !dash" class="loading-screen">
+    <div class="loading-logo"><span class="logo-r">O</span><span class="logo-365">me365</span></div>
+    <div class="loading-bar"><div class="loading-fill"></div></div>
+    <div class="loading-text">加载中...</div>
+  </div>
+
+  <!-- Sidebar (Desktop) -->
+  <aside class="sidebar" :class="{collapsed: sidebarCollapsed}">
+    <div class="sidebar-header">
+      <div class="sidebar-logo" @click="sidebarCollapsed = !sidebarCollapsed">
+        <span class="logo-r">O</span><span class="logo-365" v-show="!sidebarCollapsed">365</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <a v-for="item in navItems" :key="item.key" class="nav-item" :class="{active: view === item.key}" @click="switchView(item.key)">
+        <span class="nav-icon">{{item.icon}}</span>
+        <span class="nav-text" v-show="!sidebarCollapsed">{{item.label}}</span>
+        <span class="nav-badge" v-if="item.badge && !sidebarCollapsed">{{item.badge}}</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer" v-show="!sidebarCollapsed">
+      <div class="status-label">Q{{quarter}} · {{quarterTheme}}</div>
+      <div class="status-progress">
+        <div class="mini-bar"><div class="mini-fill" :style="{width: yearPct+'%'}"></div></div>
+        <span class="status-num">Day {{dayNumber}}/365</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main-area">
+    <header class="topbar">
+      <button class="mobile-menu-btn" @click="mobileNavOpen=true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+      </button>
+      <div class="topbar-title">{{currentTitle}}</div>
+      <div class="topbar-right"><span class="topbar-date">{{dateDisplay}} {{weekday}}</span></div>
+    </header>
+
+    <!-- View loading indicator -->
+    <div v-if="loading && dash" class="view-loading"><div class="loading-bar"><div class="loading-fill"></div></div></div>
+
+    <div class="content">
+
+      <!-- ══ DASHBOARD ══ -->
+      <div v-if="view==='dashboard'" class="view" key="dashboard">
+        <div class="greeting-bar">
+          <span class="greeting-emoji">{{greeting.emoji}}</span>
+          <span class="greeting-text">{{greeting.text}}</span>
+        </div>
+
+        <div class="grid-2">
+          <div class="card card-highlight">
+            <div class="card-row-center">
+              <svg class="ring" viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(200,169,110,0.08)" stroke-width="10"/>
+                <circle cx="60" cy="60" r="50" fill="none" stroke="#c8a96e" stroke-width="10"
+                  :stroke-dasharray="314.16" :stroke-dashoffset="314.16*(1-Math.min(dayNumber,365)/365)"
+                  stroke-linecap="round" transform="rotate(-90 60 60)" style="transition:stroke-dashoffset 1.5s cubic-bezier(.4,0,.2,1)"/>
+                <text x="60" y="54" text-anchor="middle" fill="#e8e0cc" font-size="28" font-weight="800" font-family="JetBrains Mono">{{dayNumber}}</text>
+                <text x="60" y="72" text-anchor="middle" fill="#666" font-size="11">/365</text>
+              </svg>
+              <div class="ring-meta">
+                <div class="ring-headline" v-if="daysToStart>0">距入职还有 <strong>{{daysToStart}}</strong> 天</div>
+                <div class="ring-headline" v-else>已启程 <strong>{{dayNumber}}</strong> 天</div>
+                <div class="ring-sub">Q{{quarter}} · W{{week}} · {{quarterTheme}}</div>
+              </div>
+            </div>
+          </div>
+          <div class="card card-interactive" @click="switchView('today')">
+            <div class="card-top"><span class="card-label">今日</span><span class="card-value" v-if="todayStats.total">{{todayStats.done}}/{{todayStats.total}}</span></div>
+            <div class="mini-tasks">
+              <div v-for="t in todayTasks.slice(0,3)" :key="t.text" class="mini-task" :class="{done:t.done}"><span class="mini-check" :class="{done:t.done}"></span><span>{{t.text}}</span></div>
+              <div v-if="!todayTasks.length" class="empty-sm">点击开始今日规划</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-top"><span class="card-label">本周关键动作</span><span class="card-value">{{weekStats.pct}}%</span></div>
+          <div class="bar-wrap" v-if="weekStats.total"><div class="bar"><div class="bar-fill" :class="barColor(weekStats.pct)" :style="{width:weekStats.pct+'%'}"></div></div><span class="bar-num">{{weekStats.done}}/{{weekStats.total}}</span></div>
+          <div class="task-list compact">
+            <div v-for="t in weekTasks.slice(0,5)" :key="t.text" class="task-row" @click.stop="toggleWeek(t)">
+              <span class="check" :class="{done:t.done}"><svg v-if="t.done" viewBox="0 0 24 24" width="14" height="14"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="currentColor"/></svg></span>
+              <span class="task-label" :class="{done:t.done}">{{t.text}}</span>
+            </div>
+            <div v-if="weekTasks.length>5" class="see-more" @click="switchView('week')">查看全部 {{weekTasks.length}} 项 →</div>
+          </div>
+        </div>
+
+        <div class="card"><div class="card-top"><span class="card-label">里程碑</span></div>
+          <div class="milestone-list-v2">
+            <div v-for="m in milestones" :key="m.date" class="ms-card" :class="{past:m.past, 'ms-next':!m.past && milestones.filter(x=>!x.past)[0]?.date===m.date}" :style="!m.past?{borderLeftColor:m.color||'var(--gold)'}:{}">
+              <div class="ms-card-top">
+                <span class="ms-date-v2">{{m.date}}</span>
+                <span v-if="m.category && m.category!=='其他'" class="ms-cat-tag" :style="{color:m.color,background:m.color+'18'}">{{m.category}}</span>
+              </div>
+              <div class="ms-card-label">{{m.label}}</div>
+              <div v-if="!m.past && m.countdown!=null" class="ms-card-countdown" :class="{'ms-urgent':m.countdown<=7,'ms-soon':m.countdown<=30&&m.countdown>7}">
+                {{m.countdown===0?'🔥 今天！':m.countdown+'天后'}}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" v-if="heatmapData">
+          <div class="card-top"><span class="card-label">365天活跃度</span><span class="card-value">{{heatmapActive}} 天</span></div>
+          <div class="heatmap-wrap">
+            <div class="heatmap-months"><span v-for="m in heatmapMonths" :key="m.label" class="heatmap-month" :style="{gridColumn:m.col}">{{m.label}}</span></div>
+            <div class="heatmap-grid">
+              <div v-for="(d,i) in heatmapData.days" :key="d.date" class="heatmap-cell" :class="'level-'+Math.max(0,d.level)" :style="{gridRow:d.weekday+1,gridColumn:Math.floor(i/7)+1}" :title="d.date+(d.detail?' · '+d.detail:'')" @click="heatmapClick(d)"></div>
+            </div>
+            <div class="heatmap-legend"><span class="heatmap-legend-label">少</span><span class="heatmap-cell level-0"></span><span class="heatmap-cell level-1"></span><span class="heatmap-cell level-2"></span><span class="heatmap-cell level-3"></span><span class="heatmap-cell level-4"></span><span class="heatmap-legend-label">多</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-top"><span class="card-label">🤖 AI 助手</span></div>
+          <div class="ai-quick-actions">
+            <button class="ai-action-btn" @click="askAISuggestion('today')" :disabled="aiSugLoading">📋 今天干嘛</button>
+            <button class="ai-action-btn" @click="askAISuggestion('next')" :disabled="aiSugLoading">🎯 下个突破口</button>
+            <button class="ai-action-btn" @click="askAISuggestion('review')" :disabled="aiSugLoading">📊 今日复盘</button>
+            <button class="ai-action-btn" @click="askAISuggestion('energy')" :disabled="aiSugLoading">💪 给我打气</button>
+          </div>
+          <div v-if="aiSugLoading" class="ai-loading">🤖 Ome365 AI 思考中...</div>
+          <div v-if="aiSuggestion" class="ai-suggestion-result">
+            <div class="rendered-md" v-html="aiSuggestionHtml"></div>
+            <button class="btn-ghost btn-xs" style="margin-top:8px" @click="aiSuggestion=''">关闭</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ TODAY ══ -->
+      <div v-if="view==='today'" class="view" key="today">
+        <div class="card">
+          <div class="card-top"><span class="card-label">今日任务</span><span class="card-value" v-if="todayStats.total">{{todayStats.done}}/{{todayStats.total}} · {{todayStats.pct}}%</span></div>
+          <div class="bar-wrap" v-if="todayStats.total"><div class="bar"><div class="bar-fill" :class="barColor(todayStats.pct)" :style="{width:todayStats.pct+'%'}"></div></div></div>
+          <div class="task-list">
+            <div v-for="t in todayTasks" :key="t.text" class="task-row-wrap">
+              <div class="task-row" @click="toggleToday(t)">
+                <span class="check" :class="{done:t.done}"><svg v-if="t.done" viewBox="0 0 24 24" width="14" height="14"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="currentColor"/></svg></span>
+                <span class="task-label" :class="{done:t.done}">{{t.text}}</span>
+                <span v-if="t.repeat" class="repeat-badge" :title="t.repeat==='daily'?'每日重复':'每周重复'">🔁</span>
+                <button class="task-edit-btn" @click.stop="startEditTask(t,'today')" title="编辑">✏️</button>
+              </div>
+              <div v-if="t.description" class="task-desc">{{t.description}}</div>
+            </div>
+          </div>
+          <!-- Task edit modal -->
+          <div v-if="editingTask && editingTask.type==='today'" class="task-edit-panel">
+            <div class="card-top"><span class="card-label">编辑任务</span></div>
+            <input v-model="editTaskText" class="input" placeholder="任务内容">
+            <textarea v-model="editTaskDesc" class="input" rows="3" placeholder="详细描述（可选）" style="margin-top:8px"></textarea>
+            <div class="form-actions" style="margin-top:8px">
+              <button class="btn-primary-sm" @click="saveEditTask">保存</button>
+              <button class="btn-ghost" @click="cancelEditTask">取消</button>
+            </div>
+          </div>
+          <div v-if="addingTodayTask" class="add-task-form">
+            <div class="add-task-row">
+              <input v-model="newTodayTask" class="add-task-input" placeholder="新任务..." @keydown.enter="addTodayTask" @keydown.esc="addingTodayTask=false" autofocus>
+              <button class="btn-primary-sm" @click="addTodayTask" :disabled="!newTodayTask.trim()">添加</button>
+              <button class="btn-ghost" @click="addingTodayTask=false">取消</button>
+            </div>
+            <div class="add-task-options">
+              <label class="task-opt"><span class="task-opt-icon">⏰</span><input v-model="newTaskTime" type="time" class="time-input"></label>
+              <select v-model="newTaskRepeat" class="cat-select-sm"><option value="none">不重复</option><option value="daily">每日重复</option><option value="weekly">每周重复</option></select>
+              <select v-model="newTaskCategory" class="cat-select-sm">
+                <option value="">分类</option>
+                <option v-for="c in categories" :key="c.id" :value="c.id">{{c.icon}} {{c.name}}</option>
+              </select>
+            </div>
+          </div>
+          <button v-if="!addingTodayTask && !editingTask" class="btn-add-task" @click="addingTodayTask=true">+ 添加任务</button>
+        </div>
+        <div class="card">
+          <div class="card-top"><span class="card-label">日记</span>
+            <div class="card-actions">
+              <button v-if="!editingToday" class="btn-ghost" @click="startEditToday">编辑</button>
+              <button v-if="editingToday" class="btn-primary-sm" @click="saveToday">保存</button>
+              <button v-if="editingToday" class="btn-ghost" @click="editingToday=false">取消</button>
+            </div>
+          </div>
+          <div v-if="!editingToday" class="rendered-md" v-html="todayHtml"></div>
+          <textarea v-else v-model="todayEditRaw" class="editor" rows="20"></textarea>
+        </div>
+      </div>
+
+      <!-- ══ WEEK ══ -->
+      <div v-if="view==='week'" class="view" key="week">
+        <div class="card">
+          <div class="card-top"><span class="card-label">W{{week}} 关键动作</span><span class="card-value">{{weekStats.pct}}%</span></div>
+          <div class="bar-wrap"><div class="bar"><div class="bar-fill" :class="barColor(weekStats.pct)" :style="{width:weekStats.pct+'%'}"></div></div></div>
+          <div class="task-list">
+            <div v-for="t in weekTasks" :key="t.text" class="task-row-wrap">
+              <div class="task-row" @click="toggleWeek(t)">
+                <span class="check" :class="{done:t.done}"><svg v-if="t.done" viewBox="0 0 24 24" width="14" height="14"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="currentColor"/></svg></span>
+                <span class="task-label" :class="{done:t.done}">{{t.text}}</span>
+                <span v-if="t.repeat" class="repeat-badge" :title="t.repeat==='daily'?'每日重复':'每周重复'">🔁</span>
+                <button class="task-edit-btn" @click.stop="startEditTask(t,'week')" title="编辑">✏️</button>
+              </div>
+              <div v-if="t.description" class="task-desc">{{t.description}}</div>
+            </div>
+          </div>
+          <div v-if="editingTask && editingTask.type==='week'" class="task-edit-panel">
+            <div class="card-top"><span class="card-label">编辑任务</span></div>
+            <input v-model="editTaskText" class="input" placeholder="任务内容">
+            <textarea v-model="editTaskDesc" class="input" rows="3" placeholder="详细描述（可选）" style="margin-top:8px"></textarea>
+            <div class="form-actions" style="margin-top:8px">
+              <button class="btn-primary-sm" @click="saveEditTask">保存</button>
+              <button class="btn-ghost" @click="cancelEditTask">取消</button>
+            </div>
+          </div>
+          <div v-if="addingWeekTask" class="add-task-form">
+            <div class="add-task-row">
+              <input v-model="newWeekTask" class="add-task-input" placeholder="新任务..." @keydown.enter="addWeekTask" @keydown.esc="addingWeekTask=false" autofocus>
+              <button class="btn-primary-sm" @click="addWeekTask" :disabled="!newWeekTask.trim()">添加</button>
+              <button class="btn-ghost" @click="addingWeekTask=false">取消</button>
+            </div>
+            <div class="add-task-options">
+              <label class="task-opt"><span class="task-opt-icon">⏰</span><input v-model="newTaskTime" type="time" class="time-input"></label>
+              <select v-model="newTaskRepeat" class="cat-select-sm"><option value="none">不重复</option><option value="daily">每日重复</option><option value="weekly">每周重复</option></select>
+              <select v-model="newTaskCategory" class="cat-select-sm">
+                <option value="">分类</option>
+                <option v-for="c in categories" :key="c.id" :value="c.id">{{c.icon}} {{c.name}}</option>
+              </select>
+            </div>
+          </div>
+          <button v-if="!addingWeekTask && !editingTask" class="btn-add-task" @click="addingWeekTask=true">+ 添加任务</button>
+        </div>
+        <div class="card"><div class="card-top"><span class="card-label">周回顾</span></div><div class="rendered-md" v-html="weekHtml"></div></div>
+      </div>
+
+      <!-- ══ PLAN ══ -->
+      <div v-if="view==='plan'" class="view" key="plan">
+        <div class="card card-highlight" v-if="planData">
+          <div class="card-row-center">
+            <svg class="ring ring-sm" viewBox="0 0 80 80">
+              <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(200,169,110,0.08)" stroke-width="7"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke="#c8a96e" stroke-width="7"
+                :stroke-dasharray="201" :stroke-dashoffset="201*(1-planData.overview.pct/100)"
+                stroke-linecap="round" transform="rotate(-90 40 40)" style="transition:stroke-dashoffset 1s ease"/>
+              <text x="40" y="44" text-anchor="middle" fill="#e8e0cc" font-size="18" font-weight="700" font-family="JetBrains Mono">{{planData.overview.pct}}%</text>
+            </svg>
+            <div class="ring-meta">
+              <div class="ring-headline">年度总进度</div>
+              <div class="ring-sub">{{planData.overview.done}} / {{planData.overview.total}} 项完成</div>
+            </div>
+          </div>
+        </div>
+        <div class="tab-bar" v-if="planData">
+          <button v-for="q in planData.quarters" :key="q.id" class="tab-btn" :class="{active: planQuarter===q.id}" @click="planQuarter=q.id">
+            Q{{q.id}} · {{q.theme}} <span class="tab-pct">{{q.stats.pct}}%</span>
+          </button>
+        </div>
+        <div v-if="planData && currentPlanQ" class="plan-grid">
+          <div v-for="dim in currentPlanQ.dimensions" :key="dim.name" class="card dim-card" :style="{'border-top': '3px solid '+dim.color}">
+            <div class="dim-header">
+              <span class="dim-icon">{{dim.icon}}</span><span class="dim-name">{{dim.name}}</span>
+              <div class="dim-stats-right">
+                <span class="dim-done" :style="{color:dim.color}">{{dim.stats.done}}</span>
+                <span class="dim-total">/{{dim.stats.total}}</span>
+              </div>
+            </div>
+            <div class="bar-wrap"><div class="bar"><div class="bar-fill" :style="{width:dim.stats.pct+'%', background:'linear-gradient(90deg,'+dim.color+','+dim.color+'88)'}"></div></div><span class="bar-num" :style="{color:dim.color}">{{dim.stats.pct}}%</span></div>
+            <div class="task-list compact">
+              <div v-for="t in dim.tasks" :key="t.text" class="task-row" @click="togglePlanTask(t)">
+                <span class="check" :class="{done:t.done}" :style="t.done?{background:dim.color,borderColor:dim.color}:{}"><svg v-if="t.done" viewBox="0 0 24 24" width="14" height="14"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="currentColor"/></svg></span>
+                <span class="task-label" :class="{done:t.done}">{{t.text}}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card" v-if="planData">
+          <div class="card-top"><span class="card-label">里程碑时间轴</span></div>
+          <div class="timeline">
+            <div v-for="m in planData.milestones" :key="m.date" class="tl-item" :class="{past:m.past, current: isCurrentMilestone(m)}">
+              <div class="tl-dot" :style="!m.past&&m.color?{background:m.color}:{}"></div>
+              <div class="tl-line"></div>
+              <div class="tl-content">
+                <span class="tl-date">{{m.date}}</span>
+                <span class="tl-label">{{m.label}}</span>
+                <span v-if="m.category && m.category!=='其他'" class="tl-cat" :style="{color:m.color}">{{m.category}}</span>
+                <span v-if="!m.past && m.countdown!=null" class="tl-countdown">{{m.countdown}}天</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ DECISIONS ══ -->
+      <div v-if="view==='decisions'" class="view" key="decisions">
+        <div v-if="decisionDetail" class="card card-highlight">
+          <div class="card-top">
+            <span class="card-label">决策详情</span>
+            <div class="card-actions">
+              <span class="badge" v-if="decisionDetail.meta.status" :class="'badge-'+decisionDetail.meta.status">{{decisionDetail.meta.status}}</span>
+              <button class="btn-ghost" @click="decisionDetail=null">← 返回列表</button>
+            </div>
+          </div>
+          <div class="decision-meta">
+            <span v-if="decisionDetail.meta.scope">📌 {{decisionDetail.meta.scope}}</span>
+            <span v-if="decisionDetail.meta.impact">影响: {{decisionDetail.meta.impact}}</span>
+            <span v-if="decisionDetail.meta.verify_by">验证日期: {{decisionDetail.meta.verify_by}}</span>
+          </div>
+          <div class="rendered-md" v-html="decisionDetailHtml"></div>
+        </div>
+        <template v-else>
+          <button v-if="!showDecisionForm" class="btn-create" @click="showDecisionForm=true">+ 新建决策</button>
+          <div class="card" v-if="showDecisionForm">
+            <div class="card-top"><span class="card-label">新建决策</span></div>
+            <div class="form-group"><input v-model="newDecision.title" class="input" placeholder="决策标题" @keydown.enter="createDecision"></div>
+            <div class="form-row">
+              <div class="form-group half"><label class="form-label">范围</label><select v-model="newDecision.scope" class="input"><option>架构</option><option>产品</option><option>组织</option><option>商业</option></select></div>
+              <div class="form-group half"><label class="form-label">影响</label><select v-model="newDecision.impact" class="input"><option>高</option><option>中</option><option>低</option></select></div>
+            </div>
+            <div class="form-group"><label class="form-label">背景</label><textarea v-model="newDecision.background" class="input" rows="3" placeholder="为什么需要做这个决策？"></textarea></div>
+            <div class="form-actions"><button class="btn-primary" @click="createDecision" :disabled="!newDecision.title.trim()">创建</button><button class="btn-ghost" @click="showDecisionForm=false">取消</button></div>
+          </div>
+          <div class="kanban">
+            <div v-for="col in decisionColumns" :key="col.status" class="kanban-col">
+              <div class="kanban-header" :class="col.class"><span>{{col.status}}</span><span class="kanban-count">{{col.items.length}}</span></div>
+              <div class="kanban-cards">
+                <div v-for="d in col.items" :key="d.file" class="kanban-card" @click="openDecisionDetail(d)">
+                  <div class="kc-top"><span class="kc-date">{{d.date}}</span><span class="kc-impact" :class="'impact-'+d.impact">{{d.impact}}</span></div>
+                  <div class="kc-title">{{d.title}}</div>
+                  <div class="kc-scope">{{d.scope}}</div>
+                  <div class="kc-actions"><button class="btn-ghost btn-xs" @click="toggleDecisionStatus(d, $event)">切换状态</button></div>
+                </div>
+                <div v-if="!col.items.length" class="empty-sm">暂无</div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- ══ NOTES ══ -->
+      <div v-if="view==='notes'" class="view" key="notes">
+        <div class="card">
+          <div class="card-top"><span class="card-label">速记</span>
+            <div class="card-actions">
+              <span class="shortcut-hint">{{isMac?'⌘':'Ctrl'}}+K</span>
+            </div>
+          </div>
+          <div class="notes-input-wrap">
+            <textarea v-model="noteText" class="editor notes-editor" :placeholder="notePlaceholder" rows="3" @keydown.meta.enter="submitNote" @keydown.ctrl.enter="submitNote"></textarea>
+            <div class="notes-toolbar">
+              <button class="tool-btn" :class="{recording: isRecording}" @click="toggleRecording" :title="isRecording?'停止录音':'语音速记'">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                <span v-if="isRecording" class="rec-dot"></span>
+              </button>
+              <button class="tool-btn" :class="{transcribing: isTranscribing}" @click="startSpeechToText" title="语音转文字">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+                <span style="font-size:10px;margin-left:2px">文</span>
+                <span v-if="isTranscribing" class="rec-dot"></span>
+              </button>
+              <button class="tool-btn" @click="$refs.imageInput.click()" title="添加图片">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              </button>
+              <input ref="imageInput" type="file" accept="image/*" style="display:none" @change="uploadImage">
+              <select v-model="noteCategory" class="cat-select-sm" title="分类">
+                <option value="">📌 分类</option>
+                <option v-for="c in categories" :key="c.id" :value="c.id">{{c.icon}} {{c.name}}</option>
+              </select>
+              <button class="tool-btn" @click="showAudioSettings=!showAudioSettings; if(showAudioSettings)loadAudioDevices()" title="麦克风设置">⚙</button>
+              <button class="tool-btn tool-ai" @click="askAI" :disabled="!noteText.trim() && !aiLoading" title="AI处理">🤖 AI</button>
+              <div class="toolbar-spacer"></div>
+              <span class="notes-hint">{{isMac?'⌘':'Ctrl'}}+Enter</span>
+              <button class="btn-primary" @click="submitNote" :disabled="!noteText.trim()">保存</button>
+            </div>
+          </div>
+          <div v-if="isRecording" class="recording-bar">
+            <span class="rec-pulse"></span><span>录音中 {{recordingTime}}s</span>
+            <button class="btn-ghost" @click="stopRecording">停止并保存</button>
+          </div>
+          <div v-if="isTranscribing" class="recording-bar" style="background:var(--blue-dim);border-color:rgba(96,165,250,0.3);color:var(--blue);">
+            <span class="rec-pulse" style="background:var(--blue)"></span><span>语音识别中...</span>
+            <button class="btn-ghost" @click="startSpeechToText">停止</button>
+          </div>
+          <!-- Audio settings -->
+          <div v-if="showAudioSettings" class="audio-settings">
+            <div class="as-header"><span>🎙 麦克风设置</span><button class="btn-ghost btn-xs" @click="showAudioSettings=false">关闭</button></div>
+            <div v-if="!audioDevices.length" class="as-loading">加载设备中...</div>
+            <div v-for="d in audioDevices" :key="d.deviceId" class="as-device" :class="{active: selectedDevice===d.deviceId}" @click="selectAudioDevice(d.deviceId)">
+              <span class="as-check" v-if="selectedDevice===d.deviceId">✓</span>
+              <span>{{d.label || '未知设备'}}</span>
+            </div>
+            <div v-if="audioDevices.length" class="as-device" :class="{active: !selectedDevice}" @click="selectAudioDevice('')">
+              <span class="as-check" v-if="!selectedDevice">✓</span>
+              <span>系统默认</span>
+            </div>
+          </div>
+          <div v-if="aiResponse" class="ai-response">
+            <div class="ai-header"><span>🤖 Ome365 AI</span><div class="ai-actions"><button class="btn-ghost btn-xs" @click="saveAIAsNote">保存为速记</button><button class="btn-ghost btn-xs" @click="aiResponse=''">关闭</button></div></div>
+            <div class="rendered-md" v-html="aiResponseHtml"></div>
+          </div>
+          <div v-if="aiLoading" class="ai-loading">🤖 Ome365 AI 思考中...</div>
+          <div v-if="aiError" class="ai-error">{{aiError}}</div>
+          <div v-if="noteSuccess" class="toast">已保存 {{noteTime}}</div>
+        </div>
+
+        <!-- Category filter & manage -->
+        <div class="card card-compact">
+          <div class="filter-bar">
+            <button class="filter-btn" :class="{active:noteCategoryFilter==='all'}" @click="noteCategoryFilter='all'">全部</button>
+            <button v-for="c in categories" :key="c.id" class="filter-btn" :class="{active:noteCategoryFilter===c.id}" @click="noteCategoryFilter=c.id" :style="noteCategoryFilter===c.id?{borderColor:c.color,color:c.color}:{}">
+              {{c.icon}} {{c.name}}
+            </button>
+            <button class="filter-btn filter-manage" @click="showCategoryForm=!showCategoryForm">⚙</button>
+          </div>
+          <div v-if="showCategoryForm" class="cat-form">
+            <div class="form-row">
+              <input v-model="newCategory.icon" class="input cat-icon-input" placeholder="📌" maxlength="2">
+              <input v-model="newCategory.name" class="input" placeholder="分类名称" style="flex:3" @keydown.enter="createCategory">
+              <input v-model="newCategory.color" type="color" class="cat-color-input">
+              <button class="btn-primary-sm" @click="createCategory">+</button>
+            </div>
+            <div class="cat-list">
+              <div v-for="c in categories" :key="c.id" class="cat-item">
+                <span :style="{color:c.color}">{{c.icon}} {{c.name}}</span>
+                <button v-if="c.id!=='uncategorized'" class="btn-ghost btn-xs" @click="deleteCategory(c.id)">删除</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Source file inline viewer -->
+        <div class="card" v-if="noteSourceFile">
+          <div class="card-top"><span class="card-label">📄 {{noteSourceFile._path}}</span><button class="btn-ghost" @click="noteSourceFile=null">← 返回速记</button></div>
+          <pre class="source-pre">{{noteSourceFile.raw}}</pre>
+        </div>
+
+        <!-- History -->
+        <div class="card" v-for="group in notes" :key="group.date" v-show="!noteSourceFile">
+          <div class="card-top">
+            <span class="card-label">{{group.date}}</span>
+            <div class="card-actions"><span class="card-value">{{group.items.length}} 条</span><button class="btn-ghost btn-xs" @click="openNoteFile(group)" title="打开源文件">📄</button></div>
+          </div>
+          <div class="capture-list">
+            <div v-for="c in group.items" :key="c.time+c.text" class="capture-row">
+              <span class="capture-time">{{c.time}}</span>
+              <span v-if="c.category" class="cat-tag" :style="{background:getCatColor(c.category)+'20',color:getCatColor(c.category)}">{{getCatName(c.category)}}</span>
+              <span class="capture-text" v-html="renderNoteText(c.text)"></span>
+            </div>
+          </div>
+        </div>
+        <div v-if="!notes.length && !noteText" class="empty-lg">还没有速记 — 写下第一条吧</div>
+      </div>
+
+      <!-- ══ CONTACTS ══ -->
+      <div v-if="view==='contacts'" class="view" key="contacts">
+        <!-- Contact Detail -->
+        <div v-if="selectedContact" class="card card-highlight">
+          <div class="card-top">
+            <span class="card-label">{{selectedContact.name}}</span>
+            <div class="card-actions">
+              <span class="tier-badge" :class="'tier-'+selectedContact.tier">{{tierLabel(selectedContact.tier)}}</span>
+              <button class="btn-ghost btn-xs" @click="startEditContact" v-if="!editingContact">✏️ 编辑</button>
+              <button class="btn-ghost" @click="selectedContact=null;editingContact=false">← 返回</button>
+            </div>
+          </div>
+
+          <!-- Edit mode -->
+          <div v-if="editingContact" class="contact-edit-form">
+            <div class="form-row">
+              <div class="form-group half"><label class="form-label">姓名</label><input v-model="editContactData.name" class="input"></div>
+              <div class="form-group half"><label class="form-label">公司</label><input v-model="editContactData.company" class="input"></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group half"><label class="form-label">职位</label><input v-model="editContactData.title" class="input"></div>
+              <div class="form-group half">
+                <label class="form-label">类别</label>
+                <select v-model="editContactData.category" class="input">
+                  <option v-for="c in contactCategories" :key="c.id" :value="c.id">{{c.icon}} {{c.name}}</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group half">
+                <label class="form-label">层级</label>
+                <select v-model="editContactData.tier" class="input">
+                  <option value="A">A 核心</option><option value="B">B 活跃</option><option value="C">C 待激活</option>
+                </select>
+              </div>
+              <div class="form-group half"><label class="form-label">位置</label><input v-model="editContactData.location" class="input"></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group half"><label class="form-label">微信</label><input v-model="editContactData.wechat" class="input"></div>
+              <div class="form-group half"><label class="form-label">电话</label><input v-model="editContactData.phone" class="input"></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group half"><label class="form-label">邮箱</label><input v-model="editContactData.email" class="input"></div>
+              <div class="form-group half"><label class="form-label">下次跟进</label><input v-model="editContactData.next_followup" class="input" type="date"></div>
+            </div>
+            <div class="form-group"><label class="form-label">认识场景</label><input v-model="editContactData.met_context" class="input" placeholder="如何认识的"></div>
+            <div class="form-group"><label class="form-label">关系背景</label><textarea v-model="editContactData.background" class="input" rows="2" placeholder="关系背景描述"></textarea></div>
+            <div class="form-actions">
+              <button class="btn-primary" @click="saveEditContact">保存</button>
+              <button class="btn-ghost" @click="editingContact=false">取消</button>
+            </div>
+          </div>
+
+          <!-- View mode -->
+          <template v-else>
+            <div class="contact-meta">
+              <span v-if="selectedContact.company">🏢 {{selectedContact.company}}</span>
+              <span v-if="selectedContact.title">{{selectedContact.title}}</span>
+              <span :style="{color:getContactCatColor(selectedContact.category)}">{{getContactCatName(selectedContact.category)}}</span>
+              <span v-if="selectedContact.location">📍 {{selectedContact.location}}</span>
+              <span v-if="selectedContact.wechat">💬 {{selectedContact.wechat}}</span>
+              <span v-if="selectedContact.phone">📞 {{selectedContact.phone}}</span>
+              <span v-if="selectedContact.email">✉️ {{selectedContact.email}}</span>
+            </div>
+            <div class="contact-stats">
+              <div class="cs-item" v-if="selectedContact.last_contact">
+                <div class="cs-label">上次联系</div>
+                <div class="cs-val" :class="{'cold':selectedContact.days_cold>30}">{{selectedContact.last_contact}} <span v-if="selectedContact.days_cold">({{selectedContact.days_cold}}天前)</span></div>
+              </div>
+              <div class="cs-item" v-if="selectedContact.next_followup">
+                <div class="cs-label">下次跟进</div>
+                <div class="cs-val">{{selectedContact.next_followup}}</div>
+              </div>
+              <div class="cs-item"><div class="cs-label">互动次数</div><div class="cs-val">{{selectedContact.interaction_count}}</div></div>
+            </div>
+
+            <div v-if="showInteractionForm" class="interact-form">
+              <div class="form-row">
+                <select v-model="newInteraction.method" class="input" style="flex:1"><option>微信</option><option>电话</option><option>见面</option><option>邮件</option><option>会议</option></select>
+                <input v-model="newInteraction.summary" class="input" style="flex:3" placeholder="聊了什么..." @keydown.enter="addInteraction">
+                <button class="btn-primary-sm" @click="addInteraction">记录</button>
+              </div>
+            </div>
+            <button v-else class="btn-add-task" @click="showInteractionForm=true">+ 记录互动</button>
+
+            <div class="rendered-md contact-content" v-html="contactDetailHtml"></div>
+          </template>
+        </div>
+
+        <!-- Contact List View -->
+        <template v-else>
+          <div class="tab-bar">
+            <button class="tab-btn" :class="{active:contactView==='list'}" @click="contactView='list'">📋 列表</button>
+            <button class="tab-btn" :class="{active:contactView==='graph'}" @click="contactView='graph'">🕸 关系图</button>
+            <button class="tab-btn" :class="{active:contactView==='cold'}" @click="contactView='cold'">
+              🔥 需跟进
+              <span v-if="coldContacts.length" class="tab-badge-red">{{coldContacts.length}}</span>
+            </button>
+          </div>
+
+          <!-- Cold contacts -->
+          <div v-if="contactView==='cold'" class="cold-list">
+            <div v-for="c in coldContacts" :key="c.slug" class="card contact-card cold-card" @click="selectContactDetail(c)">
+              <div class="cc-header">
+                <span class="cc-name">{{c.name}}</span>
+                <span class="tier-badge" :class="'tier-'+c.tier">{{tierLabel(c.tier)}}</span>
+              </div>
+              <div class="cc-sub">{{c.company}} · {{c.title}}</div>
+              <div class="cc-cold">
+                <span class="cold-warn">⚠ {{c.days_cold}}天未联系</span>
+                <span class="cold-threshold">({{c.tier}}级阈值 {{c.threshold}}天)</span>
+              </div>
+            </div>
+            <div v-if="!coldContacts.length" class="empty-lg">所有关系都在保温中 🎯</div>
+          </div>
+
+          <!-- Graph view -->
+          <div v-if="contactView==='graph'" class="card">
+            <div class="card-top"><span class="card-label">关系网络图</span><span class="card-value">{{contacts.length}} 人</span></div>
+            <div id="graph-container" class="graph-container"></div>
+            <div class="graph-legend">
+              <span v-for="c in contactCategories" :key="c.id" class="gl-item">
+                <span class="gl-dot" :style="{background:c.color}"></span>{{c.name}}
+              </span>
+            </div>
+            <div class="graph-tips">拖拽移动，滚轮缩放，点击节点查看详情</div>
+          </div>
+
+          <!-- List view -->
+          <template v-if="contactView==='list'">
+            <div class="filter-bar" style="margin-bottom:12px">
+              <select v-model="contactFilter.category" class="cat-select-sm" @change="loadContacts()">
+                <option value="">全部类别</option>
+                <option v-for="c in contactCategories" :key="c.id" :value="c.id">{{c.icon}} {{c.name}}</option>
+              </select>
+              <select v-model="contactFilter.tier" class="cat-select-sm" @change="loadContacts()">
+                <option value="">全部层级</option>
+                <option value="A">A 核心</option><option value="B">B 活跃</option><option value="C">C 待激活</option>
+              </select>
+              <button class="btn-ghost btn-xs" @click="showContactCatForm=!showContactCatForm">⚙ 管理分类</button>
+              <div class="toolbar-spacer"></div>
+              <button class="btn-primary-sm" @click="showContactForm=true">+ 新增</button>
+            </div>
+
+            <!-- Contact category management -->
+            <div class="card card-compact" v-if="showContactCatForm">
+              <div class="card-top"><span class="card-label">联系人分类管理</span><button class="btn-ghost btn-xs" @click="showContactCatForm=false">关闭</button></div>
+              <div class="form-row" style="margin-bottom:10px">
+                <input v-model="newContactCat.icon" class="input cat-icon-input" placeholder="🏷" maxlength="2">
+                <input v-model="newContactCat.name" class="input" placeholder="分类名称" style="flex:3" @keydown.enter="createContactCategory">
+                <input v-model="newContactCat.color" type="color" class="cat-color-input">
+                <button class="btn-primary-sm" @click="createContactCategory">+</button>
+              </div>
+              <div class="cat-list">
+                <div v-for="c in contactCategories" :key="c.id" class="cat-item">
+                  <span :style="{color:c.color}">{{c.icon}} {{c.name}}</span>
+                  <button class="btn-ghost btn-xs" @click="deleteContactCategory(c.id)">删除</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Create contact form -->
+            <div class="card" v-if="showContactForm">
+              <div class="card-top"><span class="card-label">新增联系人</span></div>
+              <div class="form-row"><div class="form-group half"><input v-model="newContact.name" class="input" placeholder="姓名"></div><div class="form-group half"><input v-model="newContact.company" class="input" placeholder="公司"></div></div>
+              <div class="form-row"><div class="form-group half"><input v-model="newContact.title" class="input" placeholder="职位"></div>
+              <div class="form-group half"><select v-model="newContact.category" class="input"><option v-for="c in contactCategories" :key="c.id" :value="c.id">{{c.icon}} {{c.name}}</option></select></div></div>
+              <div class="form-row"><div class="form-group half"><select v-model="newContact.tier" class="input"><option value="A">A 核心</option><option value="B">B 活跃</option><option value="C">C 待激活</option></select></div>
+              <div class="form-group half"><input v-model="newContact.location" class="input" placeholder="城市"></div></div>
+              <div class="form-row"><div class="form-group half"><input v-model="newContact.wechat" class="input" placeholder="微信"></div>
+              <div class="form-group half"><input v-model="newContact.phone" class="input" placeholder="电话"></div></div>
+              <div class="form-row"><div class="form-group half"><input v-model="newContact.email" class="input" placeholder="邮箱"></div>
+              <div class="form-group half"><input v-model="newContact.met_context" class="input" placeholder="认识场景"></div></div>
+              <div class="form-group"><textarea v-model="newContact.background" class="input" rows="2" placeholder="关系背景"></textarea></div>
+              <div class="form-actions"><button class="btn-primary" @click="createContact" :disabled="!newContact.name.trim()">创建</button><button class="btn-ghost" @click="showContactForm=false">取消</button></div>
+            </div>
+
+            <!-- Contact cards -->
+            <div class="contact-grid">
+              <div v-for="c in contacts" :key="c.slug" class="card contact-card" @click="selectContactDetail(c)">
+                <div class="cc-header">
+                  <span class="cc-name">{{c.name}}</span>
+                  <span class="tier-badge" :class="'tier-'+c.tier">{{tierLabel(c.tier)}}</span>
+                </div>
+                <div class="cc-sub">{{c.company}} <span v-if="c.title">· {{c.title}}</span></div>
+                <div class="cc-tags">
+                  <span class="cat-tag" :style="{background:getContactCatColor(c.category)+'20',color:getContactCatColor(c.category)}">{{getContactCatName(c.category)}}</span>
+                  <span v-if="c.days_cold!==null" class="cc-days" :class="{'cold':c.days_cold>30}">{{c.days_cold}}天前</span>
+                </div>
+              </div>
+            </div>
+            <div v-if="!contacts.length" class="empty-lg">还没有联系人 — 开始建立你的关系网络</div>
+          </template>
+        </template>
+      </div>
+
+      <!-- ══ DAYS (日子) ══ -->
+      <div v-if="view==='days'" class="view" key="days">
+
+        <!-- Top: Upcoming highlight cards -->
+        <div v-if="specialDays.length" class="days-highlight-row">
+          <div v-for="d in specialDays.slice(0,3)" :key="'h-'+d.id" class="day-highlight-card" :class="{'dh-today':d.countdown===0,'dh-soon':d.countdown>0&&d.countdown<=7}">
+            <div class="dh-icon">{{d.icon||'📅'}}</div>
+            <div class="dh-info">
+              <div class="dh-name">{{d.name}}</div>
+              <div class="dh-date">{{d.next_occurrence}}</div>
+            </div>
+            <div class="dh-countdown">
+              <template v-if="d.countdown===0"><span class="dh-num dh-today-num">今天</span></template>
+              <template v-else-if="d.countdown!=null&&d.countdown>0"><span class="dh-num">{{d.countdown}}</span><span class="dh-unit">天</span></template>
+            </div>
+          </div>
+        </div>
+
+        <!-- Calendar -->
+        <div class="card">
+          <div class="card-top">
+            <div class="cal-nav">
+              <button class="cal-nav-btn" @click="prevMonth">‹</button>
+              <span class="cal-title">{{calendarMonthLabel}}</span>
+              <button class="cal-nav-btn" @click="nextMonth">›</button>
+            </div>
+            <button class="btn-primary-sm" @click="showDayForm=!showDayForm">+ 添加</button>
+          </div>
+          <div class="cal-grid">
+            <div class="cal-header" v-for="d in ['一','二','三','四','五','六','日']" :key="d">{{d}}</div>
+            <div v-for="(cell,i) in calendarDays" :key="i"
+              class="cal-cell" :class="{'cal-empty':!cell.day,'cal-today':cell.isToday,'cal-has-event':cell.events&&cell.events.length}"
+              @click="cell.day && openDayFormForDate(cell)">
+              <span class="cal-day" v-if="cell.day">{{cell.day}}</span>
+              <div v-if="cell.events&&cell.events.length" class="cal-events">
+                <span v-for="e in cell.events.slice(0,2)" :key="e.id" class="cal-event-dot" :title="e.name">{{e.icon||'📅'}}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add form (slide down) -->
+        <div class="card card-form-glow" v-if="showDayForm">
+          <div class="card-top"><span class="card-label">{{newDay.icon}} 添加日子</span><button class="btn-ghost btn-xs" @click="showDayForm=false">✕</button></div>
+          <div class="form-row">
+            <div class="form-group" style="flex:2"><input v-model="newDay.name" class="input" placeholder="名称，如：妈妈生日" @keydown.enter="createSpecialDay"></div>
+            <div class="form-group" style="flex:1"><input v-model="newDay.date" class="input" type="date"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group half">
+              <select v-model="newDay.type" class="input" @change="onDayTypeChange">
+                <option value="birthday">🎂 生日</option>
+                <option value="anniversary">💍 纪念日</option>
+                <option value="memorial">🕯 纪念</option>
+                <option value="custom">📌 自定义</option>
+              </select>
+            </div>
+            <div class="form-group half">
+              <select v-model="newDay.repeat" class="input">
+                <option value="yearly">🔁 每年重复</option>
+                <option value="monthly">🔁 每月重复</option>
+                <option value="none">不重复</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="flex:0 0 60px"><input v-model="newDay.icon" class="input" style="text-align:center;font-size:20px" maxlength="2"></div>
+            <div class="form-group" style="flex:1"><input v-model="newDay.note" class="input" placeholder="备注（可选）"></div>
+            <button class="btn-primary" @click="createSpecialDay" :disabled="!newDay.name.trim()||!newDay.date" style="align-self:flex-end">添加</button>
+          </div>
+        </div>
+
+        <!-- All days list -->
+        <div class="card" v-if="specialDays.length">
+          <div class="card-top"><span class="card-label">全部日子</span><span class="card-value">{{specialDays.length}}</span></div>
+          <div class="days-list">
+            <div v-for="d in specialDays" :key="d.id" class="day-card" :class="{'day-card-today':d.countdown===0,'day-card-soon':d.countdown>0&&d.countdown<=7}">
+              <div class="day-card-left">
+                <span class="day-card-icon">{{d.icon||'📅'}}</span>
+              </div>
+              <div class="day-card-mid">
+                <div class="day-card-name">{{d.name}}</div>
+                <div class="day-card-meta">
+                  <span>{{d.next_occurrence}}</span>
+                  <span v-if="d.repeat!=='none'" class="day-repeat-tag">{{d.repeat==='yearly'?'每年':'每月'}}</span>
+                  <span v-if="d.note" class="day-note-text">{{d.note}}</span>
+                </div>
+              </div>
+              <div class="day-card-right">
+                <template v-if="d.countdown===0"><div class="dc-num dc-today">今天!</div></template>
+                <template v-else-if="d.countdown!=null&&d.countdown>0">
+                  <div class="dc-num" :class="{'dc-urgent':d.countdown<=3,'dc-warn':d.countdown<=7&&d.countdown>3}">{{d.countdown}}</div>
+                  <div class="dc-unit">天后</div>
+                </template>
+                <template v-else><div class="dc-unit" style="color:var(--text3)">已过</div></template>
+              </div>
+              <button class="day-delete-btn" @click.stop="deleteSpecialDay(d.id)" title="删除">✕</button>
+            </div>
+          </div>
+        </div>
+        <div v-else class="card"><div class="empty-lg">点击日历上的日期，或点「+ 添加」开始记录重要日子</div></div>
+      </div>
+
+      <!-- ══ FILES ══ -->
+      <div v-if="view==='files'" class="view view-wide" key="files">
+        <div v-if="currentFile" class="card">
+          <div class="card-top"><span class="card-label">{{currentFilePath}}</span><button class="btn-ghost" @click="currentFile=null">← 返回</button></div>
+          <div class="rendered-md file-content" v-html="currentFileHtml"></div>
+        </div>
+        <template v-else>
+          <div class="file-browser">
+            <!-- Left: folder tree -->
+            <div class="fb-sidebar">
+              <div class="fb-sidebar-header">
+                <span class="card-label">目录</span>
+                <span class="card-value">{{fileTree.reduce((s,g)=>s+g.count,0)}} 个文件</span>
+              </div>
+              <div class="fb-folder-list">
+                <div v-for="group in fileTree" :key="group.folder"
+                  class="fb-folder" :class="{active: selectedFolder===group.folder}"
+                  @click="selectedFolder=group.folder">
+                  <span class="fb-folder-icon">{{group.icon}}</span>
+                  <span class="fb-folder-name">{{group.folder}}</span>
+                  <span class="fb-folder-count">{{group.count}}</span>
+                </div>
+              </div>
+            </div>
+            <!-- Right: file list -->
+            <div class="fb-main">
+              <div v-if="!selectedFolder" class="fb-empty">
+                <div class="empty-lg">← 选择一个目录</div>
+              </div>
+              <template v-else>
+                <div class="fb-main-header">
+                  <span class="fgh-icon">{{fileTree.find(g=>g.folder===selectedFolder)?.icon}}</span>
+                  <span class="fgh-name">{{selectedFolder}}</span>
+                </div>
+                <div class="fb-file-list">
+                  <div v-for="f in selectedFolderFiles" :key="f.path" class="fb-file" @click="openFile(f.path)">
+                    <span class="fb-file-icon">{{f.icon||'📄'}}</span>
+                    <div class="fb-file-info">
+                      <span class="fb-file-name">{{f.name}}</span>
+                      <span class="fb-file-meta">{{f.size > 1024 ? Math.round(f.size/1024)+'KB' : f.size+'B'}} · {{new Date(f.mtime*1000).toLocaleDateString('zh-CN')}}</span>
+                    </div>
+                  </div>
+                  <div v-if="!selectedFolderFiles.length" class="empty-sm">此目录为空</div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- ══ SETTINGS ══ -->
+      <div v-if="view==='settings'" class="view" key="settings">
+        <div class="card">
+          <div class="card-top"><span class="card-label">基本设置</span></div>
+          <div class="form-group"><label class="form-label">你的名字</label><input v-model="settings.user_name" class="input" placeholder="用于问候语"></div>
+          <div class="form-group"><label class="form-label">主目标</label><input v-model="settings.main_goal" class="input" placeholder="365天个人执行计划"></div>
+          <div class="form-group"><label class="form-label">起始日期</label><input v-model="settings.start_date" class="input" type="date"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-top"><span class="card-label">🤖 AI 配置</span></div>
+          <div class="settings-section">
+            <div class="form-group">
+              <label class="form-label">AI 服务商</label>
+              <div class="provider-grid">
+                <label class="provider-option" :class="{active: settings.ai_provider==='anthropic'}">
+                  <input type="radio" v-model="settings.ai_provider" value="anthropic">
+                  <span class="provider-name">Anthropic (Claude)</span>
+                </label>
+                <label class="provider-option" :class="{active: settings.ai_provider==='openai'}">
+                  <input type="radio" v-model="settings.ai_provider" value="openai">
+                  <span class="provider-name">OpenAI</span>
+                </label>
+                <label class="provider-option" :class="{active: settings.ai_provider==='ollama'}">
+                  <input type="radio" v-model="settings.ai_provider" value="ollama">
+                  <span class="provider-name">Ollama (本地)</span>
+                </label>
+                <label class="provider-option" :class="{active: settings.ai_provider==='none'}">
+                  <input type="radio" v-model="settings.ai_provider" value="none">
+                  <span class="provider-name">关闭</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Anthropic settings -->
+            <template v-if="settings.ai_provider==='anthropic'">
+              <div class="form-group"><label class="form-label">API Key</label><input v-model="settings.anthropic_api_key" class="input input-mono" type="password" placeholder="sk-ant-..."></div>
+              <div class="form-group"><label class="form-label">模型</label>
+                <select v-model="settings.anthropic_model" class="input">
+                  <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                  <option value="claude-opus-4-20250514">Claude Opus 4</option>
+                  <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                </select>
+              </div>
+            </template>
+
+            <!-- OpenAI settings -->
+            <template v-if="settings.ai_provider==='openai'">
+              <div class="form-group"><label class="form-label">API Key</label><input v-model="settings.openai_api_key" class="input input-mono" type="password" placeholder="sk-..."></div>
+              <div class="form-group"><label class="form-label">Base URL</label><input v-model="settings.openai_base_url" class="input input-mono" placeholder="https://api.openai.com/v1"></div>
+              <div class="form-group"><label class="form-label">模型</label><input v-model="settings.openai_model" class="input" placeholder="gpt-4o"></div>
+            </template>
+
+            <!-- Ollama settings -->
+            <template v-if="settings.ai_provider==='ollama'">
+              <div class="form-group"><label class="form-label">Ollama URL</label><input v-model="settings.ollama_url" class="input input-mono" placeholder="http://localhost:11434"></div>
+              <div class="form-group"><label class="form-label">模型</label><input v-model="settings.ollama_model" class="input" placeholder="llama3.1"></div>
+            </template>
+
+            <div class="form-actions" style="margin-top:16px">
+              <button class="btn-primary" @click="testAI" :disabled="aiTestLoading || settings.ai_provider==='none'">
+                {{aiTestLoading ? '测试中...' : '🔌 测试连接'}}
+              </button>
+            </div>
+            <div v-if="aiTestResult" class="ai-test-result" :class="{'test-ok':aiTestResult.startsWith('✅'),'test-fail':aiTestResult.startsWith('❌')}">{{aiTestResult}}</div>
+          </div>
+        </div>
+
+        <div class="form-actions" style="margin-top:16px">
+          <button class="btn-primary" @click="saveSettings">💾 保存设置</button>
+          <span v-if="settingsSaved" class="save-success">✅ 已保存</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Mobile overlay + sidebar -->
+  <div class="mobile-overlay" :class="{open:mobileNavOpen}" @click="mobileNavOpen=false"></div>
+  <aside class="mobile-sidebar" :class="{open:mobileNavOpen}">
+    <div class="sidebar-header"><div class="sidebar-logo"><span class="logo-r">O</span><span class="logo-365">365</span></div></div>
+    <nav class="sidebar-nav">
+      <a v-for="item in navItems" :key="'m-'+item.key" class="nav-item" :class="{active:view===item.key}" @click="switchView(item.key);mobileNavOpen=false">
+        <span class="nav-icon">{{item.icon}}</span><span class="nav-text">{{item.label}}</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="status-label">Q{{quarter}} · {{quarterTheme}}</div>
+      <div class="status-progress"><div class="mini-bar"><div class="mini-fill" :style="{width:yearPct+'%'}"></div></div><span class="status-num">Day {{dayNumber}}/365</span></div>
+    </div>
+  </aside>
+
+  <nav class="bottom-nav">
+    <button v-for="item in mobileNavItems" :key="'bn-'+item.key" class="bnav-btn" :class="{active:view===item.key}" @click="switchView(item.key)">
+      <span class="bnav-icon">{{item.icon}}</span><span class="bnav-label">{{item.label}}</span>
+    </button>
+  </nav>
+  <button v-if="showFab" class="fab" @click="fabAction" title="快速速记">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+  </button>
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://unpkg.com/force-graph"></script>
+<script src="/app.js"></script>
+</body>
+</html>
