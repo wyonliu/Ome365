@@ -1,0 +1,34 @@
+# ── Personal vault data (excluded from repo) ──
+# Only exclude root-level vault dirs, not sample-vault/
+/Journal/
+/Notes/
+/Decisions/
+/Contacts/
+/Projects/
+/AI-Logs/
+/Templates/
+/000-365-PLAN.md
+/000-DASHBOARD.md
+
+# ── App runtime ──
+.app/settings.json
+.app/categories.json
+.app/contact_categories.json
+.app/special_days.json
+.app/task_repeats.json
+.app/claude_session.json
+.app/media/
+
+# ── Python ──
+__pycache__/
+*.pyc
+.env
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+
+# ── IDE ──
+.vscode/
+.idea/
+*.swp
