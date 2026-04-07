@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 import uvicorn
 
-VAULT = Path(__file__).parent.parent.resolve()
+VAULT = Path(os.environ.get("OME365_VAULT", Path(__file__).parent.parent)).resolve()
 MEDIA = Path(__file__).parent / "media"
 PORT = 3650
 WEEKDAYS = ["周一","周二","周三","周四","周五","周六","周日"]
