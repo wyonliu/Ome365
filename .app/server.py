@@ -1,5 +1,5 @@
 """
-Ome365 v0.1 — 365天个人执行面板
+Ome365 v0.2 — 个人超级助手
 启动: cd .app && python3 server.py
 """
 
@@ -274,7 +274,7 @@ def ensure_today():
         fp.parent.mkdir(parents=True, exist_ok=True)
         d = date.today(); wd = WEEKDAYS[d.weekday()]; dn = day_n()
         settings = load_settings()
-        meta = {"date":today_s(),"week":f"W{week_n()}","energy":"/10"}
+        meta = {"date":today_s(),"week":f"W{week_n()}","mood":"","energy":"","focus":"","tags":"[]"}
         content = f"""# {today_s()} · {wd} · Day {dn}
 
 ## 今日最重要的3件事
@@ -296,6 +296,9 @@ def ensure_today():
 **做了什么：**
 
 **学到什么：**
+
+## 反思
+**今日一句：**
 
 **明天最重要的1件事：**
 """
@@ -535,6 +538,10 @@ async def dashboard():
         notes_count = nfp.read_text("utf-8").count("\n- [")
     ppl_dir = VAULT/"Contacts"/"people"
     contact_count = len(list(ppl_dir.glob("*.md"))) if ppl_dir.exists() else 0
+    memory_count = len(list((VAULT/"Memory").glob("*.md"))) - 1 if (VAULT/"Memory").exists() else 0  # -1 for MEMORY.md
+
+    # Today's mood/energy/focus
+    today_meta = daily["meta"]
 
     return {
         "date":today_s(),"weekday":WEEKDAYS[date.today().weekday()],
@@ -549,6 +556,10 @@ async def dashboard():
         "decision_count":dec_count,
         "notes_count":notes_count,
         "contact_count":contact_count,
+        "memory_count":max(0, memory_count),
+        "today_mood":today_meta.get("mood",""),
+        "today_energy":today_meta.get("energy",""),
+        "today_focus":today_meta.get("focus",""),
     }
 
 
@@ -1417,8 +1428,9 @@ FOLDER_ICONS = {
     "根目录":"📋","Journal":"📅","Journal/Daily":"📅","Journal/Weekly":"📋",
     "Journal/Quarterly":"📊","Contacts":"👤","Contacts/people":"👤",
     "Decisions":"⚡","Notes":"✏️","Projects":"🚀","Templates":"📝",
+    "Memory":"🧠","Memory/insights":"💡",
 }
-FOLDER_ORDER = ["根目录","Journal/Daily","Journal/Weekly","Journal/Quarterly","Notes","Decisions","Contacts/people","Projects","Templates"]
+FOLDER_ORDER = ["根目录","Journal/Daily","Journal/Weekly","Journal/Quarterly","Notes","Memory","Memory/insights","Decisions","Contacts/people","Projects","Templates"]
 
 FILE_ICONS = {
     ".md": "📄", ".json": "📋", ".py": "🐍", ".js": "📜",
@@ -1522,6 +1534,393 @@ async def delete_special_day(day_id:str):
     return {"ok":True}
 
 
+# ── API: Memory System ────────────────────────────────
+MEMORY_DIR = VAULT / "Memory"
+MEMORY_INDEX = MEMORY_DIR / "MEMORY.md"
+
+def ensure_memory_dir():
+    MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+    if not MEMORY_INDEX.exists():
+        MEMORY_INDEX.write_text("# Memory Index\n\n", "utf-8")
+
+@app.get("/api/memory")
+async def list_memories():
+    ensure_memory_dir()
+    memories = []
+    for fp in sorted(MEMORY_DIR.glob("*.md")):
+        if fp.name == "MEMORY.md":
+            continue
+        text = fp.read_text("utf-8")
+        meta = parse_yaml_meta(text)
+        # Extract content after frontmatter
+        m = re.match(r'^---\s*\n.*?\n---\s*\n', text, re.DOTALL)
+        content = text[m.end():].strip() if m else text.strip()
+        memories.append({
+            "filename": fp.name,
+            "name": meta.get("name", fp.stem),
+            "type": meta.get("type", "general"),
+            "description": meta.get("description", ""),
+            "content": content,
+            "mtime": fp.stat().st_mtime,
+        })
+    # Read index
+    index_content = MEMORY_INDEX.read_text("utf-8") if MEMORY_INDEX.exists() else ""
+    return {"memories": memories, "index": index_content}
+
+@app.get("/api/memory/{filename}")
+async def get_memory(filename: str):
+    ensure_memory_dir()
+    fp = MEMORY_DIR / filename
+    if not fp.exists():
+        raise HTTPException(404, "Memory not found")
+    if not str(fp.resolve()).startswith(str(MEMORY_DIR.resolve())):
+        raise HTTPException(403, "Access denied")
+    text = fp.read_text("utf-8")
+    meta = parse_yaml_meta(text)
+    m = re.match(r'^---\s*\n.*?\n---\s*\n', text, re.DOTALL)
+    content = text[m.end():].strip() if m else text.strip()
+    return {"filename": fp.name, "name": meta.get("name", fp.stem), "type": meta.get("type", "general"),
+            "description": meta.get("description", ""), "content": content, "raw": text}
+
+@app.post("/api/memory")
+async def save_memory(body: dict):
+    ensure_memory_dir()
+    filename = body.get("filename", "")
+    name = body.get("name", "")
+    mem_type = body.get("type", "general")
+    description = body.get("description", "")
+    content = body.get("content", "")
+
+    if not filename:
+        # Generate filename from name
+        slug = re.sub(r'[^\w\u4e00-\u9fff]+', '_', name.lower()).strip('_')[:40]
+        filename = f"{slug}.md"
+
+    if not filename.endswith(".md"):
+        filename += ".md"
+
+    fp = MEMORY_DIR / filename
+    if not str(fp.resolve()).startswith(str(MEMORY_DIR.resolve())):
+        raise HTTPException(403, "Access denied")
+
+    # Write memory file with frontmatter
+    lines = ["---", f"name: {name}", f"description: {description}", f"type: {mem_type}", "---", "", content]
+    fp.write_text("\n".join(lines), "utf-8")
+
+    # Update MEMORY.md index
+    _update_memory_index()
+    return {"ok": True, "filename": filename}
+
+@app.delete("/api/memory/{filename}")
+async def delete_memory(filename: str):
+    ensure_memory_dir()
+    fp = MEMORY_DIR / filename
+    if not fp.exists():
+        raise HTTPException(404)
+    if not str(fp.resolve()).startswith(str(MEMORY_DIR.resolve())):
+        raise HTTPException(403)
+    if filename == "MEMORY.md":
+        raise HTTPException(400, "Cannot delete index")
+    fp.unlink()
+    _update_memory_index()
+    return {"ok": True}
+
+def _update_memory_index():
+    """Rebuild MEMORY.md index from all memory files."""
+    ensure_memory_dir()
+    lines = ["# Memory Index", "", "| 文件 | 类型 | 描述 |", "|------|------|------|"]
+    for fp in sorted(MEMORY_DIR.glob("*.md")):
+        if fp.name == "MEMORY.md":
+            continue
+        meta = parse_yaml_meta(fp.read_text("utf-8"))
+        name = meta.get("name", fp.stem)
+        mem_type = meta.get("type", "general")
+        desc = meta.get("description", "")
+        lines.append(f"| [{name}]({fp.name}) | {mem_type} | {desc} |")
+    MEMORY_INDEX.write_text("\n".join(lines) + "\n", "utf-8")
+
+
+# ── API: Full-text Search ─────────────────────────────
+@app.get("/api/search")
+async def search_vault(q: str = "", limit: int = 20):
+    if not q or len(q.strip()) < 1:
+        return {"results": [], "total": 0}
+    query = q.strip().lower()
+    keywords = query.split()
+    results = []
+
+    for root, dirs, files in os.walk(VAULT):
+        dirs[:] = [d for d in dirs if not d.startswith('.')]
+        for f in files:
+            if not f.endswith('.md'):
+                continue
+            fp = Path(root) / f
+            try:
+                text = fp.read_text("utf-8")
+            except:
+                continue
+            text_lower = text.lower()
+            # Score: count keyword matches
+            score = sum(text_lower.count(kw) for kw in keywords)
+            if score == 0:
+                continue
+            # Extract snippet around first match
+            idx = text_lower.find(keywords[0])
+            start = max(0, idx - 60)
+            end = min(len(text), idx + 120)
+            snippet = text[start:end].replace('\n', ' ').strip()
+            if start > 0:
+                snippet = "..." + snippet
+            if end < len(text):
+                snippet += "..."
+
+            rel_path = str(fp.relative_to(VAULT))
+            results.append({
+                "path": rel_path,
+                "name": f,
+                "folder": str(Path(root).relative_to(VAULT)),
+                "score": score,
+                "snippet": snippet,
+                "mtime": fp.stat().st_mtime,
+            })
+
+    results.sort(key=lambda x: -x["score"])
+    return {"results": results[:limit], "total": len(results)}
+
+
+# ── API: Enhanced Daily (mood/energy/focus) ───────────
+@app.get("/api/today/meta")
+async def get_today_meta():
+    """Get today's mood/energy/focus metadata."""
+    ensure_today()
+    fp = find_daily()
+    data = parse_md(fp)
+    meta = data.get("meta", {})
+    return {
+        "date": today_s(),
+        "mood": meta.get("mood", ""),
+        "energy": meta.get("energy", ""),
+        "focus": meta.get("focus", ""),
+        "tags": meta.get("tags", "[]"),
+    }
+
+@app.put("/api/today/meta")
+async def update_today_meta(body: dict):
+    """Update today's mood/energy/focus in frontmatter."""
+    ensure_today()
+    fp = find_daily()
+    text = fp.read_text("utf-8")
+
+    # Parse existing frontmatter
+    m = re.match(r'^---\s*\n(.*?)\n---\s*\n', text, re.DOTALL)
+    if m:
+        meta_text = m.group(1)
+        content_after = text[m.end():]
+        # Update/add fields
+        meta_lines = meta_text.split('\n')
+        fields_to_update = {k: body[k] for k in ["mood", "energy", "focus", "tags"] if k in body}
+        for key, val in fields_to_update.items():
+            found = False
+            for i, line in enumerate(meta_lines):
+                if line.startswith(f"{key}:"):
+                    meta_lines[i] = f"{key}: {val}"
+                    found = True
+                    break
+            if not found:
+                meta_lines.append(f"{key}: {val}")
+        new_text = "---\n" + "\n".join(meta_lines) + "\n---\n" + content_after
+    else:
+        # No frontmatter, add it
+        fields = {k: body.get(k, "") for k in ["mood", "energy", "focus", "tags"]}
+        fm = "---\n" + "\n".join(f"{k}: {v}" for k, v in fields.items()) + "\n---\n"
+        new_text = fm + text
+
+    fp.write_text(new_text, "utf-8")
+    return {"ok": True}
+
+
+# ── API: On This Day ─────────────────────────────────
+@app.get("/api/on-this-day")
+async def on_this_day():
+    """Find journal entries from the same date in previous years/weeks."""
+    today = date.today()
+    entries = []
+
+    # Same date last year
+    daily_dir = VAULT / "Journal" / "Daily"
+    if daily_dir.exists():
+        for fp in daily_dir.glob("*.md"):
+            try:
+                d = date.fromisoformat(fp.stem)
+                if d.month == today.month and d.day == today.day and d.year != today.year:
+                    text = fp.read_text("utf-8")[:500]
+                    entries.append({"date": fp.stem, "type": "same_date", "label": f"{d.year}年同一天", "snippet": text.split('\n')[0][:100]})
+                elif d == today - timedelta(days=7):
+                    text = fp.read_text("utf-8")[:500]
+                    entries.append({"date": fp.stem, "type": "last_week", "label": "上周今日", "snippet": text.split('\n')[0][:100]})
+            except:
+                continue
+
+    entries.sort(key=lambda x: x["date"], reverse=True)
+    return {"entries": entries}
+
+
+# ── API: AI Reflection ────────────────────────────────
+@app.post("/api/reflect")
+async def ai_reflect(body: dict):
+    """AI-powered daily/weekly reflection that generates insights and saves to Memory."""
+    import requests as req
+    reflect_type = body.get("type", "daily")  # "daily" or "weekly"
+    settings = load_settings()
+    mode = settings.get("ai_mode", "none")
+
+    if mode == "none":
+        return {"ok": False, "error": "请先配置AI"}
+
+    # Gather context
+    context_parts = []
+    if reflect_type == "daily":
+        fp = find_daily()
+        if fp.exists():
+            context_parts.append(f"--- 今日日志 ---\n{fp.read_text('utf-8')[:3000]}")
+        notes_fp = VAULT / "Notes" / f"{today_s()}.md"
+        if notes_fp.exists():
+            context_parts.append(f"--- 今日速记 ---\n{notes_fp.read_text('utf-8')[:2000]}")
+        prompt = """请对我今天的工作做一个深度反思，包含：
+1. 关键成就（做到了什么）
+2. 模式识别（重复出现的行为/思维模式）
+3. 改进建议（明天可以怎么做得更好）
+4. 一句打气的话
+请简洁有力，不要说教。"""
+    else:
+        # Weekly
+        for i in range(7):
+            d = today_s() if i == 0 else (date.today() - timedelta(days=i)).isoformat()
+            fp = VAULT / "Journal" / "Daily" / f"{d}.md"
+            if fp.exists():
+                context_parts.append(f"--- {d} ---\n{fp.read_text('utf-8')[:1500]}")
+        weekly_fp = find_weekly()
+        if weekly_fp.exists():
+            context_parts.append(f"--- 本周计划 ---\n{weekly_fp.read_text('utf-8')[:2000]}")
+        prompt = """请对我这一周做一个深度反思，包含：
+1. 本周最大收获
+2. 本周关键洞察（从行为模式中发现了什么）
+3. 需要调整的方向
+4. 下周建议聚焦的1-2件事
+请简洁有力。"""
+
+    # Memory context
+    ensure_memory_dir()
+    memory_context = ""
+    for fp in sorted(MEMORY_DIR.glob("*.md"))[:5]:
+        if fp.name == "MEMORY.md":
+            continue
+        memory_context += f"\n--- Memory: {fp.stem} ---\n{fp.read_text('utf-8')[:500]}\n"
+
+    full_context = "\n".join(context_parts) + memory_context
+
+    system_msg = f"""你是 Ome365 AI 助手，帮助用户做深度反思和洞察提取。
+今天是: {today_s()} Day {day_n()} W{week_n()} Q{quarter_n()}
+你了解用户的记忆档案，请基于这些做个性化反思。
+用简洁有力的中文，像教练对运动员说话。"""
+
+    # Call AI
+    if mode == "api":
+        base_url = settings.get("api_base_url", "").rstrip("/")
+        api_key = settings.get("api_key", "")
+        model = settings.get("api_model", "")
+        if not all([base_url, api_key, model]):
+            return {"ok": False, "error": "请配置完整的API信息"}
+        try:
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json",
+                       "HTTP-Referer": "https://ome365.app", "X-Title": "Ome365"}
+            payload = {"model": model, "max_tokens": 1500, "messages": [
+                {"role": "system", "content": system_msg + "\n" + full_context},
+                {"role": "user", "content": prompt}
+            ]}
+            resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=90, **_proxy_kwargs())
+            resp.raise_for_status()
+            text = resp.json()["choices"][0]["message"]["content"]
+
+            # Save insight to Memory/insights/
+            insights_dir = MEMORY_DIR / "insights"
+            insights_dir.mkdir(exist_ok=True)
+            insight_fp = insights_dir / f"{today_s()}_{reflect_type}.md"
+            insight_meta = f"---\nname: {reflect_type}_reflection_{today_s()}\ntype: insight\ndescription: {reflect_type} reflection for {today_s()}\n---\n\n"
+            insight_fp.write_text(insight_meta + text, "utf-8")
+
+            return {"ok": True, "response": text, "saved_to": str(insight_fp.relative_to(VAULT))}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    elif mode == "ollama":
+        ollama_url = settings.get("ollama_url", "http://localhost:11434").rstrip("/")
+        model = settings.get("ollama_model", "llama3.1")
+        try:
+            payload = {"model": model, "messages": [
+                {"role": "system", "content": system_msg + "\n" + full_context},
+                {"role": "user", "content": prompt}
+            ], "stream": False}
+            resp = req.post(f"{ollama_url}/api/chat", json=payload, timeout=120, **_proxy_kwargs())
+            resp.raise_for_status()
+            text = resp.json().get("message", {}).get("content", "")
+
+            insights_dir = MEMORY_DIR / "insights"
+            insights_dir.mkdir(exist_ok=True)
+            insight_fp = insights_dir / f"{today_s()}_{reflect_type}.md"
+            insight_meta = f"---\nname: {reflect_type}_reflection_{today_s()}\ntype: insight\ndescription: {reflect_type} reflection for {today_s()}\n---\n\n"
+            insight_fp.write_text(insight_meta + text, "utf-8")
+
+            return {"ok": True, "response": text, "saved_to": str(insight_fp.relative_to(VAULT))}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    return {"ok": False, "error": f"未知模式: {mode}"}
+
+
+# ── API: Streaks ──────────────────────────────────────
+@app.get("/api/streaks")
+async def get_streaks():
+    """Calculate streak data: consecutive days with completed tasks."""
+    daily_dir = VAULT / "Journal" / "Daily"
+    if not daily_dir.exists():
+        return {"current_streak": 0, "best_streak": 0, "total_active_days": 0}
+
+    active_dates = set()
+    for fp in daily_dir.glob("*.md"):
+        try:
+            d = date.fromisoformat(fp.stem)
+            data = parse_md(fp)
+            done = sum(1 for t in data["tasks"] if t["done"])
+            if done > 0:
+                active_dates.add(d)
+        except:
+            continue
+
+    if not active_dates:
+        return {"current_streak": 0, "best_streak": 0, "total_active_days": 0}
+
+    # Current streak (counting back from today)
+    current = 0
+    d = date.today()
+    while d in active_dates:
+        current += 1
+        d -= timedelta(days=1)
+
+    # Best streak
+    sorted_dates = sorted(active_dates)
+    best = 1
+    run = 1
+    for i in range(1, len(sorted_dates)):
+        if (sorted_dates[i] - sorted_dates[i-1]).days == 1:
+            run += 1
+            best = max(best, run)
+        else:
+            run = 1
+
+    return {"current_streak": current, "best_streak": best, "total_active_days": len(active_dates)}
+
+
 # ── PWA ───────────────────────────────────────────────
 @app.get("/manifest.json")
 async def manifest():
@@ -1547,7 +1946,7 @@ if __name__ == "__main__":
     # Validate vault
     if not VAULT.exists():
         VAULT.mkdir(parents=True, exist_ok=True)
-    for d in ["Journal/Daily","Journal/Weekly","Journal/Monthly","Journal/Quarterly","Notes","Decisions","Contacts/people","Projects","AI-Logs","Templates"]:
+    for d in ["Journal/Daily","Journal/Weekly","Journal/Monthly","Journal/Quarterly","Notes","Decisions","Contacts/people","Projects","AI-Logs","Templates","Memory","Memory/insights"]:
         (VAULT / d).mkdir(parents=True, exist_ok=True)
     MEDIA.mkdir(exist_ok=True)
 
@@ -1556,7 +1955,7 @@ if __name__ == "__main__":
     goal = settings.get("main_goal","365天个人执行计划")
     mode = settings.get("ai_mode","none")
     ai_status = f"AI: {mode}" if mode != "none" else "AI: 未配置"
-    print(f"\n  Ome365 v0.1 · {goal}")
+    print(f"\n  Ome365 v0.2 · {goal}")
     print(f"  http://localhost:{PORT} · http://{ip}:{PORT}")
     print(f"  Vault: {VAULT} · {ai_status}\n")
     uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="warning")
