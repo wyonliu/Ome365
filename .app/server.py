@@ -1,9 +1,9 @@
 """
-Ome365 v0.5 — 个人超级助手
+Ome365 v0.6 — 个人超级助手 + Ome 智能体
 启动: cd .app && python3 server.py
 """
 
-import os, re, json, glob, socket, subprocess, shutil, uuid, threading
+import os, re, json, glob, socket, subprocess, shutil, uuid, threading, logging
 from datetime import datetime, date, timedelta
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
@@ -13,6 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 import uvicorn
+
+# Suppress noisy Mindos warnings (commit_digest etc.)
+logging.getLogger("mindos").setLevel(logging.ERROR)
 
 VAULT = Path(os.environ.get("OME365_VAULT", Path(__file__).parent.parent)).resolve()
 MEDIA = Path(__file__).parent / "media"
@@ -97,6 +100,77 @@ def get_start() -> date:
         return date.fromisoformat(s.get("start_date", "2026-04-08"))
     except Exception:
         return date(2026, 4, 8)
+
+
+# ── Ome 智能体 ────────────────────────────────────────
+OME_HOME = Path.home() / ".ome" / "ome365"
+_ome_instance = None
+_ome_lock = threading.Lock()
+
+def _init_ome():
+    """Initialize or load the Ome instance. Sets up API key from settings."""
+    global _ome_instance
+    settings = load_settings()
+    # Propagate API key to env for Ome's ModelRouter
+    if settings.get("api_key"):
+        base = settings.get("api_base_url", "")
+        if "openrouter" in base:
+            os.environ.setdefault("OPENROUTER_API_KEY", settings["api_key"])
+        elif "deepseek" in base:
+            os.environ.setdefault("DEEPSEEK_API_KEY", settings["api_key"])
+        else:
+            os.environ.setdefault("OPENAI_API_KEY", settings["api_key"])
+    try:
+        from ome import Ome
+        if OME_HOME.exists():
+            _ome_instance = Ome.load(OME_HOME)
+        else:
+            _ome_instance = Ome.create(str(OME_HOME), name="小灵", traits=["执行导向", "温暖", "犀利"])
+            # Write correct config.yaml matching user's API settings
+            _write_ome_config(settings)
+            _ome_instance = Ome.load(OME_HOME)
+        print(f"  Ome 智能体: ✅ {_ome_instance.name} (from {OME_HOME})")
+    except ImportError:
+        print("  Ome 智能体: ⚠️ omnity-ome 未安装，AI功能降级为直连模式")
+    except Exception as e:
+        print(f"  Ome 智能体: ❌ 初始化失败 ({e})")
+
+def _write_ome_config(settings: dict):
+    """Write config.yaml for Ome based on Ome365 settings."""
+    base = settings.get("api_base_url", "").rstrip("/")
+    model = settings.get("api_model", "deepseek-chat")
+    if "openrouter" in base:
+        provider_name, key_env = "openrouter", "OPENROUTER_API_KEY"
+    elif "deepseek" in base:
+        provider_name, key_env = "deepseek", "DEEPSEEK_API_KEY"
+        base = "https://api.deepseek.com"
+    else:
+        provider_name, key_env = "custom", "OPENAI_API_KEY"
+    cfg = f"""models:
+- name: {provider_name}
+  type: openai_compatible
+  base_url: {base}
+  api_key_env: {key_env}
+  model: {model}
+  priority: 1
+  for: [chat, commit_digest, reflection, reasoning, creation, deep_reasoning, complex_creation]
+fallback: {provider_name}
+hydrate:
+  default_max_tokens: 2000
+  include_relations: true
+  include_capabilities: true
+commit:
+  use_llm: true
+  fallback_to_rules: true
+reflection:
+  trigger_every_n_commits: 20
+  enabled: true
+"""
+    (OME_HOME / "config.yaml").write_text(cfg, "utf-8")
+
+def get_ome():
+    """Get the Ome instance (thread-safe). Returns None if unavailable."""
+    return _ome_instance
 
 
 # ── MD Parsing ────────────────────────────────────────
@@ -970,97 +1044,53 @@ app.mount("/media", StaticFiles(directory=str(MEDIA)), name="media")
 # ── API: AI (multi-provider) ──────────────────────────
 @app.post("/api/ai")
 async def ai_ask(body:dict):
-    import requests as req
     prompt = body.get("prompt","")
     context = body.get("context","")
-    full_prompt = prompt
-    if context:
-        full_prompt = f"Context:\n{context}\n\n{prompt}"
+    full_prompt = f"Context:\n{context}\n\n{prompt}" if context else prompt
 
+    ome = get_ome()
+    if ome:
+        # Inject today's context as a remember so Ome has it
+        daily_fp = find_daily()
+        day_ctx = f"今天是 {today_s()}, Day {day_n()}, W{week_n()}, Q{quarter_n()}"
+        try:
+            with _ome_lock:
+                result = ome.chat_rich(f"{day_ctx}\n{full_prompt}")
+            return {
+                "ok": True,
+                "response": result.get("reply", ""),
+                "provider": "ome",
+                "memories_recalled": result.get("memories_recalled", []),
+                "emotion": result.get("emotion"),
+                "bond": result.get("bond"),
+                "evolution_pending": result.get("evolution_pending", False),
+                "phase": result.get("phase"),
+            }
+        except Exception as e:
+            return {"ok": False, "error": f"Ome error: {e}"}
+
+    # Fallback: direct API call (legacy, when omnity-ome not installed)
+    import requests as req
     settings = load_settings()
     mode = settings.get("ai_mode", "none")
-
-    system_msg = f"""你是 Ome365 AI 助手，帮助用户管理365天个人执行计划。
-用户的工作目录是: {VAULT}
-今天是: {today_s()}
-Day: {day_n()}
-Week: W{week_n()}
-Quarter: Q{quarter_n()}
-请用简洁有力的中文回答，像教练对运动员说话。"""
-
-    file_context = ""
-    daily_fp = find_daily()
-    if daily_fp.exists():
-        file_context += f"\n--- 今日文件 ({daily_fp.name}) ---\n{daily_fp.read_text('utf-8')[:2000]}\n"
-    plan_fp = VAULT / "000-365-PLAN.md"
-    if plan_fp.exists():
-        file_context += f"\n--- 365计划 ---\n{plan_fp.read_text('utf-8')[:3000]}\n"
-    # Inject memory context so AI actually uses stored memories
-    mem_dir = VAULT / "Memory"
-    if mem_dir.exists():
-        mem_texts = []
-        for mf in sorted(mem_dir.glob("*.md")):
-            if mf.name == "MEMORY.md":
-                continue
-            try:
-                txt = mf.read_text("utf-8")[:500]
-                mem_texts.append(txt)
-            except:
-                pass
-        if mem_texts:
-            file_context += "\n--- 用户记忆 ---\n" + "\n---\n".join(mem_texts[:10]) + "\n"
-    system_with_context = system_msg + file_context
-
     if mode == "none":
         return {"ok":False, "error":"请在设置中配置AI服务"}
-
-    elif mode == "api":
+    system_msg = f"你是 Ome365 AI 助手。今天是 {today_s()}, Day {day_n()}, W{week_n()}, Q{quarter_n()}。请用简洁有力的中文回答。"
+    if mode == "api":
         base_url = settings.get("api_base_url","").rstrip("/")
         api_key = settings.get("api_key","")
         model = settings.get("api_model","")
-        if not base_url or not api_key or not model:
-            return {"ok":False, "error":"请在设置中填写完整的 API 地址、密钥和模型"}
+        if not all([base_url, api_key, model]):
+            return {"ok":False, "error":"请在设置中填写完整的 API 配置"}
         try:
-            headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json",
-                       "HTTP-Referer":"https://ome365.app","X-Title":"Ome365"}
+            headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json"}
             payload = {"model":model,"max_tokens":1024,"messages":[
-                {"role":"system","content":system_with_context},
-                {"role":"user","content":full_prompt}
-            ]}
+                {"role":"system","content":system_msg},{"role":"user","content":full_prompt}]}
             resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=60, **_proxy_kwargs())
-            if resp.status_code == 403:
-                body_text = resp.text[:200]
-                if "region" in body_text.lower():
-                    return {"ok":False, "error":f"模型 {model} 在当前地区不可用"}
-                if "prohibited" in body_text.lower() or "terms" in body_text.lower():
-                    return {"ok":False, "error":f"模型 {model} 被提供商拒绝（地区/代理限制），建议换用 deepseek/deepseek-chat"}
-                return {"ok":False, "error":f"API 拒绝 (403): {body_text}"}
             resp.raise_for_status()
-            data = resp.json()
-            text = data["choices"][0]["message"]["content"]
-            return {"ok":True, "response":text, "provider":"api"}
-        except req.exceptions.ConnectionError:
-            return {"ok":False, "error":f"无法连接 {base_url}，请检查网络和代理设置"}
-        except req.exceptions.Timeout:
-            return {"ok":False, "error":"AI 请求超时（60s），请重试"}
+            return {"ok":True, "response":resp.json()["choices"][0]["message"]["content"], "provider":"api"}
         except Exception as e:
             return {"ok":False, "error":str(e)}
-
-    elif mode == "ollama":
-        ollama_url = settings.get("ollama_url","http://localhost:11434").rstrip("/")
-        model = settings.get("ollama_model","llama3.1")
-        try:
-            payload = {"model":model,"messages":[
-                {"role":"system","content":system_with_context},
-                {"role":"user","content":full_prompt}
-            ],"stream":False}
-            resp = req.post(f"{ollama_url}/api/chat", json=payload, timeout=120, **_proxy_kwargs())
-            resp.raise_for_status()
-            text = resp.json().get("message",{}).get("content","")
-            return {"ok":True, "response":text, "provider":"ollama"}
-        except Exception as e:
-            return {"ok":False, "error":str(e)}
-
     return {"ok":False, "error":f"未知模式: {mode}"}
 
 @app.get("/api/ai/session")
@@ -1076,8 +1106,17 @@ async def ai_smart_input(body: dict):
     if not text:
         return {"ok": False, "error": "请输入内容"}
 
+    # Also store in Ome memory for future recall
+    ome = get_ome()
+    if ome:
+        try:
+            with _ome_lock:
+                ome.remember(f"智能录入: {text[:500]}", source="smart_input")
+        except:
+            pass
+
     settings = load_settings()
-    if settings.get("ai_mode", "none") == "none":
+    if settings.get("ai_mode", "none") == "none" and not ome:
         return {"ok": False, "error": "请先在设置中配置AI"}
 
     # Gather existing contacts for matching
@@ -2529,15 +2568,46 @@ def _compute_growth_state() -> dict:
 
 @app.get("/api/growth")
 async def get_growth():
+    ome = get_ome()
+    if ome:
+        try:
+            with _ome_lock:
+                dash = ome.life_dashboard()
+            return {
+                "ome_name": ome.name,
+                "ome_personality": ", ".join(ome.traits),
+                "bond": dash.get("bond", {}),
+                "emotion": dash.get("emotion", {}),
+                "achievements": dash.get("achievements", {}),
+                "skills": dash.get("skills", []),
+                "streak": dash.get("streak", {}),
+                "highlights": dash.get("highlights", []),
+                "evolution_pending": ome.evolution_pending,
+                "commits_since_reflection": ome.commits_since_reflection,
+                # Legacy compat fields
+                "phase": {"name": dash.get("bond", {}).get("name", "初见")},
+                "total_interactions": dash.get("bond", {}).get("total_interactions", 0),
+                "days_since_first": dash.get("bond", {}).get("days", 0),
+                "traits": ome.traits,
+            }
+        except Exception as e:
+            pass  # Fall through to legacy
     return _compute_growth_state()
 
 @app.post("/api/growth/interact")
 async def record_interaction(body: dict = {}):
     """Record an interaction (called after AI use, note creation, etc.)"""
+    ome = get_ome()
+    if ome:
+        return {
+            "ok": True,
+            "total": ome.life_dashboard().get("bond", {}).get("total_interactions", 0),
+            "evolution_pending": ome.evolution_pending,
+        }
+    # Legacy fallback
     growth = load_growth()
     growth["total_interactions"] = growth.get("total_interactions", 0) + body.get("count", 1)
     total = growth["total_interactions"]
-    # Flag evolution pending every 20 interactions
     evolution_pending = (total % 20 == 0) and total > 0
     if evolution_pending:
         growth["evolution_pending"] = True
@@ -2558,82 +2628,53 @@ async def update_growth_profile(body: dict):
 @app.post("/api/growth/evolve")
 async def evolve_personality():
     """AI analyzes recent interactions and generates a personality evolution insight."""
+    ome = get_ome()
+    if ome:
+        try:
+            with _ome_lock:
+                result = ome.evolve()
+            return {
+                "ok": True,
+                "evolution": {"date": today_s(), "shift": result.get("summary", ""), "reason": "Ome自省"},
+                "new_trait": ", ".join(result.get("new_traits_observed", [])),
+                "drift_detected": result.get("drift_detected"),
+                "method": result.get("method", ""),
+            }
+        except Exception as e:
+            return {"ok": False, "error": str(e)[:100]}
+
+    # Legacy fallback
     import requests as req
     settings = load_settings()
     if settings.get("ai_mode", "none") == "none":
         return {"ok": False, "error": "请先配置AI"}
-
     growth = load_growth()
-
-    # Gather recent context
     context_parts = []
     fp = find_daily()
-    if fp.exists():
-        context_parts.append(fp.read_text("utf-8")[:2000])
-    # Recent notes
-    notes_dir = VAULT / "Notes"
-    if notes_dir.exists():
-        for nf in sorted(notes_dir.glob("*.md"), reverse=True)[:3]:
-            context_parts.append(nf.read_text("utf-8")[:500])
-    # Memories
-    mem_dir = VAULT / "Memory"
-    if mem_dir.exists():
-        for mf in sorted(mem_dir.glob("*.md"))[:5]:
-            if mf.name != "MEMORY.md":
-                context_parts.append(mf.read_text("utf-8")[:300])
-
+    if fp.exists(): context_parts.append(fp.read_text("utf-8")[:2000])
     current_traits = ", ".join(growth.get("traits", [])) or growth.get("ome_personality", "好奇、温暖、直接")
-    prompt = f"""分析以下用户数据，为AI助手"{growth.get('ome_name','Ome')}"生成一条个性进化记录。
-
-当前个性特征：{current_traits}
-总互动次数：{growth.get('total_interactions',0)}
-相识天数：{(date.today() - date.fromisoformat(growth.get('first_use_date', today_s()))).days}
-
-用户数据：
-{chr(10).join(context_parts)[:3000]}
-
-请输出一条JSON，格式：{{"shift":"一句话描述个性变化（如：变得更关注用户的能量状态）","new_trait":"新增特征词（如：敏感体察）","reason":"原因（15字以内）"}}
-只输出JSON，不要其他文字。"""
-
+    prompt = f"""分析用户数据，为AI助手"{growth.get('ome_name','Ome')}"生成个性进化记录。当前特征：{current_traits}，互动{growth.get('total_interactions',0)}次。
+用户数据：{chr(10).join(context_parts)[:2000]}
+输出JSON：{{"shift":"变化描述","new_trait":"新特征","reason":"原因"}}"""
     try:
-        if settings.get("ai_mode") == "api":
-            base_url = settings.get("api_base_url","").rstrip("/")
-            api_key = settings.get("api_key","")
-            model = settings.get("api_model","")
-            headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json",
-                       "HTTP-Referer":"https://ome365.app","X-Title":"Ome365"}
-            payload = {"model":model,"max_tokens":200,"messages":[
-                {"role":"system","content":"你是个性进化分析器，只输出JSON。"},
-                {"role":"user","content":prompt}
-            ]}
-            resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=30, **_proxy_kwargs())
-            resp.raise_for_status()
-            text = resp.json()["choices"][0]["message"]["content"].strip()
-        elif settings.get("ai_mode") == "ollama":
-            ollama_url = settings.get("ollama_url","http://localhost:11434").rstrip("/")
-            payload = {"model":settings.get("ollama_model","llama3.1"),"messages":[
-                {"role":"system","content":"你是个性进化分析器，只输出JSON。"},
-                {"role":"user","content":prompt}
-            ],"stream":False}
-            resp = req.post(f"{ollama_url}/api/chat", json=payload, timeout=30)
-            resp.raise_for_status()
-            text = resp.json().get("message",{}).get("content","").strip()
-        else:
-            return {"ok": False, "error": "AI未配置"}
-
-        # Parse the JSON response
-        import re as _re
-        json_match = _re.search(r'\{[^}]+\}', text)
+        base_url = settings.get("api_base_url","").rstrip("/")
+        api_key = settings.get("api_key","")
+        model = settings.get("api_model","")
+        headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json"}
+        payload = {"model":model,"max_tokens":200,"messages":[
+            {"role":"system","content":"只输出JSON。"},{"role":"user","content":prompt}]}
+        resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=30, **_proxy_kwargs())
+        resp.raise_for_status()
+        text = resp.json()["choices"][0]["message"]["content"].strip()
+        json_match = re.search(r'\{[^}]+\}', text)
         if json_match:
             evo = json.loads(json_match.group())
-            entry = {"date": today_s(), "shift": evo.get("shift",""), "reason": evo.get("reason",""),
-                     "phase": growth.get("total_interactions",0)}
+            entry = {"date": today_s(), "shift": evo.get("shift",""), "reason": evo.get("reason","")}
             growth.setdefault("evolution_log", []).append(entry)
             if evo.get("new_trait"):
                 traits = growth.get("traits", [])
-                if evo["new_trait"] not in traits:
-                    traits.append(evo["new_trait"])
-                growth["traits"] = traits[-10:]  # Keep last 10 traits
+                if evo["new_trait"] not in traits: traits.append(evo["new_trait"])
+                growth["traits"] = traits[-10:]
             save_growth(growth)
             return {"ok": True, "evolution": entry, "new_trait": evo.get("new_trait","")}
         return {"ok": False, "error": "AI返回格式异常"}
@@ -2713,74 +2754,47 @@ async def delete_reminder(rid: str):
 @app.get("/api/proactive")
 async def get_proactive():
     """Generate a proactive AI message based on current context."""
-    import requests as req
     settings = load_settings()
     if not settings.get("proactive_enabled", True):
         return {"ok": False, "reason": "disabled"}
+
+    ome = get_ome()
+    if ome:
+        try:
+            with _ome_lock:
+                greeting = ome.generate_greeting()
+            if greeting and "连不上" not in greeting:
+                return {"ok": True, "message": greeting, "trigger": "ome_greeting"}
+        except:
+            pass
+
+    # Legacy fallback
+    import requests as req
     if settings.get("ai_mode", "none") == "none":
         return {"ok": False, "reason": "no_ai"}
-
-    now = datetime.now()
-    hour = now.hour
-
-    # Determine proactive trigger type
+    hour = datetime.now().hour
     fp = find_daily()
     data = parse_md(fp)
     tasks = [t for t in data["tasks"] if t["text"].strip()]
-    done = sum(1 for t in tasks if t["done"])
-    total = len(tasks)
-
-    # Pick a contextual prompt
-    if hour < 9:
-        prompt = f"现在是早上{hour}点。用户今天有{total}个任务。给一句简短有力的晨间打气（15字以内），像教练对运动员说的。只输出这句话。"
-    elif hour < 12 and done == 0 and total > 0:
-        prompt = f"现在上午{hour}点，用户今天{total}个任务一个没开始。给一句温和的推动（15字以内），不要说教。只输出这句话。"
-    elif hour >= 12 and hour < 14:
-        prompt = f"午间了。用户完成了{done}/{total}个任务。给一句简短的午间提醒或鼓励（15字以内）。只输出这句话。"
-    elif hour >= 17 and done < total:
-        prompt = f"下午{hour}点了，还有{total-done}个任务没完成。给一句收尾冲刺的短句（15字以内）。只输出这句话。"
-    elif hour >= 21:
-        prompt = f"晚上{hour}点了。用户今天完成了{done}/{total}个任务。给一句简短的复盘提醒或晚安（15字以内）。只输出这句话。"
-    else:
-        # No proactive needed right now
-        return {"ok": False, "reason": "no_trigger"}
-
-    mode = settings.get("ai_mode")
+    done, total = sum(1 for t in tasks if t["done"]), len(tasks)
+    if hour < 9: prompt = f"早上{hour}点，{total}个任务。晨间打气15字。只输出这句话。"
+    elif hour < 12 and done == 0 and total > 0: prompt = f"上午{hour}点，{total}个任务没开始。温和推动15字。只输出。"
+    elif 12 <= hour < 14: prompt = f"午间，{done}/{total}完成。鼓励15字。只输出。"
+    elif hour >= 17 and done < total: prompt = f"下午{hour}点，还有{total-done}个。冲刺15字。只输出。"
+    elif hour >= 21: prompt = f"晚{hour}点，{done}/{total}完成。晚安15字。只输出。"
+    else: return {"ok": False, "reason": "no_trigger"}
     try:
-        if mode == "api":
-            base_url = settings.get("api_base_url","").rstrip("/")
-            api_key = settings.get("api_key","")
-            model = settings.get("api_model","")
-            if not all([base_url, api_key, model]):
-                return {"ok": False, "reason": "no_config"}
-            headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json",
-                       "HTTP-Referer":"https://ome365.app","X-Title":"Ome365"}
-            growth = load_growth()
-            system_msg = f"你是{growth.get('ome_name','Ome')}，用户的AI助手。个性：{growth.get('ome_personality','温暖直接')}。今天是Day {day_n()}。"
-            payload = {"model":model,"max_tokens":50,"messages":[
-                {"role":"system","content":system_msg},
-                {"role":"user","content":prompt}
-            ]}
-            resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=15, **_proxy_kwargs())
-            resp.raise_for_status()
-            text = resp.json()["choices"][0]["message"]["content"].strip().strip('"')
-            return {"ok": True, "message": text, "trigger": prompt[:20]}
-        elif mode == "ollama":
-            ollama_url = settings.get("ollama_url","http://localhost:11434").rstrip("/")
-            model = settings.get("ollama_model","llama3.1")
-            growth = load_growth()
-            system_msg = f"你是{growth.get('ome_name','Ome')}，用户的AI助手。个性：{growth.get('ome_personality','温暖直接')}。"
-            payload = {"model":model,"messages":[
-                {"role":"system","content":system_msg},
-                {"role":"user","content":prompt}
-            ],"stream":False}
-            resp = req.post(f"{ollama_url}/api/chat", json=payload, timeout=15)
-            resp.raise_for_status()
-            text = resp.json().get("message",{}).get("content","").strip().strip('"')
-            return {"ok": True, "message": text, "trigger": prompt[:20]}
+        base_url = settings.get("api_base_url","").rstrip("/")
+        api_key = settings.get("api_key","")
+        model = settings.get("api_model","")
+        if not all([base_url, api_key, model]): return {"ok": False, "reason": "no_config"}
+        headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json"}
+        payload = {"model":model,"max_tokens":50,"messages":[{"role":"user","content":prompt}]}
+        resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=15, **_proxy_kwargs())
+        resp.raise_for_status()
+        return {"ok": True, "message": resp.json()["choices"][0]["message"]["content"].strip().strip('"')}
     except Exception as e:
         return {"ok": False, "reason": str(e)[:100]}
-    return {"ok": False, "reason": "unknown_mode"}
 
 
 # ── PWA ───────────────────────────────────────────────
@@ -2817,7 +2831,9 @@ if __name__ == "__main__":
     goal = settings.get("main_goal","365天个人执行计划")
     mode = settings.get("ai_mode","none")
     ai_status = f"AI: {mode}" if mode != "none" else "AI: 未配置"
-    print(f"\n  Ome365 v0.2 · {goal}")
+    print(f"\n  Ome365 v0.6 · {goal}")
     print(f"  http://localhost:{PORT} · http://{ip}:{PORT}")
-    print(f"  Vault: {VAULT} · {ai_status}\n")
+    print(f"  Vault: {VAULT} · {ai_status}")
+    _init_ome()
+    print()
     uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="warning")
