@@ -107,12 +107,12 @@ createApp({
     const aiError = ref('');
 
     // Settings
-    const settings = ref({user_name:'', main_goal:'365天个人执行计划', start_date:'2026-04-08', ai_mode:'none', api_base_url:'', api_key:'', api_model:'', ollama_url:'http://localhost:11434', ollama_model:'llama3.1'});
+    const settings = ref({user_name:'', main_goal:'365天个人执行计划', start_date:'2026-04-08', ai_mode:'none', api_base_url:'', api_key:'', api_model:'', ollama_url:'http://localhost:11434', ollama_model:'llama3.1', use_proxy:true});
     const apiPresets = [
+      {name:'DeepSeek', base_url:'https://api.deepseek.com/v1', model:'deepseek-chat'},
+      {name:'OpenRouter', base_url:'https://openrouter.ai/api/v1', model:'deepseek/deepseek-chat'},
       {name:'OpenAI', base_url:'https://api.openai.com/v1', model:'gpt-4o'},
       {name:'Anthropic', base_url:'https://api.anthropic.com/v1', model:'claude-sonnet-4-20250514'},
-      {name:'DeepSeek', base_url:'https://api.deepseek.com/v1', model:'deepseek-chat'},
-      {name:'OpenRouter', base_url:'https://openrouter.ai/api/v1', model:'anthropic/claude-sonnet-4'},
       {name:'自定义', base_url:'', model:''},
     ];
     function applyPreset(preset) {
@@ -155,7 +155,12 @@ createApp({
     const notePlaceholder = computed(() => isRecording.value ? '录音中...' : isTranscribing.value ? '语音识别中...' : '写下想法、灵感、待办...');
 
     // Dashboard computed
-    const dateDisplay = computed(() => dash.value?.date||'');
+    const dateDisplay = computed(() => {
+      const d = dash.value?.date;
+      if(!d) return '';
+      const [y,m,dd] = d.split('-');
+      return `${parseInt(m)}月${parseInt(dd)}日`;
+    });
     const weekday = computed(() => dash.value?.weekday||'');
     const dayNumber = computed(() => dash.value?.day_number||0);
     const week = computed(() => dash.value?.week_number||0);
@@ -199,6 +204,27 @@ createApp({
       return html;
     });
     const aiResponseHtml = computed(() => aiResponse.value ? marked.parse(aiResponse.value,{gfm:true,breaks:true}) : '');
+
+    // Note date formatting
+    function formatNoteDate(isoDate) {
+      const today = new Date(); const d = new Date(isoDate + 'T00:00:00');
+      const todayStr = today.toISOString().slice(0,10);
+      const yest = new Date(today); yest.setDate(yest.getDate()-1);
+      const yestStr = yest.toISOString().slice(0,10);
+      if(isoDate === todayStr) return '今天';
+      if(isoDate === yestStr) return '昨天';
+      const [y,m,dd] = isoDate.split('-');
+      const wd = ['日','一','二','三','四','五','六'][d.getDay()];
+      return `${parseInt(m)}月${parseInt(dd)}日 周${wd}`;
+    }
+    // Ensure today always shows in notes list
+    const notesDisplay = computed(() => {
+      const raw = notes.value || [];
+      const todayStr = new Date().toISOString().slice(0,10);
+      const hasToday = raw.some(g => g.date === todayStr);
+      if(hasToday) return raw;
+      return [{date:todayStr, items:[], path:`Notes/${todayStr}.md`}, ...raw];
+    });
     const decisionDetailHtml = computed(() => decisionDetail.value ? marked.parse(decisionDetail.value.content||'',{gfm:true,breaks:true}) : '');
     const contactDetailHtml = computed(() => selectedContact.value ? marked.parse(selectedContact.value.content||'',{gfm:true,breaks:true}) : '');
 
@@ -293,8 +319,15 @@ createApp({
       const res = await api('/settings', {method:'PUT', body:JSON.stringify(settings.value)});
       if(res?.ok) { settingsSaved.value = true; setTimeout(()=>settingsSaved.value=false, 2000); showToast('设置已保存'); await loadDashboard(); }
     }
+    async function toggleProxy() {
+      settings.value.use_proxy = !settings.value.use_proxy;
+      await api('/settings', {method:'PUT', body:JSON.stringify(settings.value)});
+      showToast(settings.value.use_proxy ? '代理已开启' : '代理已关闭');
+    }
     async function testAI() {
       aiTestLoading.value = true; aiTestResult.value = '';
+      // Auto-save settings before testing
+      await api('/settings', {method:'PUT', body:JSON.stringify(settings.value)});
       const res = await api('/settings/test-ai', {method:'POST'});
       aiTestLoading.value = false;
       if(res?.ok) aiTestResult.value = '✅ 连接成功: ' + (res.response||'').slice(0,100);
@@ -652,6 +685,16 @@ createApp({
     function heatmapClick(d){ if(d.level >= 0) switchView('today'); }
 
     function barColor(pct){if(pct>=85)return 'good';if(pct>=60)return '';if(pct>=40)return 'warn';return 'bad';}
+    function formatMsDate(isoDate) {
+      const today = new Date(); const d = new Date(isoDate + 'T00:00:00');
+      const todayStr = today.toISOString().slice(0,10);
+      if(isoDate === todayStr) return '今天';
+      const [y,m,dd] = isoDate.split('-');
+      const wd = ['日','一','二','三','四','五','六'][d.getDay()];
+      const thisYear = today.getFullYear().toString();
+      if(y === thisYear) return `${parseInt(m)}月${parseInt(dd)}日 周${wd}`;
+      return `${y}年${parseInt(m)}月${parseInt(dd)}日`;
+    }
     function isCurrentMilestone(m){
       if(m.past)return false;
       const all=(planData.value?.milestones||[]).filter(x=>!x.past);
@@ -925,12 +968,12 @@ createApp({
       createContact, selectContactDetail, startEditContact, saveEditContact, addInteraction,
       createContactCategory, deleteContactCategory,
       openFile, openNoteFile, heatmapClick,
-      barColor, isCurrentMilestone, renderNoteText, askAISuggestion,
-      getCatColor, getCatName, tierLabel, getContactCatName, getContactCatColor,
+      barColor, isCurrentMilestone, formatMsDate, renderNoteText, askAISuggestion,
+      getCatColor, getCatName, tierLabel, getContactCatName, getContactCatColor, formatNoteDate, notesDisplay,
       resetAISession,
       toggleRecording, stopRecording, startSpeechToText, uploadImage, askAI,
       loadSpecialDays, createSpecialDay, deleteSpecialDay, prevMonth, nextMonth, openDayFormForDate, onDayTypeChange,
-      loadSettings, saveSettings, testAI,
+      loadSettings, saveSettings, testAI, toggleProxy,
       fabAction, showToast,
     };
   }

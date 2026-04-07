@@ -55,7 +55,13 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
       </button>
       <div class="topbar-title">{{currentTitle}}</div>
-      <div class="topbar-right"><span class="topbar-date">{{dateDisplay}} {{weekday}}</span></div>
+      <div class="topbar-right">
+        <button class="proxy-toggle" :class="{on: settings.use_proxy}" @click="toggleProxy" :title="settings.use_proxy?'代理已开启，点击关闭':'代理已关闭，点击开启'">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <span class="proxy-label">代理</span>
+        </button>
+        <span class="topbar-date">{{dateDisplay}} {{weekday}}</span>
+      </div>
     </header>
 
     <!-- View loading indicator -->
@@ -68,6 +74,11 @@
         <div class="greeting-bar">
           <span class="greeting-emoji">{{greeting.emoji}}</span>
           <span class="greeting-text">{{greeting.text}}</span>
+        </div>
+
+        <div class="main-goal-bar" v-if="settings.main_goal">
+          <span class="main-goal-label">主计划</span>
+          <span class="main-goal-text">{{settings.main_goal}}</span>
         </div>
 
         <div class="grid-2">
@@ -109,16 +120,22 @@
           </div>
         </div>
 
-        <div class="card"><div class="card-top"><span class="card-label">里程碑</span></div>
-          <div class="milestone-list-v2">
-            <div v-for="m in milestones" :key="m.date" class="ms-card" :class="{past:m.past, 'ms-next':!m.past && milestones.filter(x=>!x.past)[0]?.date===m.date}" :style="!m.past?{borderLeftColor:m.color||'var(--gold)'}:{}">
-              <div class="ms-card-top">
-                <span class="ms-date-v2">{{m.date}}</span>
-                <span v-if="m.category && m.category!=='其他'" class="ms-cat-tag" :style="{color:m.color,background:m.color+'18'}">{{m.category}}</span>
+        <div class="card"><div class="card-top"><span class="card-label">里程碑</span><span class="card-value see-more" @click="switchView('plan')">查看全部 →</span></div>
+          <div class="ms-timeline">
+            <div v-for="(m,i) in milestones" :key="m.date" class="ms-tl-item" :class="{'ms-tl-past':m.past, 'ms-tl-next':!m.past && milestones.filter(x=>!x.past)[0]?.date===m.date, 'ms-tl-future':!m.past && milestones.filter(x=>!x.past)[0]?.date!==m.date}">
+              <div class="ms-tl-rail">
+                <div class="ms-tl-dot" :style="!m.past?{borderColor:m.color||'var(--gold)', boxShadow:'0 0 8px '+(m.color||'var(--gold)')+'40'}:{}"></div>
+                <div class="ms-tl-line" v-if="i<milestones.length-1"></div>
               </div>
-              <div class="ms-card-label">{{m.label}}</div>
-              <div v-if="!m.past && m.countdown!=null" class="ms-card-countdown" :class="{'ms-urgent':m.countdown<=7,'ms-soon':m.countdown<=30&&m.countdown>7}">
-                {{m.countdown===0?'🔥 今天！':m.countdown+'天后'}}
+              <div class="ms-tl-body">
+                <div class="ms-tl-header">
+                  <span class="ms-tl-date">{{formatMsDate(m.date)}}</span>
+                  <span v-if="m.category && m.category!=='其他'" class="ms-tl-cat" :style="{color:m.color,background:(m.color||'var(--gold)')+'14'}">{{m.category}}</span>
+                </div>
+                <div class="ms-tl-label">{{m.label}}</div>
+                <div v-if="!m.past && m.countdown!=null" class="ms-tl-countdown" :class="{'ms-tl-urgent':m.countdown<=7,'ms-tl-soon':m.countdown<=30&&m.countdown>7}">
+                  {{m.countdown===0?'今天':'还有 '+m.countdown+' 天'}}
+                </div>
               </div>
             </div>
           </div>
@@ -292,16 +309,22 @@
           </div>
         </div>
         <div class="card" v-if="planData">
-          <div class="card-top"><span class="card-label">里程碑时间轴</span></div>
-          <div class="timeline">
-            <div v-for="m in planData.milestones" :key="m.date" class="tl-item" :class="{past:m.past, current: isCurrentMilestone(m)}">
-              <div class="tl-dot" :style="!m.past&&m.color?{background:m.color}:{}"></div>
-              <div class="tl-line"></div>
-              <div class="tl-content">
-                <span class="tl-date">{{m.date}}</span>
-                <span class="tl-label">{{m.label}}</span>
-                <span v-if="m.category && m.category!=='其他'" class="tl-cat" :style="{color:m.color}">{{m.category}}</span>
-                <span v-if="!m.past && m.countdown!=null" class="tl-countdown">{{m.countdown}}天</span>
+          <div class="card-top"><span class="card-label">里程碑时间轴</span><span class="card-value">{{planData.milestones.length}} 个节点</span></div>
+          <div class="ms-timeline ms-timeline-full">
+            <div v-for="(m,i) in planData.milestones" :key="m.date" class="ms-tl-item" :class="{'ms-tl-past':m.past, 'ms-tl-next':isCurrentMilestone(m), 'ms-tl-future':!m.past && !isCurrentMilestone(m)}">
+              <div class="ms-tl-rail">
+                <div class="ms-tl-dot" :style="!m.past?{borderColor:m.color||'var(--gold)', boxShadow:'0 0 8px '+(m.color||'var(--gold)')+'40'}:{}"></div>
+                <div class="ms-tl-line" v-if="i<planData.milestones.length-1"></div>
+              </div>
+              <div class="ms-tl-body">
+                <div class="ms-tl-header">
+                  <span class="ms-tl-date">{{formatMsDate(m.date)}}</span>
+                  <span v-if="m.category && m.category!=='其他'" class="ms-tl-cat" :style="{color:m.color,background:(m.color||'var(--gold)')+'14'}">{{m.category}}</span>
+                  <span v-if="!m.past && m.countdown!=null" class="ms-tl-countdown" :class="{'ms-tl-urgent':m.countdown<=7,'ms-tl-soon':m.countdown<=30&&m.countdown>7}">
+                    {{m.countdown===0?'今天':'还有 '+m.countdown+' 天'}}
+                  </span>
+                </div>
+                <div class="ms-tl-label">{{m.label}}</div>
               </div>
             </div>
           </div>
@@ -451,20 +474,20 @@
         </div>
 
         <!-- History -->
-        <div class="card" v-for="group in notes" :key="group.date" v-show="!noteSourceFile">
+        <div class="card" v-for="group in notesDisplay" :key="group.date" v-show="!noteSourceFile">
           <div class="card-top">
-            <span class="card-label">{{group.date}}</span>
-            <div class="card-actions"><span class="card-value">{{group.items.length}} 条</span><button class="btn-ghost btn-xs" @click="openNoteFile(group)" title="打开源文件">📄</button></div>
+            <span class="card-label">{{formatNoteDate(group.date)}} <span class="note-date-raw">{{group.date}}</span></span>
+            <div class="card-actions"><span class="card-value" v-if="group.items.length">{{group.items.length}} 条</span><button class="btn-ghost btn-xs" @click="openNoteFile(group)" title="打开源文件" v-if="group.items.length">📄</button></div>
           </div>
-          <div class="capture-list">
+          <div class="capture-list" v-if="group.items.length">
             <div v-for="c in group.items" :key="c.time+c.text" class="capture-row">
               <span class="capture-time">{{c.time}}</span>
               <span v-if="c.category" class="cat-tag" :style="{background:getCatColor(c.category)+'20',color:getCatColor(c.category)}">{{getCatName(c.category)}}</span>
               <span class="capture-text" v-html="renderNoteText(c.text)"></span>
             </div>
           </div>
+          <div v-else class="empty-sm" style="padding:12px 0;opacity:0.5;">还没有速记，写下第一条吧</div>
         </div>
-        <div v-if="!notes.length && !noteText" class="empty-lg">还没有速记 — 写下第一条吧</div>
       </div>
 
       <!-- ══ CONTACTS ══ -->
@@ -820,56 +843,61 @@
       <div v-if="view==='settings'" class="view" key="settings">
         <div class="card">
           <div class="card-top"><span class="card-label">基本设置</span></div>
-          <div class="form-group"><label class="form-label">你的名字</label><input v-model="settings.user_name" class="input" placeholder="用于问候语"></div>
-          <div class="form-group"><label class="form-label">主目标</label><input v-model="settings.main_goal" class="input" placeholder="365天个人执行计划"></div>
-          <div class="form-group"><label class="form-label">起始日期</label><input v-model="settings.start_date" class="input" type="date"></div>
+          <div class="settings-form-grid">
+            <div class="form-group"><label class="form-label">你的名字</label><input v-model="settings.user_name" class="input" placeholder="用于问候语"></div>
+            <div class="form-group"><label class="form-label">起始日期</label><input v-model="settings.start_date" class="input" type="date"></div>
+          </div>
+          <div class="form-group"><label class="form-label">主目标</label><input v-model="settings.main_goal" class="input" placeholder="365天个人执行计划"><p class="settings-hint">显示在总览页面顶部</p></div>
         </div>
 
         <div class="card">
-          <div class="card-top"><span class="card-label">🤖 AI 配置</span></div>
-          <p class="settings-desc">配置AI后，速记页面的AI助手和总览页的智能建议将会启用。</p>
+          <div class="card-top"><span class="card-label">AI 配置</span></div>
+          <p class="settings-desc">配置后，速记页的 AI 助手和总览页的智能建议将启用。</p>
 
           <div class="mode-tabs">
-            <button class="mode-tab" :class="{active: settings.ai_mode==='api'}" @click="settings.ai_mode='api'">🔑 API 模式</button>
-            <button class="mode-tab" :class="{active: settings.ai_mode==='ollama'}" @click="settings.ai_mode='ollama'">🏠 Ollama 本地</button>
+            <button class="mode-tab" :class="{active: settings.ai_mode==='api'}" @click="settings.ai_mode='api'">API 模式</button>
+            <button class="mode-tab" :class="{active: settings.ai_mode==='ollama'}" @click="settings.ai_mode='ollama'">Ollama 本地</button>
             <button class="mode-tab" :class="{active: settings.ai_mode==='none'}" @click="settings.ai_mode='none'">关闭</button>
           </div>
 
           <!-- API Mode -->
           <div v-if="settings.ai_mode==='api'" class="settings-section">
             <div class="preset-bar">
-              <span class="preset-label">快速填入：</span>
+              <span class="preset-label">快速选择：</span>
               <button v-for="p in apiPresets" :key="p.name" class="preset-btn" :class="{active: settings.api_base_url===p.base_url && p.base_url}" @click="applyPreset(p)">{{p.name}}</button>
             </div>
             <div class="form-group"><label class="form-label">API Base URL</label><input v-model="settings.api_base_url" class="input input-mono" placeholder="https://api.openai.com/v1"></div>
-            <div class="form-group"><label class="form-label">API Key</label><input v-model="settings.api_key" class="input input-mono" type="password" placeholder="sk-..."></div>
+            <div class="form-group"><label class="form-label">API Key</label><input v-model="settings.api_key" class="input input-mono" type="password" placeholder="sk-..." autocomplete="off"></div>
             <div class="form-group"><label class="form-label">模型名称</label><input v-model="settings.api_model" class="input input-mono" placeholder="gpt-4o"></div>
-            <p class="settings-hint">支持所有 OpenAI 兼容接口：OpenAI、Anthropic、DeepSeek、OpenRouter、Together 等</p>
+            <p class="settings-hint">支持所有 OpenAI 兼容接口：OpenAI / Anthropic / DeepSeek / OpenRouter / Together 等</p>
           </div>
 
           <!-- Ollama Mode -->
           <div v-if="settings.ai_mode==='ollama'" class="settings-section">
             <div class="form-group"><label class="form-label">Ollama 地址</label><input v-model="settings.ollama_url" class="input input-mono" placeholder="http://localhost:11434"></div>
             <div class="form-group"><label class="form-label">模型名称</label><input v-model="settings.ollama_model" class="input input-mono" placeholder="llama3.1"></div>
-            <p class="settings-hint">需要先安装 Ollama 并下载模型：ollama pull llama3.1</p>
+            <p class="settings-hint">需先安装 <a href="https://ollama.ai" target="_blank" style="color:var(--gold)">Ollama</a> 并下载模型：<code style="color:var(--text2)">ollama pull llama3.1</code></p>
           </div>
 
           <!-- None Mode -->
           <div v-if="settings.ai_mode==='none'" class="settings-section">
-            <p class="settings-hint" style="margin-top:12px">AI已关闭。其他功能不受影响。</p>
+            <div class="settings-none-state">
+              <span style="font-size:24px;opacity:0.3">🤖</span>
+              <span style="color:var(--text3);font-size:13px">AI 已关闭，其他功能不受影响</span>
+            </div>
           </div>
 
-          <div class="form-actions" style="margin-top:16px;gap:12px">
-            <button class="btn-primary" @click="testAI" :disabled="aiTestLoading || settings.ai_mode==='none'">
-              {{aiTestLoading ? '测试中...' : '🔌 测试连接'}}
+          <div v-if="settings.ai_mode!=='none'" class="settings-test-row">
+            <button class="btn-outline" @click="testAI" :disabled="aiTestLoading">
+              {{aiTestLoading ? '测试中...' : '测试连接'}}
             </button>
+            <div v-if="aiTestResult" class="ai-test-result" :class="{'test-ok':aiTestResult.startsWith('✅'),'test-fail':aiTestResult.startsWith('❌')}">{{aiTestResult}}</div>
           </div>
-          <div v-if="aiTestResult" class="ai-test-result" :class="{'test-ok':aiTestResult.startsWith('✅'),'test-fail':aiTestResult.startsWith('❌')}">{{aiTestResult}}</div>
         </div>
 
-        <div class="form-actions" style="margin-top:16px">
-          <button class="btn-primary" @click="saveSettings">💾 保存设置</button>
-          <span v-if="settingsSaved" class="save-success">✅ 已保存</span>
+        <div class="settings-save-bar">
+          <button class="btn-primary btn-save-settings" @click="saveSettings">保存设置</button>
+          <transition name="toast-fade"><span v-if="settingsSaved" class="save-success">已保存</span></transition>
         </div>
       </div>
 
