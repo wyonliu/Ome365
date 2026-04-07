@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  ome365:
+    build: .
+    container_name: ome365
+    ports:
+      - "3650:3650"
+    volumes:
+      - ./data:/data    # 你的数据在这里，容器删了数据还在
+    restart: unless-stopped
+    environment:
+      - OME365_VAULT=/data
