@@ -1,5 +1,5 @@
 """
-Ome365 v6 — 个人执行面板
+Ome365 v0.1 — 365天个人执行面板
 启动: cd .app && python3 server.py
 """
 
@@ -57,19 +57,35 @@ SETTINGS_DEFAULTS = {
     "api_model": "",           # e.g. gpt-4o, claude-sonnet-4-20250514
     "ollama_url": "http://localhost:11434",
     "ollama_model": "llama3.1",
+    "use_proxy": True,
 }
 
+def _safe_json_load(fp: Path, default=None):
+    """Load JSON file with corruption protection."""
+    if not fp.exists():
+        return default
+    try:
+        return json.loads(fp.read_text("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        # Backup corrupted file, return default
+        bak = fp.with_suffix(fp.suffix + ".bak")
+        fp.rename(bak)
+        return default
+
 def load_settings() -> dict:
-    if SETTINGS_FILE.exists():
-        saved = json.loads(SETTINGS_FILE.read_text("utf-8"))
-        merged = {**SETTINGS_DEFAULTS, **saved}
-        return merged
-    return dict(SETTINGS_DEFAULTS)
+    saved = _safe_json_load(SETTINGS_FILE, {})
+    return {**SETTINGS_DEFAULTS, **saved}
 
 def save_settings(settings: dict):
     # Only save known keys (merge with defaults to avoid losing new keys)
     merged = {**SETTINGS_DEFAULTS, **settings}
     SETTINGS_FILE.write_text(json.dumps(merged, ensure_ascii=False, indent=2), "utf-8")
+
+def _proxy_kwargs() -> dict:
+    """Return proxy kwargs for requests. Bypass proxy when use_proxy is off."""
+    if load_settings().get("use_proxy", True):
+        return {}  # let system proxy through
+    return {"proxies": {"http": "", "https": ""}}
 
 def get_start() -> date:
     """Get the configured start date from settings, with backward compat fallback."""
@@ -320,9 +336,7 @@ def ensure_today():
 TASK_REPEATS_FILE = Path(__file__).parent / "task_repeats.json"
 
 def load_task_repeats():
-    if TASK_REPEATS_FILE.exists():
-        return json.loads(TASK_REPEATS_FILE.read_text("utf-8"))
-    return []
+    return _safe_json_load(TASK_REPEATS_FILE, [])
 
 def save_task_repeats(repeats):
     TASK_REPEATS_FILE.write_text(json.dumps(repeats, ensure_ascii=False, indent=2), "utf-8")
@@ -332,9 +346,7 @@ def save_task_repeats(repeats):
 SPECIAL_DAYS_FILE = Path(__file__).parent / "special_days.json"
 
 def load_special_days():
-    if SPECIAL_DAYS_FILE.exists():
-        return json.loads(SPECIAL_DAYS_FILE.read_text("utf-8"))
-    return []
+    return _safe_json_load(SPECIAL_DAYS_FILE, [])
 
 def save_special_days(days):
     SPECIAL_DAYS_FILE.write_text(json.dumps(days, ensure_ascii=False, indent=2), "utf-8")
@@ -374,8 +386,9 @@ def compute_next_occurrence(day_entry):
 CATEGORIES_FILE = Path(__file__).parent / "categories.json"
 
 def load_categories() -> list:
-    if CATEGORIES_FILE.exists():
-        return json.loads(CATEGORIES_FILE.read_text("utf-8"))
+    data = _safe_json_load(CATEGORIES_FILE)
+    if data is not None:
+        return data
     default = [
         {"id":"career","name":"职业产出","color":"#60a5fa","icon":"💼"},
         {"id":"create","name":"创作事业","color":"#c8a96e","icon":"✍️"},
@@ -396,8 +409,9 @@ def save_categories(cats: list):
 CONTACT_CATS_FILE = Path(__file__).parent / "contact_categories.json"
 
 def load_contact_categories() -> list:
-    if CONTACT_CATS_FILE.exists():
-        return json.loads(CONTACT_CATS_FILE.read_text("utf-8"))
+    data = _safe_json_load(CONTACT_CATS_FILE)
+    if data is not None:
+        return data
     CONTACT_CATS_FILE.write_text(json.dumps(DEFAULT_CONTACT_CATS, ensure_ascii=False, indent=2), "utf-8")
     return DEFAULT_CONTACT_CATS
 
@@ -821,6 +835,7 @@ async def get_note_file(date_str:str):
 
 # ── API: Media Upload (voice/image) ──────────────────
 MEDIA.mkdir(exist_ok=True)
+MAX_UPLOAD_MB = 50
 
 @app.post("/api/media/upload")
 async def upload_media(file: UploadFile = File(...)):
@@ -830,8 +845,14 @@ async def upload_media(file: UploadFile = File(...)):
     uid = uuid.uuid4().hex[:8]
     fname = f"{today_s()}_{uid}{ext}"
     fp = MEDIA / fname
+    size = 0
     with open(fp, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+        while chunk := await file.read(1024 * 1024):
+            size += len(chunk)
+            if size > MAX_UPLOAD_MB * 1024 * 1024:
+                f.close(); fp.unlink(missing_ok=True)
+                raise HTTPException(413, f"文件超过 {MAX_UPLOAD_MB}MB 限制")
+            f.write(chunk)
     return {"ok":True,"filename":fname,"url":f"/media/{fname}","size":fp.stat().st_size}
 
 app.mount("/media", StaticFiles(directory=str(MEDIA)), name="media")
@@ -877,16 +898,28 @@ Quarter: Q{quarter_n()}
         if not base_url or not api_key or not model:
             return {"ok":False, "error":"请在设置中填写完整的 API 地址、密钥和模型"}
         try:
-            headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json"}
+            headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json",
+                       "HTTP-Referer":"https://ome365.app","X-Title":"Ome365"}
             payload = {"model":model,"max_tokens":1024,"messages":[
                 {"role":"system","content":system_with_context},
                 {"role":"user","content":full_prompt}
             ]}
-            resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=60)
+            resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=60, **_proxy_kwargs())
+            if resp.status_code == 403:
+                body_text = resp.text[:200]
+                if "region" in body_text.lower():
+                    return {"ok":False, "error":f"模型 {model} 在当前地区不可用"}
+                if "prohibited" in body_text.lower() or "terms" in body_text.lower():
+                    return {"ok":False, "error":f"模型 {model} 被提供商拒绝（地区/代理限制），建议换用 deepseek/deepseek-chat"}
+                return {"ok":False, "error":f"API 拒绝 (403): {body_text}"}
             resp.raise_for_status()
             data = resp.json()
             text = data["choices"][0]["message"]["content"]
             return {"ok":True, "response":text, "provider":"api"}
+        except req.exceptions.ConnectionError:
+            return {"ok":False, "error":f"无法连接 {base_url}，请检查网络和代理设置"}
+        except req.exceptions.Timeout:
+            return {"ok":False, "error":"AI 请求超时（60s），请重试"}
         except Exception as e:
             return {"ok":False, "error":str(e)}
 
@@ -898,7 +931,7 @@ Quarter: Q{quarter_n()}
                 {"role":"system","content":system_with_context},
                 {"role":"user","content":full_prompt}
             ],"stream":False}
-            resp = req.post(f"{ollama_url}/api/chat", json=payload, timeout=120)
+            resp = req.post(f"{ollama_url}/api/chat", json=payload, timeout=120, **_proxy_kwargs())
             resp.raise_for_status()
             text = resp.json().get("message",{}).get("content","")
             return {"ok":True, "response":text, "provider":"ollama"}
@@ -965,12 +998,22 @@ async def test_ai_connection():
         if not base_url or not api_key or not model:
             return {"ok":False, "error":"请填写完整的 API 地址、密钥和模型"}
         try:
-            headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json"}
+            headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json",
+                       "HTTP-Referer":"https://ome365.app","X-Title":"Ome365"}
             payload = {"model":model,"max_tokens":64,"messages":[{"role":"user","content":test_prompt}]}
-            resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=30)
+            resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=30, **_proxy_kwargs())
+            if resp.status_code == 403:
+                body_text = resp.text[:300]
+                if "region" in body_text.lower():
+                    return {"ok":False, "error":f"该模型在当前地区不可用，请换一个模型（如 deepseek/deepseek-chat）。当前: {model}"}
+                if "terms of service" in body_text.lower() or "prohibited" in body_text.lower():
+                    return {"ok":False, "error":f"该模型的提供商拒绝了请求（可能因地区/代理限制）。建议：换用 deepseek/deepseek-chat，或关闭右上角代理开关后重试。当前: {model}"}
+                return {"ok":False, "error":f"API 拒绝访问 (403)，请检查 Key 和模型名。当前: {model}"}
             resp.raise_for_status()
             text = resp.json()["choices"][0]["message"]["content"]
             return {"ok":True, "response":text}
+        except req.exceptions.HTTPError as e:
+            return {"ok":False, "error":f"HTTP {e.response.status_code}: {e.response.text[:200]}"}
         except Exception as e:
             return {"ok":False, "error":str(e)}
 
@@ -979,7 +1022,7 @@ async def test_ai_connection():
         model = settings.get("ollama_model","llama3.1")
         try:
             payload = {"model":model,"messages":[{"role":"user","content":test_prompt}],"stream":False}
-            resp = req.post(f"{ollama_url}/api/chat", json=payload, timeout=60)
+            resp = req.post(f"{ollama_url}/api/chat", json=payload, timeout=60, **_proxy_kwargs())
             resp.raise_for_status()
             text = resp.json().get("message",{}).get("content","")
             return {"ok":True, "response":text}
@@ -1362,7 +1405,12 @@ async def heatmap():
 async def read_file(path:str):
     fp = VAULT/path
     if not fp.exists(): raise HTTPException(404)
-    if not fp.resolve().is_relative_to(VAULT): raise HTTPException(403)
+    try:
+        resolved = fp.resolve()
+        if not str(resolved).startswith(str(VAULT.resolve())):
+            raise HTTPException(403, "Access denied")
+    except (ValueError, OSError):
+        raise HTTPException(403, "Invalid path")
     return parse_md(fp)
 
 FOLDER_ICONS = {
@@ -1496,10 +1544,19 @@ def get_local_ip():
     except: return "127.0.0.1"
 
 if __name__ == "__main__":
+    # Validate vault
+    if not VAULT.exists():
+        VAULT.mkdir(parents=True, exist_ok=True)
+    for d in ["Journal/Daily","Journal/Weekly","Journal/Monthly","Journal/Quarterly","Notes","Decisions","Contacts/people","Projects","AI-Logs","Templates"]:
+        (VAULT / d).mkdir(parents=True, exist_ok=True)
+    MEDIA.mkdir(exist_ok=True)
+
     ip = get_local_ip()
     settings = load_settings()
     goal = settings.get("main_goal","365天个人执行计划")
-    print(f"\n  Ome365 · {goal}")
+    mode = settings.get("ai_mode","none")
+    ai_status = f"AI: {mode}" if mode != "none" else "AI: 未配置"
+    print(f"\n  Ome365 v0.1 · {goal}")
     print(f"  http://localhost:{PORT} · http://{ip}:{PORT}")
-    print(f"  Vault: {VAULT}\n")
+    print(f"  Vault: {VAULT} · {ai_status}\n")
     uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="warning")
