@@ -1750,6 +1750,19 @@ select.input { cursor: pointer; }
 .tb-form-time { max-width: 120px; }
 .tb-form-dim { max-width: 80px; }
 
+/* Reminders */
+.reminder-list { display: flex; flex-direction: column; gap: 4px; }
+.reminder-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; transition: background 0.15s; }
+.reminder-row:hover { background: rgba(255,255,255,0.04); }
+.reminder-auto { opacity: 0.7; }
+.reminder-time { font-size: 13px; font-weight: 600; color: var(--gold); min-width: 50px; font-family: var(--mono); }
+.reminder-title { font-size: 13px; color: var(--text); flex: 1; }
+.reminder-badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: rgba(255,255,255,0.06); color: var(--text3); }
+.reminder-badge-task { color: var(--green); background: rgba(52,211,153,0.1); }
+.reminder-badge-block { color: var(--gold); background: var(--gold-dim); }
+.reminder-badge-day { color: #f472b6; background: rgba(244,114,182,0.1); }
+.reminder-row:hover .tb-del { opacity: 1; }
+
 /* Edit task row */
 .edit-task-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .btn-time-range { background: rgba(200,169,110,0.12); border: 1px solid rgba(200,169,110,0.2); color: #c8a96e; border-radius: 4px; cursor: pointer; padding: 2px 8px; font-size: 12px; transition: all 0.15s; white-space: nowrap; }

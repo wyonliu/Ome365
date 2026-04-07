@@ -387,6 +387,35 @@
           </div>
         </div>
 
+        <!-- Reminders — today/tomorrow tabs -->
+        <div v-if="(tasksTab==='today'||tasksTab==='tomorrow') && (reminders.length || showReminderForm)" class="card">
+          <div class="card-top">
+            <span class="card-label">⏰ 提醒</span>
+            <button class="btn-ghost" @click="showReminderForm=!showReminderForm">+ 添加</button>
+          </div>
+          <div class="reminder-list" v-if="reminders.length">
+            <div v-for="r in reminders" :key="r.id" class="reminder-row" :class="{'reminder-auto':!r.custom}">
+              <span class="reminder-time">{{r.time}}</span>
+              <span class="reminder-title">{{r.title}}</span>
+              <span v-if="!r.custom" class="reminder-badge">自动</span>
+              <span v-if="r.type==='task'" class="reminder-badge reminder-badge-task">任务</span>
+              <span v-if="r.type==='block'" class="reminder-badge reminder-badge-block">日程</span>
+              <span v-if="r.type==='day'" class="reminder-badge reminder-badge-day">日子</span>
+              <button v-if="r.custom" class="tb-del" @click="deleteReminder(r.id)" title="删除">×</button>
+            </div>
+          </div>
+          <div v-if="showReminderForm" class="tb-form">
+            <div class="tb-form-row">
+              <input v-model="newReminder.time" type="time" class="input tb-form-time">
+              <input v-model="newReminder.title" class="input" placeholder="提醒内容" style="flex:1" @keyup.enter="addReminder">
+            </div>
+            <div class="form-actions" style="margin-top:8px">
+              <button class="btn-primary-sm" @click="addReminder">添加</button>
+              <button class="btn-ghost" @click="showReminderForm=false">取消</button>
+            </div>
+          </div>
+        </div>
+
         <!-- Diary (today tab only) -->
         <div v-if="tasksTab==='today'" class="card">
           <div class="card-top"><span class="card-label">日记</span>
