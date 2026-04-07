@@ -56,6 +56,9 @@
       </button>
       <div class="topbar-title">{{currentTitle}}</div>
       <div class="topbar-right">
+        <button class="search-btn" @click="showSearchPanel=!showSearchPanel" title="搜索 (⌘K)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        </button>
         <button class="proxy-toggle" :class="{on: settings.use_proxy}" @click="toggleProxy" :title="settings.use_proxy?'代理已开启，点击关闭':'代理已关闭，点击开启'">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
           <span class="proxy-label">代理</span>
@@ -63,6 +66,30 @@
         <span class="topbar-date">{{dateDisplay}} {{weekday}}</span>
       </div>
     </header>
+
+    <!-- Search Panel (Cmd+K) -->
+    <transition name="fade">
+      <div v-if="showSearchPanel" class="search-overlay" @click.self="showSearchPanel=false">
+        <div class="search-panel">
+          <div class="search-input-row">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <input id="search-input" v-model="searchQuery" @input="onSearchInput" placeholder="搜索全部文件..." class="search-input" autofocus>
+            <kbd class="search-kbd">ESC</kbd>
+          </div>
+          <div v-if="searchLoading" class="search-loading">搜索中...</div>
+          <div v-else-if="searchResults.length" class="search-results">
+            <div v-for="r in searchResults" :key="r.path" class="search-result-item" @click="openSearchResult(r)">
+              <div class="search-result-name">{{r.name}}</div>
+              <div class="search-result-path">{{r.folder}}</div>
+              <div class="search-result-snippet">{{r.snippet}}</div>
+            </div>
+            <div v-if="searchTotal>searchResults.length" class="search-more">还有 {{searchTotal-searchResults.length}} 个结果</div>
+          </div>
+          <div v-else-if="searchQuery.trim()" class="search-empty">没有找到匹配的内容</div>
+          <div v-else class="search-hint">输入关键词搜索所有笔记、日志、计划...</div>
+        </div>
+      </div>
+    </transition>
 
     <!-- View loading indicator -->
     <div v-if="loading && dash" class="view-loading"><div class="loading-bar"><div class="loading-fill"></div></div></div>
@@ -79,6 +106,31 @@
         <div class="main-goal-bar" v-if="settings.main_goal">
           <span class="main-goal-label">主计划</span>
           <span class="main-goal-text">{{settings.main_goal}}</span>
+        </div>
+
+        <!-- Streak + Mood Quick Bar -->
+        <div class="dash-quick-bar">
+          <div class="quick-stat" v-if="streakData.current_streak>0">
+            <span class="quick-stat-icon">🔥</span>
+            <span class="quick-stat-val">{{streakData.current_streak}}</span>
+            <span class="quick-stat-label">连续天</span>
+          </div>
+          <div class="quick-stat">
+            <span class="quick-stat-icon">📅</span>
+            <span class="quick-stat-val">{{streakData.total_active_days}}</span>
+            <span class="quick-stat-label">活跃日</span>
+          </div>
+          <div class="quick-mood">
+            <span class="quick-mood-label">今日心情</span>
+            <span v-for="m in moodOptions" :key="m.val" class="mood-btn" :class="{active: dash?.today_mood===m.val}" @click="setMood(m.val)" :title="m.tip">{{m.label}}</span>
+          </div>
+        </div>
+
+        <!-- On This Day -->
+        <div v-if="onThisDayEntries.length" class="on-this-day-bar">
+          <span class="otd-icon">📖</span>
+          <span class="otd-label">回忆</span>
+          <span v-for="e in onThisDayEntries.slice(0,2)" :key="e.date" class="otd-entry">{{e.label}}: {{e.snippet}}</span>
         </div>
 
         <div class="grid-2">
@@ -169,6 +221,26 @@
 
       <!-- ══ TODAY ══ -->
       <div v-if="view==='today'" class="view" key="today">
+        <!-- Mood / Energy / Focus tracker -->
+        <div class="today-tracker">
+          <div class="tracker-group">
+            <span class="tracker-label">心情</span>
+            <span v-for="m in moodOptions" :key="m.val" class="mood-btn" :class="{active:todayMood===m.val}" @click="setMood(m.val)" :title="m.tip">{{m.label}}</span>
+          </div>
+          <div class="tracker-group">
+            <span class="tracker-label">能量</span>
+            <div class="energy-bar">
+              <div v-for="i in 5" :key="i" class="energy-dot" :class="{active: Number(todayEnergy)>=i}" @click="setEnergy(String(i))"></div>
+            </div>
+          </div>
+          <div class="tracker-group">
+            <span class="tracker-label">专注</span>
+            <div class="energy-bar">
+              <div v-for="i in 5" :key="i" class="focus-dot" :class="{active: Number(todayFocus)>=i}" @click="setFocus(String(i))"></div>
+            </div>
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-top"><span class="card-label">今日任务</span><span class="card-value" v-if="todayStats.total">{{todayStats.done}}/{{todayStats.total}} · {{todayStats.pct}}%</span></div>
           <div class="bar-wrap" v-if="todayStats.total"><div class="bar"><div class="bar-fill" :class="barColor(todayStats.pct)" :style="{width:todayStats.pct+'%'}"></div></div></div>
@@ -684,6 +756,88 @@
             <div v-if="!contacts.length" class="empty-lg">还没有联系人 — 开始建立你的关系网络</div>
           </template>
         </template>
+      </div>
+
+      <!-- ══ MEMORY ══ -->
+      <div v-if="view==='memory'" class="view" key="memory">
+        <div class="memory-header">
+          <h2 class="section-title">🧠 记忆系统</h2>
+          <button class="btn btn-gold" @click="showMemoryForm=true;editingMemory=null;memoryForm={name:'',type:'identity',description:'',content:'',filename:''}">+ 新记忆</button>
+        </div>
+        <p class="memory-desc">AI 和你一起积累的长期记忆。身份、偏好、目标、技能、洞察 —— 越用越懂你。</p>
+
+        <!-- Memory type filter pills -->
+        <div class="memory-types">
+          <span v-for="t in memoryTypes" :key="t.id" class="memory-type-pill">
+            <span class="mtp-icon">{{t.icon}}</span>
+            <span class="mtp-label">{{t.label}}</span>
+            <span class="mtp-count">{{memories.filter(m=>m.type===t.id).length}}</span>
+          </span>
+        </div>
+
+        <!-- Memory cards -->
+        <div class="memory-grid">
+          <div v-for="m in memories" :key="m.filename" class="memory-card" @click="editMemoryFile(m)">
+            <div class="memory-card-head">
+              <span class="memory-card-type">{{memoryTypes.find(t=>t.id===m.type)?.icon||'📝'}} {{memoryTypes.find(t=>t.id===m.type)?.label||m.type}}</span>
+              <button class="memory-card-del" @click.stop="deleteMemory(m.filename)" title="删除">×</button>
+            </div>
+            <div class="memory-card-name">{{m.name}}</div>
+            <div class="memory-card-desc" v-if="m.description">{{m.description}}</div>
+            <div class="memory-card-preview">{{m.content.slice(0,120)}}{{m.content.length>120?'...':''}}</div>
+          </div>
+          <div v-if="!memories.length" class="memory-empty">
+            <div class="memory-empty-icon">🧠</div>
+            <div>还没有记忆。点击「+ 新记忆」开始记录。</div>
+            <div class="memory-empty-hint">记录你的身份、偏好、目标，让AI越来越懂你。</div>
+          </div>
+        </div>
+
+        <!-- AI Reflection -->
+        <div class="memory-section">
+          <h3 class="section-subtitle">AI 反思</h3>
+          <div class="reflect-actions">
+            <button class="btn btn-outline" @click="doReflect('daily')" :disabled="reflectLoading">{{reflectLoading?'思考中...':'📝 今日反思'}}</button>
+            <button class="btn btn-outline" @click="doReflect('weekly')" :disabled="reflectLoading">{{reflectLoading?'思考中...':'📋 本周反思'}}</button>
+          </div>
+          <div v-if="reflectResult" class="reflect-result card">
+            <div class="reflect-content" v-html="reflectHtml"></div>
+          </div>
+        </div>
+
+        <!-- Memory Form Modal -->
+        <div v-if="showMemoryForm" class="modal-overlay" @click.self="showMemoryForm=false">
+          <div class="modal memory-modal">
+            <div class="modal-header">
+              <h3>{{editingMemory ? '编辑记忆' : '新建记忆'}}</h3>
+              <button class="modal-close" @click="showMemoryForm=false">×</button>
+            </div>
+            <div class="form-group">
+              <label>名称</label>
+              <input v-model="memoryForm.name" placeholder="例：我的职业目标" class="input">
+            </div>
+            <div class="form-group">
+              <label>类型</label>
+              <div class="memory-type-selector">
+                <button v-for="t in memoryTypes" :key="t.id" class="mts-btn" :class="{active:memoryForm.type===t.id}" @click="memoryForm.type=t.id">
+                  {{t.icon}} {{t.label}}
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>描述（一句话）</label>
+              <input v-model="memoryForm.description" placeholder="用于检索时判断相关性" class="input">
+            </div>
+            <div class="form-group">
+              <label>内容</label>
+              <textarea v-model="memoryForm.content" rows="8" placeholder="详细内容..." class="input textarea"></textarea>
+            </div>
+            <div class="modal-actions">
+              <button class="btn btn-gold" @click="saveMemory">保存</button>
+              <button class="btn btn-outline" @click="showMemoryForm=false">取消</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- ══ DAYS (日子) ══ -->

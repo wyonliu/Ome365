@@ -1,9 +1,9 @@
 # Ome365
 
-**365天个人执行面板** — AI原生、Markdown存储、本地优先
+**个人超级助手** — AI记忆、Markdown存储、本地优先
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v0.1-blue" alt="v0.1">
+  <img src="https://img.shields.io/badge/version-v0.2-blue" alt="v0.2">
   <img src="https://img.shields.io/badge/python-3.9+-blue" alt="Python 3.9+">
   <img src="https://img.shields.io/badge/vue-3.x-green" alt="Vue 3">
   <img src="https://img.shields.io/badge/storage-markdown-orange" alt="Markdown">
@@ -17,12 +17,22 @@
 
 你有365天。一年后的你，和现在有什么不同？
 
-Ome365 帮你把年度目标拆解为可执行的每日行动，用六个维度衡量进度，用AI辅助思考和复盘。
+Ome365 帮你把年度目标拆解为可执行的每日行动，用AI记忆系统越来越懂你，用反思引擎帮你持续进化。
 
-**不是又一个笔记工具。** 是一个执行系统——帮你把「想做」变成「做到」。
+**不是又一个笔记工具。** 是一个会记住你、理解你、帮你执行的个人超级助手。
 
 ## 核心特性
 
+### v0.2 新增
+- **记忆系统** — 多层记忆（身份/偏好/目标/技能/洞察），AI越用越懂你
+- **全文搜索** — Cmd+K 搜索全部笔记、日志、计划，快速定位
+- **AI反思** — 每日/每周深度反思，自动保存洞察到记忆
+- **心情/能量/专注度** — 每日状态追踪，可视化趋势
+- **连续打卡** — 自动计算连续活跃天数，激励坚持
+- **回忆** — "去年今日"功能，回顾同一天的笔记
+- **CLAUDE.md桥接** — 外部AI（Claude Code等）可直接接入，理解你的数据
+
+### v0.1 基础
 - **365天作战地图** — 年度计划按季度拆解，里程碑时间轴实时倒计时
 - **今日/本周** — 任务管理，支持重复任务自动生成
 - **速记** — 随手记录想法、灵感，支持语音转文字（本地Whisper）和图片
@@ -82,9 +92,12 @@ Ome365/
 ├── .app/                    # 应用代码
 │   ├── server.py            # FastAPI 后端
 │   └── static/              # 前端 (Vue 3 CDN, 零构建)
-├── sample-vault/            # 示例数据
+├── CLAUDE.md                # AI集成桥接文件 (v0.2)
 ├── Journal/                 # 日记 (Daily/Weekly/Monthly/Quarterly)
 ├── Notes/                   # 速记
+├── Memory/                  # AI记忆系统 (v0.2)
+│   ├── MEMORY.md            # 记忆索引（自动生成）
+│   └── insights/            # AI反思洞察
 ├── Decisions/               # 决策日志
 ├── Contacts/people/         # 联系人
 ├── 000-365-PLAN.md          # 年度计划（核心文件）
@@ -100,6 +113,7 @@ Ome365/
 | 前端 | Vue 3 CDN（无构建步骤） |
 | 存储 | Markdown + JSON 文件 |
 | AI | OpenAI 兼容 API / Ollama |
+| 记忆 | MEMORY.md 索引 + 主题文件 |
 | 语音 | faster-whisper（本地转写） |
 | 图表 | force-graph（关系网络） |
 | 部署 | Docker / 裸机 |
@@ -111,23 +125,7 @@ Ome365/
 3. **零构建** — 前端用 Vue CDN，不需要 npm/webpack
 4. **AI可选** — AI是增强不是依赖，不配置也能完整使用
 5. **鲁棒存储** — JSON 文件损坏自动备份恢复，不丢数据
-
-## v0.1 特性清单
-
-- [x] 总览仪表盘（进度环、里程碑时间轴、热力图、AI建议）
-- [x] 365天作战地图（四季度 × 六维度，任务勾选）
-- [x] 今日/本周任务管理（添加、编辑、勾选、重复任务）
-- [x] 速记系统（文本/语音/图片，分类，AI处理）
-- [x] 决策日志（看板 + 状态流转）
-- [x] 关系网络（联系人CRUD、关系图、保温提醒）
-- [x] 重要日子日历（倒计时、年/月重复）
-- [x] 文件浏览器（Vault 全文件树）
-- [x] AI 多模式（API / Ollama / 关闭）
-- [x] 代理开关（右上角一键切换）
-- [x] 语音转文字（本地 faster-whisper）
-- [x] PWA 支持
-- [x] Docker 部署
-- [x] 响应式设计（桌面 + 移动端）
+6. **记忆驱动** — AI越用越懂你，不是每次从零开始 (v0.2)
 
 ## License
 
