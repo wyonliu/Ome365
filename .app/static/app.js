@@ -101,6 +101,48 @@ createApp({
     // Speech-to-text
     const isTranscribing = ref(false);
 
+    // Memory
+    const memories = ref([]);
+    const memoryIndex = ref('');
+    const showMemoryForm = ref(false);
+    const editingMemory = ref(null);
+    const memoryForm = ref({name:'', type:'identity', description:'', content:'', filename:''});
+    const memoryTypes = [
+      {id:'identity', label:'身份', icon:'👤', desc:'我是谁、角色、价值观'},
+      {id:'preference', label:'偏好', icon:'⚙️', desc:'习惯、工作方式'},
+      {id:'goal', label:'目标', icon:'🎯', desc:'长期愿景、阶段目标'},
+      {id:'skill', label:'技能', icon:'🛠', desc:'擅长什么、在学什么'},
+      {id:'insight', label:'洞察', icon:'💡', desc:'AI反思生成的认知'},
+      {id:'general', label:'通用', icon:'📝', desc:'其他记忆'},
+    ];
+
+    // Search
+    const searchQuery = ref('');
+    const searchResults = ref([]);
+    const searchTotal = ref(0);
+    const searchLoading = ref(false);
+    const showSearchPanel = ref(false);
+
+    // Streaks
+    const streakData = ref({current_streak:0, best_streak:0, total_active_days:0});
+
+    // Mood/Energy/Focus
+    const todayMood = ref('');
+    const todayEnergy = ref('');
+    const todayFocus = ref('');
+    const moodOptions = [
+      {val:'1',label:'😫',tip:'很差'},{val:'2',label:'😟',tip:'不好'},
+      {val:'3',label:'😐',tip:'一般'},{val:'4',label:'🙂',tip:'不错'},
+      {val:'5',label:'😊',tip:'很好'},{val:'6',label:'🔥',tip:'爆棚'},
+    ];
+
+    // Reflection
+    const reflectResult = ref('');
+    const reflectLoading = ref(false);
+
+    // On This Day
+    const onThisDayEntries = ref([]);
+
     // AI
     const aiResponse = ref('');
     const aiLoading = ref(false);
@@ -139,6 +181,7 @@ createApp({
       {key:'decisions',icon:'⚡',label:'决策',badge:dash.value?.decision_count||''},
       {key:'notes',icon:'✏️',label:'速记',badge:dash.value?.notes_count||''},
       {key:'contacts',icon:'👤',label:'关系',badge:dash.value?.contact_count||''},
+      {key:'memory',icon:'🧠',label:'记忆',badge:dash.value?.memory_count||''},
       {key:'days',icon:'🗓',label:'日子'},
       {key:'files',icon:'📁',label:'文件'},
       {key:'settings',icon:'⚙️',label:'设置'},
@@ -150,7 +193,7 @@ createApp({
       {key:'contacts',icon:'👤',label:'关系'},
       {key:'files',icon:'📁',label:'更多'},
     ];
-    const titles = {dashboard:'总览',today:'今日',week:'本周',plan:'365天作战地图',decisions:'决策日志',notes:'速记',contacts:'关系网络',days:'日子',files:'文件',settings:'设置'};
+    const titles = {dashboard:'总览',today:'今日',week:'本周',plan:'365天作战地图',decisions:'决策日志',notes:'速记',contacts:'关系网络',memory:'记忆',days:'日子',files:'文件',settings:'设置'};
     const currentTitle = computed(() => titles[view.value]||'');
     const notePlaceholder = computed(() => isRecording.value ? '录音中...' : isTranscribing.value ? '语音识别中...' : '写下想法、灵感、待办...');
 
@@ -313,6 +356,87 @@ createApp({
     async function loadContactGraph(){contactGraph.value = await api('/contacts/graph');}
     async function loadColdContacts(){coldContacts.value = await api('/contacts/cold')||[];}
 
+    // Memory
+    async function loadMemories() {
+      const res = await api('/memory');
+      if(res) { memories.value = res.memories||[]; memoryIndex.value = res.index||''; }
+    }
+    async function saveMemory() {
+      const f = memoryForm.value;
+      if(!f.name.trim()) return;
+      const payload = {...f};
+      if(editingMemory.value) payload.filename = editingMemory.value;
+      const res = await api('/memory',{method:'POST',body:JSON.stringify(payload)});
+      if(res?.ok){ showMemoryForm.value=false; editingMemory.value=null; memoryForm.value={name:'',type:'identity',description:'',content:'',filename:''}; await loadMemories(); showToast('记忆已保存'); }
+    }
+    async function editMemoryFile(m) {
+      const res = await api('/memory/'+encodeURIComponent(m.filename));
+      if(res){ editingMemory.value=m.filename; memoryForm.value={name:res.name,type:res.type,description:res.description,content:res.content,filename:m.filename}; showMemoryForm.value=true; }
+    }
+    async function deleteMemory(filename) {
+      await api('/memory/'+encodeURIComponent(filename),{method:'DELETE'});
+      await loadMemories(); showToast('记忆已删除');
+    }
+
+    // Search
+    let searchTimer = null;
+    async function doSearch() {
+      const q = searchQuery.value.trim();
+      if(!q) { searchResults.value=[]; searchTotal.value=0; return; }
+      searchLoading.value = true;
+      const res = await api('/search?q='+encodeURIComponent(q));
+      searchLoading.value = false;
+      if(res){ searchResults.value=res.results||[]; searchTotal.value=res.total||0; }
+    }
+    function onSearchInput() {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(doSearch, 300);
+    }
+    function openSearchResult(r) {
+      showSearchPanel.value = false;
+      switchView('files');
+      nextTick(() => openFile(r.path));
+    }
+
+    // Streaks
+    async function loadStreaks() {
+      const res = await api('/streaks');
+      if(res) streakData.value = res;
+    }
+
+    // Mood/Energy/Focus
+    async function setMood(val) {
+      todayMood.value = val;
+      await api('/today/meta',{method:'PUT',body:JSON.stringify({mood:val})});
+      showToast('心情已记录');
+    }
+    async function setEnergy(val) {
+      todayEnergy.value = val;
+      await api('/today/meta',{method:'PUT',body:JSON.stringify({energy:val})});
+      showToast('能量已记录');
+    }
+    async function setFocus(val) {
+      todayFocus.value = val;
+      await api('/today/meta',{method:'PUT',body:JSON.stringify({focus:val})});
+      showToast('专注度已记录');
+    }
+
+    // AI Reflection
+    async function doReflect(type) {
+      reflectLoading.value = true; reflectResult.value = '';
+      const res = await api('/reflect',{method:'POST',body:JSON.stringify({type})});
+      reflectLoading.value = false;
+      if(res?.ok) reflectResult.value = res.response;
+      else reflectResult.value = '反思失败: ' + (res?.error||'');
+    }
+    const reflectHtml = computed(() => reflectResult.value ? marked.parse(reflectResult.value,{gfm:true,breaks:true}) : '');
+
+    // On This Day
+    async function loadOnThisDay() {
+      const res = await api('/on-this-day');
+      if(res) onThisDayEntries.value = res.entries||[];
+    }
+
     // Settings
     async function loadSettings() { const res = await api('/settings'); if(res) settings.value = res; }
     async function saveSettings() {
@@ -398,13 +522,14 @@ createApp({
       localStorage.setItem('ome365_view', key);
       loading.value = true;
       switch(key){
-        case 'dashboard': await loadDashboard(); break;
-        case 'today': await loadToday(); break;
+        case 'dashboard': await Promise.all([loadDashboard(), loadStreaks(), loadOnThisDay()]); break;
+        case 'today': await loadToday(); todayMood.value=dash.value?.today_mood||''; todayEnergy.value=dash.value?.today_energy||''; todayFocus.value=dash.value?.today_focus||''; break;
         case 'week': await loadWeek(); break;
         case 'plan': await loadPlan(); break;
         case 'decisions': await loadDecisions(); break;
         case 'notes': await loadNotes(); break;
         case 'contacts': await Promise.all([loadContacts(), loadColdContacts(), loadContactCategories()]); break;
+        case 'memory': await loadMemories(); break;
         case 'days': await loadSpecialDays(); break;
         case 'files': await loadFileTree(); break;
         case 'settings': await loadSettings(); break;
@@ -903,7 +1028,7 @@ createApp({
     // Init
     onMounted(async () => {
       loading.value = true;
-      await Promise.all([loadDashboard(), loadCategories(), loadContactCategories(), loadSettings()]);
+      await Promise.all([loadDashboard(), loadCategories(), loadContactCategories(), loadSettings(), loadStreaks(), loadOnThisDay()]);
       loading.value = false;
 
       // Restore saved view
@@ -913,7 +1038,8 @@ createApp({
       }
 
       document.addEventListener('keydown', e => {
-        if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();switchView('notes');}
+        if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();showSearchPanel.value=!showSearchPanel.value;if(showSearchPanel.value)nextTick(()=>{const el=document.getElementById('search-input');if(el)el.focus();});}
+        if(e.key==='Escape'&&showSearchPanel.value){showSearchPanel.value=false;}
       });
     });
 
@@ -959,6 +1085,20 @@ createApp({
       dayTypeIcons,
       fileBrowserMode, selectedFolder, selectedFolderFiles,
       settings, settingsSaved, aiTestResult, aiTestLoading, apiPresets, applyPreset,
+      // v0.2: Memory
+      memories, memoryIndex, showMemoryForm, editingMemory, memoryForm, memoryTypes,
+      loadMemories, saveMemory, editMemoryFile, deleteMemory,
+      // v0.2: Search
+      searchQuery, searchResults, searchTotal, searchLoading, showSearchPanel,
+      doSearch, onSearchInput, openSearchResult,
+      // v0.2: Streaks & Mood
+      streakData, todayMood, todayEnergy, todayFocus, moodOptions,
+      setMood, setEnergy, setFocus,
+      // v0.2: Reflection
+      reflectResult, reflectLoading, reflectHtml, doReflect,
+      // v0.2: On This Day
+      onThisDayEntries,
+      // Functions
       loadAudioDevices, selectAudioDevice,
       switchView, toggleToday, toggleWeek, togglePlanTask,
       addTodayTask, addWeekTask, createCategory, deleteCategory,
