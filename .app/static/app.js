@@ -45,6 +45,11 @@ createApp({
     const tasksTab = ref('today'); // today|tomorrow|week|month|days
     const unifiedTasksData = ref(null);
 
+    // Reminders
+    const reminders = ref([]); // custom + auto merged
+    const showReminderForm = ref(false);
+    const newReminder = ref({time:'', title:''});
+
     // Task editing
     const editingTask = ref(null); // {text, description, type:'today'|'week'}
     const editTaskText = ref('');
@@ -444,12 +449,36 @@ createApp({
       const res = await api(`/tasks/unified?tab=${tab||tasksTab.value}`);
       if(res) unifiedTasksData.value = res;
     }
+    // Reminders
+    async function loadReminders() {
+      const res = await api('/reminders');
+      if(res?.ok) {
+        reminders.value = [
+          ...(res.reminders||[]).map(r=>({...r, custom:true})),
+          ...(res.auto_reminders||[]).map(r=>({...r, custom:false}))
+        ].sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+      }
+    }
+    async function addReminder() {
+      if(!newReminder.value.time || !newReminder.value.title) return;
+      await api('/reminders',{method:'POST',body:JSON.stringify(newReminder.value)});
+      newReminder.value = {time:'', title:''};
+      showReminderForm.value = false;
+      await loadReminders();
+      showToast('提醒已添加');
+      recordInteraction();
+    }
+    async function deleteReminder(rid) {
+      await api(`/reminders/${rid}`,{method:'DELETE'});
+      await loadReminders();
+      showToast('提醒已删除');
+    }
     async function switchTasksTab(tab) {
       tasksTab.value = tab;
       addingTodayTask.value = false;
       editingTask.value = null;
       if(tab === 'today') {
-        await Promise.all([loadToday(), loadTimeBlocks()]);
+        await Promise.all([loadToday(), loadTimeBlocks(), loadReminders()]);
         todayMood.value = dash.value?.today_mood||'';
         todayEnergy.value = dash.value?.today_energy||'';
         todayFocus.value = dash.value?.today_focus||'';
@@ -1569,6 +1598,7 @@ createApp({
       editingTask, editTaskText, editTaskDesc, editTaskTime, editTaskTimeEnd, editTaskTimeRange,
       newTaskTimeEnd, newTaskTimeRange,
       timeBlocks, showTimeBlockForm, editingBlockIdx, blockForm,
+      reminders, showReminderForm, newReminder, loadReminders, addReminder, deleteReminder,
       notifEnabled, notifSound, proactiveMsg, showProactive,
       toggleNotif, setNotifSound, playSound, dismissProactive, acknowledgeProactive,
       categories, noteCategory, noteCategoryFilter, showCategoryForm, newCategory,
