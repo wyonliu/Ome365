@@ -1,5 +1,5 @@
 """
-Ome365 v0.2 — 个人超级助手
+Ome365 v0.5 — 个人超级助手
 启动: cd .app && python3 server.py
 """
 
@@ -58,6 +58,9 @@ SETTINGS_DEFAULTS = {
     "ollama_url": "http://localhost:11434",
     "ollama_model": "llama3.1",
     "use_proxy": True,
+    "notification_enabled": True,
+    "notification_sound": "chime",  # "chime" | "bell" | "pop" | "none"
+    "proactive_enabled": True,
 }
 
 def _safe_json_load(fp: Path, default=None):
@@ -154,6 +157,42 @@ def toggle_task(fp: Path, text: str) -> bool:
             lines[i] = f"{m.group(1)}{'x' if m.group(2)==' ' else ' '}{m.group(3)}{m.group(4)}"
             fp.write_text('\n'.join(lines), "utf-8"); return True
     return False
+
+
+def parse_time_blocks(fp: Path) -> list:
+    """Parse the ## 时间块 / ## 日程 / ## 日程安排 table from a daily markdown file."""
+    if not fp.exists(): return []
+    raw = fp.read_text("utf-8")
+    # Find the 时间块/日程/日程安排 section
+    m = re.search(r'## (?:时间块|日程安排|日程)\s*\n\|.*\|\s*\n\|[-| ]+\|\s*\n((?:\|.*\|\s*\n?)*)', raw)
+    if not m: return []
+    blocks = []
+    for i, line in enumerate(m.group(1).strip().split('\n')):
+        cells = [c.strip() for c in line.strip().strip('|').split('|')]
+        if len(cells) >= 2:
+            blocks.append({"idx": i, "time": cells[0], "item": cells[1] if len(cells) > 1 else "", "dim": cells[2] if len(cells) > 2 else ""})
+    return blocks
+
+
+def update_time_blocks(fp: Path, blocks: list):
+    """Rewrite the ## 时间块/日程/日程安排 table in the daily markdown file."""
+    if not fp.exists(): return False
+    raw = fp.read_text("utf-8")
+    header = "## 日程\n| 时间 | 事项 | 维度 |\n|------|------|------|\n"
+    rows = "\n".join(f"| {b.get('time','')} | {b.get('item','')} | {b.get('dim','')} |" for b in blocks) + "\n" if blocks else ""
+    new_section = header + rows
+    # Replace existing section (match any of the three names)
+    pattern = r'## (?:时间块|日程安排|日程)\s*\n\|.*\|\s*\n\|[-| ]+\|\s*\n(?:\|.*\|\s*\n?)*'
+    if re.search(pattern, raw):
+        raw = re.sub(pattern, new_section, raw, count=1)
+    else:
+        # No existing section, insert before ## 会议纪要 or append
+        if '## 会议纪要' in raw:
+            raw = raw.replace('## 会议纪要', new_section + '\n## 会议纪要')
+        else:
+            raw += '\n' + new_section
+    fp.write_text(raw, "utf-8")
+    return True
 
 
 def edit_task_in_file(fp: Path, old_text: str, new_text: str, description: str = None) -> bool:
@@ -634,11 +673,27 @@ async def get_today():
         core = re.sub(r'^\[\d{2}:\d{2}\]\s*', '', t["text"]).strip()
         core_no_tag = re.sub(r'\s*#\S+$', '', core).strip()
         t["repeat"] = repeat_texts.get(core, repeat_texts.get(core_no_tag, ""))
+    data["time_blocks"] = parse_time_blocks(fp)
     return {"path":str(fp.relative_to(VAULT)), **data}
+
+@app.get("/api/today/timeblocks")
+async def get_time_blocks():
+    ensure_today()
+    return {"ok": True, "blocks": parse_time_blocks(find_daily())}
+
+@app.put("/api/today/timeblocks")
+async def save_time_blocks(body: dict):
+    """Save the full time blocks list (replaces all blocks)."""
+    ensure_today()
+    blocks = body.get("blocks", [])
+    update_time_blocks(find_daily(), blocks)
+    return {"ok": True, "blocks": parse_time_blocks(find_daily())}
 
 @app.post("/api/today/toggle")
 async def toggle_today(body:dict):
-    return {"ok":toggle_task(find_daily(), body.get("text",""))}
+    target_date = body.get("date","").strip()
+    fp = find_daily(target_date) if target_date else find_daily()
+    return {"ok":toggle_task(fp, body.get("text",""))}
 
 @app.put("/api/today/content")
 async def save_today(body:dict):
@@ -677,6 +732,7 @@ async def add_today_task(body:dict):
         repeats = [r for r in repeats if r["text"] != text]
         repeats.append({"text": text, "repeat": repeat, "time": time_str, "scope": "today", "created": today_s()})
         save_task_repeats(repeats)
+    _auto_growth()
     return {"ok":True}
 
 @app.put("/api/today/task")
@@ -694,9 +750,29 @@ async def add_week_task(body:dict):
     text = body.get("text","").strip()
     cat = body.get("category","")
     if not text: raise HTTPException(400, "Empty task")
-    ensure_weekly()
     time_str = body.get("time","").strip()
     repeat = body.get("repeat","none")
+    target_date = body.get("target_date","").strip()  # YYYY-MM-DD to route to specific day
+
+    # If target_date given, add to that day's daily file instead of weekly
+    if target_date:
+        fp = find_daily(target_date)
+        if not fp.exists():
+            fp.parent.mkdir(parents=True, exist_ok=True)
+            wd = WEEKDAYS[date.fromisoformat(target_date).weekday()]
+            fp.write_text(f"# {target_date} {wd}\n\n## 任务\n\n## 日记\n", "utf-8")
+        raw = fp.read_text("utf-8")
+        tag = f" #{cat}" if cat and cat != "uncategorized" else ""
+        time_prefix = f"[{time_str}] " if time_str else ""
+        task_line = f"- [ ] {time_prefix}{text}{tag}"
+        if "## 任务" in raw:
+            raw = raw.replace("## 任务\n", f"## 任务\n{task_line}\n", 1)
+        else:
+            raw += f"\n## 任务\n{task_line}\n"
+        fp.write_text(raw, "utf-8")
+        return {"ok":True, "target":"daily", "date":target_date}
+
+    ensure_weekly()
     fp = find_weekly(); raw = fp.read_text("utf-8")
     tag = f" #{cat}" if cat and cat != "uncategorized" else ""
     time_prefix = f"[{time_str}] " if time_str else ""
@@ -716,6 +792,7 @@ async def add_week_task(body:dict):
         repeats = [r for r in repeats if r["text"] != text]
         repeats.append({"text": text, "repeat": repeat, "time": time_str, "scope": "week", "created": today_s()})
         save_task_repeats(repeats)
+    _auto_growth()
     return {"ok":True}
 
 @app.get("/api/week")
@@ -818,6 +895,7 @@ async def create_note(body:dict):
         fp.write_text(fp.read_text("utf-8")+entry,"utf-8")
     else:
         fp.write_text(f"# {today_s()} 速记\n\n{entry}","utf-8")
+    _auto_growth()
     return {"ok":True,"time":now}
 
 @app.get("/api/notes")
@@ -842,6 +920,26 @@ async def get_note_file(date_str:str):
     fp = VAULT/"Notes"/f"{date_str}.md"
     if not fp.exists(): raise HTTPException(404)
     return {"path":str(fp.relative_to(VAULT)),"raw":fp.read_text("utf-8")}
+
+@app.delete("/api/notes/{date_str}/{idx}")
+async def delete_note_item(date_str:str, idx:int):
+    """Delete a single note entry by date and line index."""
+    fp = VAULT/"Notes"/f"{date_str}.md"
+    if not fp.exists(): raise HTTPException(404)
+    lines = fp.read_text("utf-8").split('\n')
+    # Find all note-entry lines (- [HH:MM] ...)
+    entry_lines = [(i, l) for i, l in enumerate(lines) if re.match(r'^- \[\d{2}:\d{2}\]', l)]
+    if idx < 0 or idx >= len(entry_lines):
+        raise HTTPException(400, "Index out of range")
+    line_num = entry_lines[idx][0]
+    lines.pop(line_num)
+    # If only header remains, delete the file
+    remaining_entries = [l for l in lines if re.match(r'^- \[\d{2}:\d{2}\]', l)]
+    if not remaining_entries:
+        fp.unlink()
+    else:
+        fp.write_text('\n'.join(lines), "utf-8")
+    return {"ok": True}
 
 
 # ── API: Media Upload (voice/image) ──────────────────
@@ -897,6 +995,20 @@ Quarter: Q{quarter_n()}
     plan_fp = VAULT / "000-365-PLAN.md"
     if plan_fp.exists():
         file_context += f"\n--- 365计划 ---\n{plan_fp.read_text('utf-8')[:3000]}\n"
+    # Inject memory context so AI actually uses stored memories
+    mem_dir = VAULT / "Memory"
+    if mem_dir.exists():
+        mem_texts = []
+        for mf in sorted(mem_dir.glob("*.md")):
+            if mf.name == "MEMORY.md":
+                continue
+            try:
+                txt = mf.read_text("utf-8")[:500]
+                mem_texts.append(txt)
+            except:
+                pass
+        if mem_texts:
+            file_context += "\n--- 用户记忆 ---\n" + "\n---\n".join(mem_texts[:10]) + "\n"
     system_with_context = system_msg + file_context
 
     if mode == "none":
@@ -955,6 +1067,223 @@ Quarter: Q{quarter_n()}
 async def ai_session_info():
     settings = load_settings()
     return {"session_id": "sdk", "name": "Ome365", "provider": settings.get("ai_mode","none")}
+
+@app.post("/api/ai/smart-input")
+async def ai_smart_input(body: dict):
+    """AI分析非结构化输入，提取联系人/事件/待办/笔记等结构化数据。"""
+    import requests as req
+    text = body.get("text", "").strip()
+    if not text:
+        return {"ok": False, "error": "请输入内容"}
+
+    settings = load_settings()
+    if settings.get("ai_mode", "none") == "none":
+        return {"ok": False, "error": "请先在设置中配置AI"}
+
+    # Gather existing contacts for matching
+    PEOPLE_DIR.mkdir(parents=True, exist_ok=True)
+    existing_contacts = []
+    for fp in sorted(PEOPLE_DIR.glob("*.md")):
+        c = parse_contact(fp)
+        existing_contacts.append({"name": c["name"], "slug": c["slug"], "company": c.get("company",""), "title": c.get("title","")})
+
+    prompt = f"""你是一个超级结构化信息提取器。分析以下用户输入（可能是对话记录、会议笔记、微信聊天摘要等），提取以下结构化数据：
+
+1. **联系人**：提到的人名、公司、职位、联系方式等。对于每个人，判断是"new"还是"update"（和已有联系人匹配）。
+2. **事件/互动记录**：谁和谁发生了什么事，什么时候。
+3. **待办事项**：需要跟进/完成的事情，附上时间（如果有）。
+4. **速记/笔记**：值得记录的信息片段。
+
+已有联系人列表（用于匹配）：
+{json.dumps(existing_contacts, ensure_ascii=False)[:2000]}
+
+今天是：{today_s()}
+
+请输出JSON，格式：
+{{
+  "contacts": [
+    {{"action":"new"|"update", "slug":"已有联系人的slug或空", "name":"姓名", "company":"公司", "title":"职位", "category":"industry|friend|partner|team|mentor|talent|investor", "met_context":"认识场景", "info":"需补充/更新的信息"}}
+  ],
+  "interactions": [
+    {{"contact_name":"联系人姓名", "method":"微信|电话|面聊|其他", "summary":"互动摘要"}}
+  ],
+  "todos": [
+    {{"text":"待办内容", "time":"HH:MM或空", "priority":"high|normal"}}
+  ],
+  "notes": [
+    {{"text":"笔记内容", "category":""}}
+  ],
+  "summary": "一句话总结提取了什么"
+}}
+
+只输出JSON，不要其他文字。
+
+用户输入：
+{text}"""
+
+    try:
+        if settings.get("ai_mode") == "api":
+            base_url = settings.get("api_base_url","").rstrip("/")
+            api_key = settings.get("api_key","")
+            model = settings.get("api_model","")
+            headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json",
+                       "HTTP-Referer":"https://ome365.app","X-Title":"Ome365"}
+            payload = {"model":model,"max_tokens":2000,"messages":[
+                {"role":"system","content":"你是结构化信息提取器，只输出JSON。"},
+                {"role":"user","content":prompt}
+            ]}
+            resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=60, **_proxy_kwargs())
+            resp.raise_for_status()
+            ai_text = resp.json()["choices"][0]["message"]["content"].strip()
+        elif settings.get("ai_mode") == "ollama":
+            ollama_url = settings.get("ollama_url","http://localhost:11434").rstrip("/")
+            payload = {"model":settings.get("ollama_model","llama3.1"),"messages":[
+                {"role":"system","content":"你是结构化信息提取器，只输出JSON。"},
+                {"role":"user","content":prompt}
+            ],"stream":False}
+            resp = req.post(f"{ollama_url}/api/chat", json=payload, timeout=120, **_proxy_kwargs())
+            resp.raise_for_status()
+            ai_text = resp.json().get("message",{}).get("content","").strip()
+        else:
+            return {"ok":False, "error":f"未知AI模式: {settings.get('ai_mode')}"}
+
+        # Parse JSON from AI response (handle markdown code blocks)
+        ai_text = re.sub(r'^```json\s*', '', ai_text)
+        ai_text = re.sub(r'\s*```$', '', ai_text)
+        result = json.loads(ai_text)
+        return {"ok": True, "data": result}
+    except json.JSONDecodeError:
+        return {"ok": True, "data": {"contacts":[],"interactions":[],"todos":[],"notes":[],"summary":"AI返回格式异常，请重试"}, "raw": ai_text}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.post("/api/ai/smart-input/apply")
+async def ai_smart_input_apply(body: dict):
+    """Apply extracted structured data: create/update contacts, add todos, add notes, add interactions."""
+    results = {"contacts_created":0, "contacts_updated":0, "interactions_added":0, "todos_added":0, "notes_added":0}
+    data = body.get("data", {})
+
+    # 1. Process contacts
+    for c in data.get("contacts", []):
+        name = c.get("name","").strip()
+        if not name:
+            continue
+        if c.get("action") == "update" and c.get("slug"):
+            # Update existing contact
+            fp = PEOPLE_DIR / f"{c['slug']}.md"
+            if fp.exists():
+                meta = parse_yaml_meta(fp.read_text("utf-8"))
+                raw = fp.read_text("utf-8")
+                m = re.match(r'^---\s*\n(.*?)\n---\s*\n', raw, re.DOTALL)
+                if m:
+                    content = raw[m.end():]
+                    if c.get("company"): meta["company"] = c["company"]
+                    if c.get("title"): meta["title"] = c["title"]
+                    if c.get("info"):
+                        content = content.rstrip() + f"\n\n## 补充信息\n{c['info']}\n"
+                    write_md(fp, meta, content)
+                    results["contacts_updated"] += 1
+        else:
+            # Create new contact
+            slug = re.sub(r'[^\w\u4e00-\u9fff]','-', name)[:30].strip('-').lower()
+            fp = PEOPLE_DIR / f"{slug}.md"
+            if fp.exists():
+                continue  # Already exists, skip
+            PEOPLE_DIR.mkdir(parents=True, exist_ok=True)
+            meta = {
+                "name": name,
+                "company": c.get("company",""),
+                "title": c.get("title",""),
+                "category": c.get("category","industry"),
+                "tier": "B",
+                "tags": [],
+                "location": "",
+                "wechat": "",
+                "phone": "",
+                "email": "",
+                "met_date": today_s(),
+                "met_context": c.get("met_context",""),
+                "last_contact": today_s(),
+                "next_followup": (date.today()+timedelta(days=14)).isoformat(),
+            }
+            content = f"""# {name} · {c.get('title','')}
+
+## 关系背景
+{c.get('info','（待补充）')}
+
+## 联系记录
+| 日期 | 方式 | 内容摘要 |
+|------|------|---------|
+| {today_s()} | 初识 | {c.get('met_context','')} |
+
+## 备注
+"""
+            write_md(fp, meta, content)
+            results["contacts_created"] += 1
+
+    # 2. Process interactions
+    for inter in data.get("interactions", []):
+        contact_name = inter.get("contact_name","").strip()
+        if not contact_name:
+            continue
+        # Find matching contact by name
+        for fp in PEOPLE_DIR.glob("*.md"):
+            c = parse_contact(fp)
+            if c["name"] == contact_name:
+                raw = fp.read_text("utf-8")
+                m_meta = re.match(r'^---\s*\n(.*?)\n---\s*\n', raw, re.DOTALL)
+                if m_meta:
+                    meta = parse_yaml_meta(raw)
+                    content = raw[m_meta.end():]
+                    row = f"| {today_s()} | {inter.get('method','微信')} | {inter.get('summary','')} |"
+                    content = content.replace("## 备注", f"{row}\n\n## 备注")
+                    meta["last_contact"] = today_s()
+                    write_md(fp, meta, content)
+                    results["interactions_added"] += 1
+                break
+
+    # 3. Process todos
+    for todo in data.get("todos", []):
+        text = todo.get("text","").strip()
+        if not text:
+            continue
+        time_str = todo.get("time","")
+        if time_str:
+            text = f"[{time_str}] {text}"
+        fp = find_daily()
+        if not fp.exists():
+            fp.write_text(f"# {today_s()} {WEEKDAYS[date.today().weekday()]}\n\n## 任务\n- [ ] {text}\n", "utf-8")
+        else:
+            raw = fp.read_text("utf-8")
+            if "## 任务" in raw:
+                raw = raw.replace("## 任务\n", f"## 任务\n- [ ] {text}\n", 1)
+            else:
+                raw += f"\n## 任务\n- [ ] {text}\n"
+            fp.write_text(raw, "utf-8")
+        results["todos_added"] += 1
+
+    # 4. Process notes
+    for note in data.get("notes", []):
+        text = note.get("text","").strip()
+        if not text:
+            continue
+        d = VAULT / "Notes"
+        d.mkdir(exist_ok=True)
+        fp = d / f"{today_s()}.md"
+        now = datetime.now().strftime("%H:%M")
+        cat = note.get("category","")
+        tag = f" #{cat}" if cat else ""
+        entry = f"- [{now}]{tag} {text}\n"
+        if fp.exists():
+            fp.write_text(fp.read_text("utf-8")+entry, "utf-8")
+        else:
+            fp.write_text(f"# {today_s()} 速记\n\n{entry}", "utf-8")
+        results["notes_added"] += 1
+
+    total_ops = results["contacts_created"] + results["todos_added"] + results["notes_added"] + results["interactions_added"]
+    if total_ops > 0:
+        _auto_growth(total_ops)
+    return {"ok": True, "results": results}
 
 @app.post("/api/ai/reset")
 async def ai_reset_session():
@@ -1296,6 +1625,7 @@ async def create_contact(body:dict):
 ## 备注
 """
     write_md(fp, meta, content)
+    _auto_growth()
     return {"ok":True,"slug":slug}
 
 @app.put("/api/contacts/{slug}")
@@ -1739,6 +2069,111 @@ async def update_today_meta(body: dict):
     return {"ok": True}
 
 
+# ── API: Unified Tasks ───────────────────────────────
+@app.get("/api/tasks/unified")
+async def get_unified_tasks(tab: str = "today"):
+    """Unified task view aggregating today/tomorrow/week/month data."""
+    result = {"tab": tab, "tasks": [], "schedule": []}
+
+    if tab == "today":
+        ensure_today()
+        fp = find_daily()
+        data = parse_md(fp)
+        tasks = [t for t in data.get("tasks",[]) if t["text"].strip()]
+        for t in tasks:
+            t["source"] = "daily"
+            t["date"] = today_s()
+            t["description"] = get_task_description(fp, t["text"])
+        result["tasks"] = tasks
+        result["schedule"] = parse_time_blocks(fp)
+        result["diary_html"] = data.get("html","")
+
+    elif tab == "tomorrow":
+        tmr = (date.today() + timedelta(days=1)).isoformat()
+        fp = find_daily(tmr)
+        if fp.exists():
+            data = parse_md(fp)
+            tasks = [t for t in data.get("tasks",[]) if t["text"].strip()]
+            for t in tasks:
+                t["source"] = "daily"
+                t["date"] = tmr
+                t["description"] = get_task_description(fp, t["text"])
+            result["tasks"] = tasks
+            result["schedule"] = parse_time_blocks(fp)
+        result["date"] = tmr
+
+    elif tab == "week":
+        # Aggregate weekly file + all daily files this week
+        all_tasks = []
+        all_schedule = []
+        today_d = date.today()
+        dow = today_d.weekday()  # Monday=0
+        week_start = today_d - timedelta(days=dow)
+
+        # Weekly file tasks
+        ensure_weekly()
+        wfp = find_weekly()
+        wdata = parse_md(wfp)
+        for t in wdata.get("tasks",[]):
+            if t["text"].strip():
+                t["source"] = "weekly"
+                t["date"] = ""
+                t["description"] = get_task_description(wfp, t["text"])
+                all_tasks.append(t)
+
+        # Daily files for each day of the week
+        for i in range(7):
+            d = week_start + timedelta(days=i)
+            ds = d.isoformat()
+            fp = find_daily(ds)
+            if fp.exists():
+                data = parse_md(fp)
+                for t in data.get("tasks",[]):
+                    if t["text"].strip():
+                        t["source"] = "daily"
+                        t["date"] = ds
+                        t["description"] = get_task_description(fp, t["text"])
+                        all_tasks.append(t)
+                for b in parse_time_blocks(fp):
+                    b["date"] = ds
+                    all_schedule.append(b)
+
+        result["tasks"] = all_tasks
+        result["schedule"] = all_schedule
+        result["week_number"] = week_n()
+
+    elif tab == "month":
+        all_tasks = []
+        today_d = date.today()
+        # Get all daily files for the month
+        daily_dir = VAULT / "Journal" / "Daily"
+        prefix = today_d.strftime("%Y-%m")
+        if daily_dir.exists():
+            for fp in sorted(daily_dir.glob(f"{prefix}-*.md")):
+                ds = fp.stem  # YYYY-MM-DD
+                data = parse_md(fp)
+                for t in data.get("tasks",[]):
+                    if t["text"].strip():
+                        t["source"] = "daily"
+                        t["date"] = ds
+                        t["description"] = get_task_description(fp, t["text"])
+                        all_tasks.append(t)
+        result["tasks"] = all_tasks
+
+    elif tab == "days":
+        result["days"] = load_special_days()
+
+    # Add repeats info
+    repeats = load_task_repeats()
+    repeat_map = {r["text"]: r["repeat"] for r in repeats}
+    for t in result.get("tasks",[]):
+        core = re.sub(r'^\[\d{2}:\d{2}(?:-\d{2}:\d{2})?\]\s*', '', t["text"]).strip()
+        core_no_tag = re.sub(r'\s*#\S+$', '', core).strip()
+        t["repeat"] = repeat_map.get(core, repeat_map.get(core_no_tag, ""))
+
+    return result
+
+
 # ── API: On This Day ─────────────────────────────────
 @app.get("/api/on-this-day")
 async def on_this_day():
@@ -1919,6 +2354,433 @@ async def get_streaks():
             run = 1
 
     return {"current_streak": current, "best_streak": best, "total_active_days": len(active_dates)}
+
+
+# ── API: Growth / Nurturing System ────────────────────
+GROWTH_FILE = Path(__file__).parent / "growth.json"
+
+GROWTH_PHASES = [
+    {"id": "newborn", "name": "初生", "icon": "🌱", "min_interactions": 0, "min_days": 0, "desc": "刚刚苏醒，对一切好奇"},
+    {"id": "forming", "name": "成长", "icon": "🌿", "min_interactions": 20, "min_days": 3, "desc": "开始记住你的偏好"},
+    {"id": "distinct", "name": "独立", "icon": "🌳", "min_interactions": 80, "min_days": 14, "desc": "形成了自己的观点和风格"},
+    {"id": "soulmate", "name": "知己", "icon": "🌟", "min_interactions": 200, "min_days": 30, "desc": "懂你的每一个细微表达"},
+]
+
+BOND_LEVELS = [
+    {"level": 1, "name": "初识", "min_interactions": 0, "min_days": 0, "icon": "🤝"},
+    {"level": 2, "name": "熟悉", "min_interactions": 10, "min_days": 2, "icon": "💬"},
+    {"level": 3, "name": "信任", "min_interactions": 30, "min_days": 7, "icon": "🔗"},
+    {"level": 4, "name": "默契", "min_interactions": 80, "min_days": 21, "icon": "💎"},
+    {"level": 5, "name": "知己", "min_interactions": 150, "min_days": 45, "icon": "⭐"},
+    {"level": 6, "name": "灵犀", "min_interactions": 300, "min_days": 90, "icon": "✨"},
+    {"level": 7, "name": "共生", "min_interactions": 500, "min_days": 180, "icon": "🌌"},
+]
+
+ACHIEVEMENTS = [
+    {"id": "first_note", "name": "第一笔", "icon": "✏️", "desc": "写下第一条速记", "check": "notes_count >= 1"},
+    {"id": "first_task", "name": "开始行动", "icon": "✅", "desc": "完成第一个任务", "check": "tasks_done >= 1"},
+    {"id": "streak_3", "name": "三日坚持", "icon": "🔥", "desc": "连续3天活跃", "check": "streak >= 3"},
+    {"id": "streak_7", "name": "一周不断", "icon": "🔥🔥", "desc": "连续7天活跃", "check": "streak >= 7"},
+    {"id": "streak_30", "name": "月度战士", "icon": "🏆", "desc": "连续30天活跃", "check": "streak >= 30"},
+    {"id": "memory_5", "name": "有记性", "icon": "🧠", "desc": "积累5条记忆", "check": "memory_count >= 5"},
+    {"id": "reflect_first", "name": "知行合一", "icon": "💡", "desc": "完成第一次AI反思", "check": "reflect_count >= 1"},
+    {"id": "contacts_10", "name": "社交达人", "icon": "👥", "desc": "建立10个联系人", "check": "contacts >= 10"},
+    {"id": "plan_25", "name": "计划执行者", "icon": "🗺️", "desc": "完成25%年度计划", "check": "plan_pct >= 25"},
+    {"id": "plan_50", "name": "半程英雄", "icon": "🏅", "desc": "完成50%年度计划", "check": "plan_pct >= 50"},
+    {"id": "active_30", "name": "持之以恒", "icon": "📅", "desc": "累计30天活跃", "check": "active_days >= 30"},
+    {"id": "active_100", "name": "百日精进", "icon": "💯", "desc": "累计100天活跃", "check": "active_days >= 100"},
+]
+
+def load_growth() -> dict:
+    default = {
+        "total_interactions": 0,
+        "first_use_date": today_s(),
+        "achievements_unlocked": [],
+        "ome_name": "Ome",
+        "ome_personality": "好奇、温暖、直接",
+        "evolution_log": [],  # [{date, shift, phase}]
+        "traits": [],  # accumulated personality traits
+    }
+    return {**default, **_safe_json_load(GROWTH_FILE, {})}
+
+def save_growth(data: dict):
+    GROWTH_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
+
+def _auto_growth(count=1):
+    """Background growth interaction increment."""
+    try:
+        growth = load_growth()
+        growth["total_interactions"] = growth.get("total_interactions", 0) + count
+        if growth["total_interactions"] % 20 == 0:
+            growth["evolution_pending"] = True
+        save_growth(growth)
+    except:
+        pass
+
+def _compute_growth_state() -> dict:
+    """Compute the full growth state from all data sources."""
+    growth = load_growth()
+    interactions = growth.get("total_interactions", 0)
+    first_date = growth.get("first_use_date", today_s())
+    try:
+        days_since = (date.today() - date.fromisoformat(first_date)).days
+    except:
+        days_since = 0
+
+    # Determine phase
+    phase = GROWTH_PHASES[0]
+    for p in reversed(GROWTH_PHASES):
+        if interactions >= p["min_interactions"] and days_since >= p["min_days"]:
+            phase = p; break
+
+    # Determine bond level
+    bond = BOND_LEVELS[0]
+    for b in reversed(BOND_LEVELS):
+        if interactions >= b["min_interactions"] and days_since >= b["min_days"]:
+            bond = b; break
+
+    # Next bond level
+    next_bond = None
+    for b in BOND_LEVELS:
+        if b["level"] > bond["level"]:
+            next_bond = b; break
+
+    # Bond progress (percentage to next level)
+    bond_progress = 100
+    if next_bond:
+        inter_range = max(1, next_bond["min_interactions"] - bond["min_interactions"])
+        days_range = max(1, next_bond["min_days"] - bond["min_days"])
+        inter_pct = min(100, (interactions - bond["min_interactions"]) / inter_range * 100)
+        days_pct = min(100, (days_since - bond["min_days"]) / days_range * 100)
+        bond_progress = int(min(inter_pct, days_pct))  # Both must be met
+
+    # Gather stats for achievements
+    notes_dir = VAULT / "Notes"
+    notes_count = sum(1 for _ in notes_dir.glob("*.md")) if notes_dir.exists() else 0
+    daily_dir = VAULT / "Journal" / "Daily"
+    tasks_done = 0
+    active_dates = set()
+    if daily_dir.exists():
+        for fp in daily_dir.glob("*.md"):
+            try:
+                d = date.fromisoformat(fp.stem)
+                data = parse_md(fp)
+                done = sum(1 for t in data["tasks"] if t["done"])
+                tasks_done += done
+                if done > 0:
+                    active_dates.add(d)
+            except:
+                continue
+
+    # Streak
+    streak = 0
+    d = date.today()
+    while d in active_dates:
+        streak += 1
+        d -= timedelta(days=1)
+
+    memory_count = len(list((VAULT / "Memory").glob("*.md"))) - 1 if (VAULT / "Memory").exists() else 0
+    insights_dir = VAULT / "Memory" / "insights"
+    reflect_count = len(list(insights_dir.glob("*.md"))) if insights_dir.exists() else 0
+    contacts_dir = VAULT / "Contacts" / "people"
+    contacts = len(list(contacts_dir.glob("*.md"))) if contacts_dir.exists() else 0
+    plan = parse_plan()
+    plan_pct = plan["overview"]["pct"]
+    active_days = len(active_dates)
+
+    # Check achievements
+    unlocked = set(growth.get("achievements_unlocked", []))
+    stats = {"notes_count": notes_count, "tasks_done": tasks_done, "streak": streak,
+             "memory_count": max(0, memory_count), "reflect_count": reflect_count,
+             "contacts": contacts, "plan_pct": plan_pct, "active_days": active_days}
+    newly_unlocked = []
+    for ach in ACHIEVEMENTS:
+        if ach["id"] not in unlocked:
+            try:
+                if eval(ach["check"], {"__builtins__": {}}, stats):
+                    unlocked.add(ach["id"])
+                    newly_unlocked.append(ach)
+            except:
+                pass
+
+    # Save updated state
+    if newly_unlocked or growth.get("achievements_unlocked", []) != list(unlocked):
+        growth["achievements_unlocked"] = list(unlocked)
+        save_growth(growth)
+
+    achievements_list = []
+    for ach in ACHIEVEMENTS:
+        achievements_list.append({**ach, "unlocked": ach["id"] in unlocked})
+
+    return {
+        "phase": phase,
+        "bond": {**bond, "progress": bond_progress},
+        "next_bond": next_bond,
+        "total_interactions": interactions,
+        "days_since_first": days_since,
+        "ome_name": growth.get("ome_name", "Ome"),
+        "ome_personality": growth.get("ome_personality", "好奇、温暖、直接"),
+        "traits": growth.get("traits", []),
+        "evolution_log": growth.get("evolution_log", [])[-10:],  # Last 10 entries
+        "achievements": achievements_list,
+        "newly_unlocked": newly_unlocked,
+        "stats": stats,
+    }
+
+@app.get("/api/growth")
+async def get_growth():
+    return _compute_growth_state()
+
+@app.post("/api/growth/interact")
+async def record_interaction(body: dict = {}):
+    """Record an interaction (called after AI use, note creation, etc.)"""
+    growth = load_growth()
+    growth["total_interactions"] = growth.get("total_interactions", 0) + body.get("count", 1)
+    total = growth["total_interactions"]
+    # Flag evolution pending every 20 interactions
+    evolution_pending = (total % 20 == 0) and total > 0
+    if evolution_pending:
+        growth["evolution_pending"] = True
+    save_growth(growth)
+    return {"ok": True, "total": total, "evolution_pending": evolution_pending}
+
+@app.put("/api/growth/profile")
+async def update_growth_profile(body: dict):
+    """Update Ome's name and personality."""
+    growth = load_growth()
+    if "ome_name" in body:
+        growth["ome_name"] = body["ome_name"]
+    if "ome_personality" in body:
+        growth["ome_personality"] = body["ome_personality"]
+    save_growth(growth)
+    return {"ok": True}
+
+@app.post("/api/growth/evolve")
+async def evolve_personality():
+    """AI analyzes recent interactions and generates a personality evolution insight."""
+    import requests as req
+    settings = load_settings()
+    if settings.get("ai_mode", "none") == "none":
+        return {"ok": False, "error": "请先配置AI"}
+
+    growth = load_growth()
+
+    # Gather recent context
+    context_parts = []
+    fp = find_daily()
+    if fp.exists():
+        context_parts.append(fp.read_text("utf-8")[:2000])
+    # Recent notes
+    notes_dir = VAULT / "Notes"
+    if notes_dir.exists():
+        for nf in sorted(notes_dir.glob("*.md"), reverse=True)[:3]:
+            context_parts.append(nf.read_text("utf-8")[:500])
+    # Memories
+    mem_dir = VAULT / "Memory"
+    if mem_dir.exists():
+        for mf in sorted(mem_dir.glob("*.md"))[:5]:
+            if mf.name != "MEMORY.md":
+                context_parts.append(mf.read_text("utf-8")[:300])
+
+    current_traits = ", ".join(growth.get("traits", [])) or growth.get("ome_personality", "好奇、温暖、直接")
+    prompt = f"""分析以下用户数据，为AI助手"{growth.get('ome_name','Ome')}"生成一条个性进化记录。
+
+当前个性特征：{current_traits}
+总互动次数：{growth.get('total_interactions',0)}
+相识天数：{(date.today() - date.fromisoformat(growth.get('first_use_date', today_s()))).days}
+
+用户数据：
+{chr(10).join(context_parts)[:3000]}
+
+请输出一条JSON，格式：{{"shift":"一句话描述个性变化（如：变得更关注用户的能量状态）","new_trait":"新增特征词（如：敏感体察）","reason":"原因（15字以内）"}}
+只输出JSON，不要其他文字。"""
+
+    try:
+        if settings.get("ai_mode") == "api":
+            base_url = settings.get("api_base_url","").rstrip("/")
+            api_key = settings.get("api_key","")
+            model = settings.get("api_model","")
+            headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json",
+                       "HTTP-Referer":"https://ome365.app","X-Title":"Ome365"}
+            payload = {"model":model,"max_tokens":200,"messages":[
+                {"role":"system","content":"你是个性进化分析器，只输出JSON。"},
+                {"role":"user","content":prompt}
+            ]}
+            resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=30, **_proxy_kwargs())
+            resp.raise_for_status()
+            text = resp.json()["choices"][0]["message"]["content"].strip()
+        elif settings.get("ai_mode") == "ollama":
+            ollama_url = settings.get("ollama_url","http://localhost:11434").rstrip("/")
+            payload = {"model":settings.get("ollama_model","llama3.1"),"messages":[
+                {"role":"system","content":"你是个性进化分析器，只输出JSON。"},
+                {"role":"user","content":prompt}
+            ],"stream":False}
+            resp = req.post(f"{ollama_url}/api/chat", json=payload, timeout=30)
+            resp.raise_for_status()
+            text = resp.json().get("message",{}).get("content","").strip()
+        else:
+            return {"ok": False, "error": "AI未配置"}
+
+        # Parse the JSON response
+        import re as _re
+        json_match = _re.search(r'\{[^}]+\}', text)
+        if json_match:
+            evo = json.loads(json_match.group())
+            entry = {"date": today_s(), "shift": evo.get("shift",""), "reason": evo.get("reason",""),
+                     "phase": growth.get("total_interactions",0)}
+            growth.setdefault("evolution_log", []).append(entry)
+            if evo.get("new_trait"):
+                traits = growth.get("traits", [])
+                if evo["new_trait"] not in traits:
+                    traits.append(evo["new_trait"])
+                growth["traits"] = traits[-10:]  # Keep last 10 traits
+            save_growth(growth)
+            return {"ok": True, "evolution": entry, "new_trait": evo.get("new_trait","")}
+        return {"ok": False, "error": "AI返回格式异常"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:100]}
+
+
+# ── Reminders & Proactive ─────────────────────────────
+REMINDERS_FILE = Path(__file__).parent / "reminders.json"
+
+def load_reminders() -> list:
+    return _safe_json_load(REMINDERS_FILE, [])
+
+def save_reminders(reminders: list):
+    REMINDERS_FILE.write_text(json.dumps(reminders, ensure_ascii=False, indent=2), "utf-8")
+
+@app.get("/api/reminders")
+async def get_reminders():
+    """Get all reminders. Client filters by time."""
+    reminders = load_reminders()
+    # Also auto-generate reminders from tasks with time prefix and special days
+    auto = []
+    # Tasks with [HH:MM] prefix
+    ensure_today()
+    fp = find_daily()
+    data = parse_md(fp)
+    for t in data["tasks"]:
+        tm = re.match(r'^\[(\d{2}:\d{2})\]\s*(.+)', t["text"])
+        if tm and not t["done"]:
+            auto.append({"id": f"task_{tm.group(1)}_{tm.group(2)[:20]}", "type": "task", "time": tm.group(1),
+                         "title": tm.group(2).strip(), "auto": True})
+    # Special days (today only)
+    days_file = Path(__file__).parent / "special_days.json"
+    if days_file.exists():
+        sdays = _safe_json_load(days_file, [])
+        td = date.today()
+        for sd in sdays:
+            is_today = False
+            if sd.get("repeat") == "yearly":
+                is_today = sd["date"] == f"{td.month:02d}-{td.day:02d}"
+            elif sd.get("repeat") == "monthly":
+                try: is_today = int(sd["date"]) == td.day
+                except: pass
+            else:
+                is_today = sd["date"] == today_s()
+            if is_today:
+                auto.append({"id": f"day_{sd.get('id','')}", "type": "day", "time": "09:00",
+                             "title": f"{sd.get('icon','📅')} {sd['name']}", "auto": True})
+    # Time blocks
+    blocks = parse_time_blocks(fp)
+    for b in blocks:
+        if b["item"]:
+            # Extract start time from block (e.g. "09-12" -> "09:00")
+            start = b["time"].split("-")[0].strip()
+            if len(start) <= 2: start += ":00"
+            auto.append({"id": f"block_{b['time']}_{b['item'][:10]}", "type": "block", "time": start,
+                         "title": f"时间块: {b['item']}", "auto": True})
+    return {"ok": True, "reminders": reminders, "auto_reminders": auto}
+
+@app.post("/api/reminders")
+async def create_reminder(body: dict):
+    reminders = load_reminders()
+    r = {"id": str(uuid.uuid4())[:8], "time": body.get("time",""), "title": body.get("title",""),
+         "type": body.get("type","custom"), "repeat": body.get("repeat","none"),
+         "created": today_s()}
+    reminders.append(r)
+    save_reminders(reminders)
+    return {"ok": True, "reminder": r}
+
+@app.delete("/api/reminders/{rid}")
+async def delete_reminder(rid: str):
+    reminders = load_reminders()
+    reminders = [r for r in reminders if r.get("id") != rid]
+    save_reminders(reminders)
+    return {"ok": True}
+
+@app.get("/api/proactive")
+async def get_proactive():
+    """Generate a proactive AI message based on current context."""
+    import requests as req
+    settings = load_settings()
+    if not settings.get("proactive_enabled", True):
+        return {"ok": False, "reason": "disabled"}
+    if settings.get("ai_mode", "none") == "none":
+        return {"ok": False, "reason": "no_ai"}
+
+    now = datetime.now()
+    hour = now.hour
+
+    # Determine proactive trigger type
+    fp = find_daily()
+    data = parse_md(fp)
+    tasks = [t for t in data["tasks"] if t["text"].strip()]
+    done = sum(1 for t in tasks if t["done"])
+    total = len(tasks)
+
+    # Pick a contextual prompt
+    if hour < 9:
+        prompt = f"现在是早上{hour}点。用户今天有{total}个任务。给一句简短有力的晨间打气（15字以内），像教练对运动员说的。只输出这句话。"
+    elif hour < 12 and done == 0 and total > 0:
+        prompt = f"现在上午{hour}点，用户今天{total}个任务一个没开始。给一句温和的推动（15字以内），不要说教。只输出这句话。"
+    elif hour >= 12 and hour < 14:
+        prompt = f"午间了。用户完成了{done}/{total}个任务。给一句简短的午间提醒或鼓励（15字以内）。只输出这句话。"
+    elif hour >= 17 and done < total:
+        prompt = f"下午{hour}点了，还有{total-done}个任务没完成。给一句收尾冲刺的短句（15字以内）。只输出这句话。"
+    elif hour >= 21:
+        prompt = f"晚上{hour}点了。用户今天完成了{done}/{total}个任务。给一句简短的复盘提醒或晚安（15字以内）。只输出这句话。"
+    else:
+        # No proactive needed right now
+        return {"ok": False, "reason": "no_trigger"}
+
+    mode = settings.get("ai_mode")
+    try:
+        if mode == "api":
+            base_url = settings.get("api_base_url","").rstrip("/")
+            api_key = settings.get("api_key","")
+            model = settings.get("api_model","")
+            if not all([base_url, api_key, model]):
+                return {"ok": False, "reason": "no_config"}
+            headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json",
+                       "HTTP-Referer":"https://ome365.app","X-Title":"Ome365"}
+            growth = load_growth()
+            system_msg = f"你是{growth.get('ome_name','Ome')}，用户的AI助手。个性：{growth.get('ome_personality','温暖直接')}。今天是Day {day_n()}。"
+            payload = {"model":model,"max_tokens":50,"messages":[
+                {"role":"system","content":system_msg},
+                {"role":"user","content":prompt}
+            ]}
+            resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=15, **_proxy_kwargs())
+            resp.raise_for_status()
+            text = resp.json()["choices"][0]["message"]["content"].strip().strip('"')
+            return {"ok": True, "message": text, "trigger": prompt[:20]}
+        elif mode == "ollama":
+            ollama_url = settings.get("ollama_url","http://localhost:11434").rstrip("/")
+            model = settings.get("ollama_model","llama3.1")
+            growth = load_growth()
+            system_msg = f"你是{growth.get('ome_name','Ome')}，用户的AI助手。个性：{growth.get('ome_personality','温暖直接')}。"
+            payload = {"model":model,"messages":[
+                {"role":"system","content":system_msg},
+                {"role":"user","content":prompt}
+            ],"stream":False}
+            resp = req.post(f"{ollama_url}/api/chat", json=payload, timeout=15)
+            resp.raise_for_status()
+            text = resp.json().get("message",{}).get("content","").strip().strip('"')
+            return {"ok": True, "message": text, "trigger": prompt[:20]}
+    except Exception as e:
+        return {"ok": False, "reason": str(e)[:100]}
+    return {"ok": False, "reason": "unknown_mode"}
 
 
 # ── PWA ───────────────────────────────────────────────
