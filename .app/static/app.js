@@ -100,7 +100,6 @@ createApp({
 
     // Speech-to-text
     const isTranscribing = ref(false);
-    let recognition = null;
 
     // AI
     const aiResponse = ref('');
@@ -108,7 +107,18 @@ createApp({
     const aiError = ref('');
 
     // Settings
-    const settings = ref({user_name:'', main_goal:'365天个人执行计划', start_date:'2026-04-08', ai_provider:'none', anthropic_api_key:'', anthropic_model:'claude-sonnet-4-20250514', openai_api_key:'', openai_base_url:'https://api.openai.com/v1', openai_model:'gpt-4o', ollama_url:'http://localhost:11434', ollama_model:'llama3.1'});
+    const settings = ref({user_name:'', main_goal:'365天个人执行计划', start_date:'2026-04-08', ai_mode:'none', api_base_url:'', api_key:'', api_model:'', ollama_url:'http://localhost:11434', ollama_model:'llama3.1'});
+    const apiPresets = [
+      {name:'OpenAI', base_url:'https://api.openai.com/v1', model:'gpt-4o'},
+      {name:'Anthropic', base_url:'https://api.anthropic.com/v1', model:'claude-sonnet-4-20250514'},
+      {name:'DeepSeek', base_url:'https://api.deepseek.com/v1', model:'deepseek-chat'},
+      {name:'OpenRouter', base_url:'https://openrouter.ai/api/v1', model:'anthropic/claude-sonnet-4'},
+      {name:'自定义', base_url:'', model:''},
+    ];
+    function applyPreset(preset) {
+      settings.value.api_base_url = preset.base_url;
+      settings.value.api_model = preset.model;
+    }
     const settingsSaved = ref(false);
     const aiTestResult = ref('');
     const aiTestLoading = ref(false);
@@ -290,6 +300,7 @@ createApp({
       if(res?.ok) aiTestResult.value = '✅ 连接成功: ' + (res.response||'').slice(0,100);
       else aiTestResult.value = '❌ 连接失败: ' + (res?.error||'未知错误');
     }
+
 
     // Special Days
     async function loadSpecialDays(){ specialDays.value = await api('/days')||[]; }
@@ -727,64 +738,48 @@ createApp({
       }
     }
 
-    // Speech-to-text
-    function startSpeechToText() {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        showToast('浏览器不支持语音识别。请使用 Chrome 浏览器打开此页面。', 'error');
-        return;
-      }
+    // Speech-to-text (server-side Whisper)
+    async function startSpeechToText() {
       if (isTranscribing.value) {
-        try { recognition?.stop(); } catch(e) {}
-        isTranscribing.value = false;
-        showToast('语音识别已停止');
+        // Stop recording and transcribe
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+          mediaRecorder.stop();
+        }
         return;
       }
       try {
-        recognition = new SpeechRecognition();
-        recognition.lang = 'zh-CN';
-        recognition.interimResults = true;
-        recognition.continuous = true;
-        recognition.maxAlternatives = 1;
-
-        const baseText = noteText.value;
-        let finalText = '';
-        recognition.onresult = (e) => {
-          let interim = '';
-          for (let i = e.resultIndex; i < e.results.length; i++) {
-            if (e.results[i].isFinal) {
-              finalText += e.results[i][0].transcript;
+        const constraints = {audio: selectedDevice.value ? {deviceId:{exact:selectedDevice.value}} : true};
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        const recorder = new MediaRecorder(stream);
+        const chunks = [];
+        recorder.ondataavailable = e => { if(e.data.size>0) chunks.push(e.data); };
+        recorder.onstop = async () => {
+          stream.getTracks().forEach(t=>t.stop());
+          isTranscribing.value = false;
+          if(!chunks.length) return;
+          showToast('识别中...');
+          const blob = new Blob(chunks, {type:'audio/webm'});
+          const formData = new FormData();
+          formData.append('file', blob, 'stt_' + Date.now() + '.webm');
+          try {
+            const res = await fetch('/api/whisper', {method:'POST', body:formData});
+            const data = await res.json();
+            if(data.ok && data.text) {
+              noteText.value = (noteText.value ? noteText.value + '\n' : '') + data.text;
+              showToast('语音识别完成');
             } else {
-              interim += e.results[i][0].transcript;
+              showToast(data.error || '语音识别失败', 'error');
             }
-          }
-          const combined = finalText + (interim ? '🗣' + interim : '');
-          noteText.value = baseText ? baseText + '\n' + combined : combined;
-        };
-        recognition.onerror = (e) => {
-          console.warn('STT error:', e.error);
-          isTranscribing.value = false;
-          if (e.error === 'not-allowed') {
-            showToast('麦克风权限被拒绝。请在浏览器设置中允许麦克风访问。', 'error');
-          } else if (e.error === 'network') {
-            showToast('语音识别需要网络连接（Chrome会发送到Google服务器处理）', 'error');
-          } else if (e.error === 'no-speech') {
-            showToast('未检测到语音，请靠近麦克风说话', 'error');
-          } else if (e.error !== 'aborted') {
-            showToast('语音识别错误: ' + e.error, 'error');
+          } catch(e) {
+            showToast('语音识别请求失败: ' + e.message, 'error');
           }
         };
-        recognition.onend = () => {
-          isTranscribing.value = false;
-          // Clean up interim markers
-          noteText.value = noteText.value.replace(/🗣[^]*$/, '').trim();
-        };
-        recognition.start();
+        recorder.start();
+        mediaRecorder = recorder;
         isTranscribing.value = true;
-        showToast('语音识别中...请说话（需Chrome+联网）');
+        showToast('开始录音...再次点击停止并识别');
       } catch(e) {
-        showToast('启动语音识别失败: ' + e.message, 'error');
-        isTranscribing.value = false;
+        showToast('无法访问麦克风: ' + e.message, 'error');
       }
     }
 
@@ -920,7 +915,7 @@ createApp({
       specialDays, showDayForm, newDay, calendarMonth, calendarYear, calendarDays, calendarMonthLabel, editingDay,
       dayTypeIcons,
       fileBrowserMode, selectedFolder, selectedFolderFiles,
-      settings, settingsSaved, aiTestResult, aiTestLoading,
+      settings, settingsSaved, aiTestResult, aiTestLoading, apiPresets, applyPreset,
       loadAudioDevices, selectAudioDevice,
       switchView, toggleToday, toggleWeek, togglePlanTask,
       addTodayTask, addWeekTask, createCategory, deleteCategory,

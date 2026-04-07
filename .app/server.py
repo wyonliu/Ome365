@@ -51,12 +51,10 @@ SETTINGS_DEFAULTS = {
     "user_name": "",
     "main_goal": "365天个人执行计划",
     "start_date": "2026-04-08",
-    "ai_provider": "none",
-    "anthropic_api_key": "",
-    "anthropic_model": "claude-sonnet-4-20250514",
-    "openai_api_key": "",
-    "openai_base_url": "https://api.openai.com/v1",
-    "openai_model": "gpt-4o",
+    "ai_mode": "none",        # "api" | "ollama" | "none"
+    "api_base_url": "",        # e.g. https://api.openai.com/v1 or https://api.anthropic.com/v1
+    "api_key": "",
+    "api_model": "",           # e.g. gpt-4o, claude-sonnet-4-20250514
     "ollama_url": "http://localhost:11434",
     "ollama_model": "llama3.1",
 }
@@ -842,7 +840,7 @@ app.mount("/media", StaticFiles(directory=str(MEDIA)), name="media")
 # ── API: AI (multi-provider) ──────────────────────────
 @app.post("/api/ai")
 async def ai_ask(body:dict):
-    """Call AI API — supports anthropic, openai-compatible, ollama, or none."""
+    import requests as req
     prompt = body.get("prompt","")
     context = body.get("context","")
     full_prompt = prompt
@@ -850,9 +848,8 @@ async def ai_ask(body:dict):
         full_prompt = f"Context:\n{context}\n\n{prompt}"
 
     settings = load_settings()
-    provider = settings.get("ai_provider", "none")
+    mode = settings.get("ai_mode", "none")
 
-    # Build system prompt with vault context
     system_msg = f"""你是 Ome365 AI 助手，帮助用户管理365天个人执行计划。
 用户的工作目录是: {VAULT}
 今天是: {today_s()}
@@ -861,7 +858,6 @@ Week: W{week_n()}
 Quarter: Q{quarter_n()}
 请用简洁有力的中文回答，像教练对运动员说话。"""
 
-    # Read relevant files for context
     file_context = ""
     daily_fp = find_daily()
     if daily_fp.exists():
@@ -871,86 +867,50 @@ Quarter: Q{quarter_n()}
         file_context += f"\n--- 365计划 ---\n{plan_fp.read_text('utf-8')[:3000]}\n"
     system_with_context = system_msg + file_context
 
-    if provider == "none":
-        return {"ok":False, "response":"", "error":"请在设置中配置AI服务"}
+    if mode == "none":
+        return {"ok":False, "error":"请在设置中配置AI服务"}
 
-    elif provider == "anthropic":
-        api_key = settings.get("anthropic_api_key","")
-        model = settings.get("anthropic_model","claude-sonnet-4-20250514")
-        if not api_key:
-            return {"ok":False, "response":"", "error":"请在设置中填写 Anthropic API Key"}
+    elif mode == "api":
+        base_url = settings.get("api_base_url","").rstrip("/")
+        api_key = settings.get("api_key","")
+        model = settings.get("api_model","")
+        if not base_url or not api_key or not model:
+            return {"ok":False, "error":"请在设置中填写完整的 API 地址、密钥和模型"}
         try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=api_key)
-            msg = client.messages.create(
-                model=model,
-                max_tokens=1024,
-                system=system_with_context,
-                messages=[{"role":"user","content":full_prompt}]
-            )
-            response_text = msg.content[0].text if msg.content else ""
-            return {"ok":True, "response":response_text, "provider":"anthropic", "cost":0}
-        except ImportError:
-            return {"ok":False, "response":"", "error":"anthropic SDK未安装，请运行: pip install anthropic"}
-        except Exception as e:
-            return {"ok":False, "response":"", "error":str(e)}
-
-    elif provider == "openai":
-        import requests as req
-        api_key = settings.get("openai_api_key","")
-        base_url = settings.get("openai_base_url","https://api.openai.com/v1").rstrip("/")
-        model = settings.get("openai_model","gpt-4o")
-        if not api_key:
-            return {"ok":False, "response":"", "error":"请在设置中填写 OpenAI API Key"}
-        try:
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            }
-            payload = {
-                "model": model,
-                "max_tokens": 1024,
-                "messages": [
-                    {"role":"system","content":system_with_context},
-                    {"role":"user","content":full_prompt}
-                ]
-            }
+            headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json"}
+            payload = {"model":model,"max_tokens":1024,"messages":[
+                {"role":"system","content":system_with_context},
+                {"role":"user","content":full_prompt}
+            ]}
             resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=60)
             resp.raise_for_status()
             data = resp.json()
-            response_text = data["choices"][0]["message"]["content"]
-            return {"ok":True, "response":response_text, "provider":"openai", "cost":0}
+            text = data["choices"][0]["message"]["content"]
+            return {"ok":True, "response":text, "provider":"api"}
         except Exception as e:
-            return {"ok":False, "response":"", "error":str(e)}
+            return {"ok":False, "error":str(e)}
 
-    elif provider == "ollama":
-        import requests as req
+    elif mode == "ollama":
         ollama_url = settings.get("ollama_url","http://localhost:11434").rstrip("/")
         model = settings.get("ollama_model","llama3.1")
         try:
-            payload = {
-                "model": model,
-                "messages": [
-                    {"role":"system","content":system_with_context},
-                    {"role":"user","content":full_prompt}
-                ],
-                "stream": False,
-            }
+            payload = {"model":model,"messages":[
+                {"role":"system","content":system_with_context},
+                {"role":"user","content":full_prompt}
+            ],"stream":False}
             resp = req.post(f"{ollama_url}/api/chat", json=payload, timeout=120)
             resp.raise_for_status()
-            data = resp.json()
-            response_text = data.get("message",{}).get("content","")
-            return {"ok":True, "response":response_text, "provider":"ollama", "cost":0}
+            text = resp.json().get("message",{}).get("content","")
+            return {"ok":True, "response":text, "provider":"ollama"}
         except Exception as e:
-            return {"ok":False, "response":"", "error":str(e)}
+            return {"ok":False, "error":str(e)}
 
-    else:
-        return {"ok":False, "response":"", "error":f"未知的AI服务提供商: {provider}"}
+    return {"ok":False, "error":f"未知模式: {mode}"}
 
 @app.get("/api/ai/session")
 async def ai_session_info():
     settings = load_settings()
-    return {"session_id": "sdk", "name": "Ome365", "provider": settings.get("ai_provider","none")}
+    return {"session_id": "sdk", "name": "Ome365", "provider": settings.get("ai_mode","none")}
 
 @app.post("/api/ai/reset")
 async def ai_reset_session():
@@ -969,7 +929,7 @@ async def get_settings():
     settings = load_settings()
     masked = dict(settings)
     # Mask sensitive keys
-    for field in ("anthropic_api_key", "openai_api_key"):
+    for field in ("api_key",):
         if masked.get(field):
             masked[field] = mask_key(masked[field])
     return masked
@@ -979,7 +939,7 @@ async def update_settings(body: dict):
     settings = load_settings()
     # For API key fields: if the incoming value looks like a masked value (starts with ••),
     # keep the existing stored key instead of overwriting with the masked display value.
-    sensitive_fields = ("anthropic_api_key", "openai_api_key")
+    sensitive_fields = ("api_key",)
     for k, v in body.items():
         if k in sensitive_fields and isinstance(v, str) and v.startswith("••"):
             # Don't overwrite — keep existing key
@@ -990,54 +950,31 @@ async def update_settings(body: dict):
 
 @app.post("/api/settings/test-ai")
 async def test_ai_connection():
-    """Test the configured AI connection with a simple prompt."""
+    import requests as req
     settings = load_settings()
-    provider = settings.get("ai_provider","none")
-
-    if provider == "none":
-        return {"ok":False, "error":"请先在设置中选择AI服务提供商"}
-
+    mode = settings.get("ai_mode","none")
     test_prompt = "请回复「连接成功」四个字。"
 
-    if provider == "anthropic":
-        api_key = settings.get("anthropic_api_key","")
-        model = settings.get("anthropic_model","claude-sonnet-4-20250514")
-        if not api_key:
-            return {"ok":False, "error":"请填写 Anthropic API Key"}
-        try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=api_key)
-            msg = client.messages.create(
-                model=model,
-                max_tokens=64,
-                messages=[{"role":"user","content":test_prompt}]
-            )
-            text = msg.content[0].text if msg.content else ""
-            return {"ok":True, "response":text, "provider":provider}
-        except ImportError:
-            return {"ok":False, "error":"anthropic SDK未安装: pip install anthropic"}
-        except Exception as e:
-            return {"ok":False, "error":str(e)}
+    if mode == "none":
+        return {"ok":False, "error":"请先选择AI模式"}
 
-    elif provider == "openai":
-        import requests as req
-        api_key = settings.get("openai_api_key","")
-        base_url = settings.get("openai_base_url","https://api.openai.com/v1").rstrip("/")
-        model = settings.get("openai_model","gpt-4o")
-        if not api_key:
-            return {"ok":False, "error":"请填写 OpenAI API Key"}
+    elif mode == "api":
+        base_url = settings.get("api_base_url","").rstrip("/")
+        api_key = settings.get("api_key","")
+        model = settings.get("api_model","")
+        if not base_url or not api_key or not model:
+            return {"ok":False, "error":"请填写完整的 API 地址、密钥和模型"}
         try:
             headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json"}
             payload = {"model":model,"max_tokens":64,"messages":[{"role":"user","content":test_prompt}]}
             resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=30)
             resp.raise_for_status()
             text = resp.json()["choices"][0]["message"]["content"]
-            return {"ok":True, "response":text, "provider":provider}
+            return {"ok":True, "response":text}
         except Exception as e:
             return {"ok":False, "error":str(e)}
 
-    elif provider == "ollama":
-        import requests as req
+    elif mode == "ollama":
         ollama_url = settings.get("ollama_url","http://localhost:11434").rstrip("/")
         model = settings.get("ollama_model","llama3.1")
         try:
@@ -1045,12 +982,11 @@ async def test_ai_connection():
             resp = req.post(f"{ollama_url}/api/chat", json=payload, timeout=60)
             resp.raise_for_status()
             text = resp.json().get("message",{}).get("content","")
-            return {"ok":True, "response":text, "provider":provider}
+            return {"ok":True, "response":text}
         except Exception as e:
             return {"ok":False, "error":str(e)}
 
-    else:
-        return {"ok":False, "error":f"未知提供商: {provider}"}
+    return {"ok":False, "error":f"未知模式: {mode}"}
 
 
 # ── API: Whisper STT ───────────────────────────────────
