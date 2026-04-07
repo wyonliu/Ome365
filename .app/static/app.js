@@ -24,6 +24,7 @@ createApp({
     const isMac = ref(navigator.platform.includes('Mac'));
     const heatmapData = ref(null);
     const planQuarter = ref(1);
+    const msFilter = ref('all'); // all | week | important | past
 
     // Loading
     const loading = ref(true);
@@ -35,12 +36,28 @@ createApp({
     const addingWeekTask = ref(false);
     const newTaskCategory = ref('');
     const newTaskTime = ref('');
+    const newTaskTimeEnd = ref('');
+    const newTaskTimeRange = ref(false);
     const newTaskRepeat = ref('none');
+    const newTaskTargetDate = ref(''); // YYYY-MM-DD for week task day selection
+
+    // Unified tasks view
+    const tasksTab = ref('today'); // today|tomorrow|week|month|days
+    const unifiedTasksData = ref(null);
 
     // Task editing
     const editingTask = ref(null); // {text, description, type:'today'|'week'}
     const editTaskText = ref('');
     const editTaskDesc = ref('');
+    const editTaskTime = ref('');
+    const editTaskTimeEnd = ref('');
+    const editTaskTimeRange = ref(false);
+
+    // Time blocks
+    const timeBlocks = ref([]);
+    const showTimeBlockForm = ref(false);
+    const editingBlockIdx = ref(-1);
+    const blockForm = ref({time:'', item:'', dim:''});
 
     // Categories
     const categories = ref([]);
@@ -80,6 +97,16 @@ createApp({
     const calendarMonth = ref(new Date().getMonth());
     const calendarYear = ref(new Date().getFullYear());
     const editingDay = ref(null);
+
+    // Note delete
+    const noteDeleteConfirm = ref(null); // {date, idx, preview}
+
+    // Smart Input
+    const showSmartInput = ref(false);
+    const smartInputText = ref('');
+    const smartInputResult = ref(null);
+    const smartInputLoading = ref(false);
+    const smartInputApplying = ref(false);
 
     // Toast
     const toastMsg = ref('');
@@ -143,6 +170,123 @@ createApp({
     // On This Day
     const onThisDayEntries = ref([]);
 
+    // Growth / 养成
+    const growthData = ref(null);
+    const editingOmeProfile = ref(false);
+    const omeNameEdit = ref('');
+    const omePersonalityEdit = ref('');
+
+    // Notifications & Reminders
+    const notifEnabled = ref(localStorage.getItem('ome365_notif') !== '0');
+    const notifSound = ref(localStorage.getItem('ome365_notif_sound') || 'chime');
+    const firedReminders = ref(new Set());
+    const proactiveMsg = ref('');
+    const showProactive = ref(false);
+    let reminderInterval = null;
+    let proactiveInterval = null;
+    let audioCtx = null;
+
+    function getAudioCtx() {
+      if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      return audioCtx;
+    }
+    function playSound(type) {
+      if(!notifEnabled.value || notifSound.value === 'none') return;
+      try {
+        const ctx = getAudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        if(type === 'chime') {
+          osc.type = 'sine'; osc.frequency.setValueAtTime(880, ctx.currentTime);
+          osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.1);
+          osc.frequency.setValueAtTime(1320, ctx.currentTime + 0.2);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+          osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.5);
+        } else if(type === 'bell') {
+          osc.type = 'sine'; osc.frequency.setValueAtTime(660, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.8);
+          osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.8);
+        } else if(type === 'pop') {
+          osc.type = 'sine'; osc.frequency.setValueAtTime(600, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.15);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+          osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.2);
+        }
+      } catch(e) { /* ignore audio errors */ }
+    }
+    function sendBrowserNotif(title, body) {
+      if(!notifEnabled.value) return;
+      if(Notification.permission === 'granted') {
+        new Notification(title, {body, icon:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="80">🔔</text></svg>'});
+      }
+    }
+    async function checkReminders() {
+      const now = new Date();
+      const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      try {
+        const res = await api('/reminders');
+        if(!res?.ok) return;
+        const all = [...(res.reminders||[]), ...(res.auto_reminders||[])];
+        for(const r of all) {
+          if(!r.time || firedReminders.value.has(r.id)) continue;
+          if(r.time === hhmm) {
+            firedReminders.value.add(r.id);
+            playSound(notifSound.value);
+            sendBrowserNotif('Ome365 提醒', r.title);
+            showToast(`⏰ ${r.title}`, 'info');
+          }
+        }
+      } catch(e) {}
+    }
+    let lastUserActivity = Date.now();
+    let proactiveDismissCount = parseInt(localStorage.getItem('ome365_proactive_dismiss')||'0');
+    document.addEventListener('click', () => lastUserActivity = Date.now());
+    document.addEventListener('keydown', () => lastUserActivity = Date.now());
+
+    async function checkProactive() {
+      if(!notifEnabled.value) return;
+      // Don't interrupt if user was active in the last 5 minutes
+      if(Date.now() - lastUserActivity < 300000) return;
+      // Reduce frequency if user keeps dismissing (back off)
+      if(proactiveDismissCount >= 5) return;
+      try {
+        const res = await api('/proactive');
+        if(res?.ok && res.message) {
+          proactiveMsg.value = res.message;
+          showProactive.value = true;
+          playSound('pop');
+          setTimeout(() => { if(showProactive.value) { showProactive.value = false; proactiveDismissCount++; localStorage.setItem('ome365_proactive_dismiss', String(proactiveDismissCount)); } }, 15000);
+        }
+      } catch(e) {}
+    }
+    function dismissProactive() {
+      showProactive.value = false;
+      proactiveDismissCount++;
+      localStorage.setItem('ome365_proactive_dismiss', String(proactiveDismissCount));
+    }
+    function acknowledgeProactive() {
+      showProactive.value = false;
+      proactiveDismissCount = Math.max(0, proactiveDismissCount - 1);
+      localStorage.setItem('ome365_proactive_dismiss', String(proactiveDismissCount));
+    }
+    function requestNotifPermission() {
+      if('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+    }
+    function toggleNotif(val) {
+      notifEnabled.value = val;
+      localStorage.setItem('ome365_notif', val ? '1' : '0');
+      if(val) requestNotifPermission();
+    }
+    function setNotifSound(s) {
+      notifSound.value = s;
+      localStorage.setItem('ome365_notif_sound', s);
+      playSound(s);
+    }
+
     // AI
     const aiResponse = ref('');
     const aiLoading = ref(false);
@@ -175,25 +319,25 @@ createApp({
     // Nav
     const navItems = computed(() => [
       {key:'dashboard',icon:'📊',label:'总览'},
-      {key:'today',icon:'📅',label:'今日'},
-      {key:'week',icon:'📋',label:'本周'},
+      {key:'tasks',icon:'✅',label:'清单'},
       {key:'plan',icon:'🗺️',label:'地图'},
       {key:'decisions',icon:'⚡',label:'决策',badge:dash.value?.decision_count||''},
       {key:'notes',icon:'✏️',label:'速记',badge:dash.value?.notes_count||''},
       {key:'contacts',icon:'👤',label:'关系',badge:dash.value?.contact_count||''},
       {key:'memory',icon:'🧠',label:'记忆',badge:dash.value?.memory_count||''},
+      {key:'growth',icon:'🌱',label:'养成'},
       {key:'days',icon:'🗓',label:'日子'},
       {key:'files',icon:'📁',label:'文件'},
       {key:'settings',icon:'⚙️',label:'设置'},
     ]);
     const mobileNavItems = [
       {key:'dashboard',icon:'📊',label:'总览'},
-      {key:'today',icon:'📅',label:'今日'},
+      {key:'tasks',icon:'✅',label:'清单'},
       {key:'notes',icon:'✏️',label:'速记'},
       {key:'contacts',icon:'👤',label:'关系'},
       {key:'files',icon:'📁',label:'更多'},
     ];
-    const titles = {dashboard:'总览',today:'今日',week:'本周',plan:'365天作战地图',decisions:'决策日志',notes:'速记',contacts:'关系网络',memory:'记忆',days:'日子',files:'文件',settings:'设置'};
+    const titles = {dashboard:'总览',tasks:'清单',plan:'365天作战地图',decisions:'决策日志',notes:'速记',contacts:'关系网络',memory:'记忆',growth:'养成',files:'文件',settings:'设置'};
     const currentTitle = computed(() => titles[view.value]||'');
     const notePlaceholder = computed(() => isRecording.value ? '录音中...' : isTranscribing.value ? '语音识别中...' : '写下想法、灵感、待办...');
 
@@ -228,11 +372,160 @@ createApp({
       const t=weekTasks.value; const d=t.filter(x=>x.done).length;
       return {total:t.length,done:d,pct:t.length?Math.round(d/t.length*100):0};
     });
+    const weekDayOptions = computed(() => {
+      const days = ['周一','周二','周三','周四','周五','周六','周日'];
+      const today = new Date();
+      const todayStr = today.toISOString().slice(0,10);
+      const dow = (today.getDay()+6)%7; // Monday=0
+      const result = [];
+      for(let i=0; i<7; i++){
+        const d = new Date(today);
+        d.setDate(d.getDate() - dow + i);
+        const ds = d.toISOString().slice(0,10);
+        result.push({ date:ds, label: ds===todayStr ? '今天' : days[i], isToday: ds===todayStr });
+      }
+      return result;
+    });
+
+    // Unified tasks computed
+    const taskTabs = computed(() => {
+      const ut = unifiedTasksData.value;
+      return [
+        {key:'today', label:'今日', count: todayStats.value.total||''},
+        {key:'tomorrow', label:'明日', count: ''},
+        {key:'week', label:'本周', count: weekStats.value.total||''},
+        {key:'month', label:'本月', count: ''},
+        {key:'days', label:'日子', count: specialDays.value.length||''},
+      ];
+    });
+    const tasksTabTitle = computed(() => {
+      const m = {today:'今日任务', tomorrow:'明日任务', week:`W${week.value} 本周任务`, month:'本月任务'};
+      return m[tasksTab.value]||'';
+    });
+    const unifiedTasks = computed(() => {
+      const ut = unifiedTasksData.value;
+      if (!ut) {
+        // Fall back to existing data
+        if(tasksTab.value==='today') return todayTasks.value;
+        if(tasksTab.value==='week') return weekTasks.value;
+        return [];
+      }
+      return (ut.tasks||[]).filter(t=>t.text.trim());
+    });
+    const unifiedTasksDone = computed(() => unifiedTasks.value.filter(t=>t.done).length);
+    const unifiedTasksPct = computed(() => {
+      const t = unifiedTasks.value.length;
+      return t ? Math.round(unifiedTasksDone.value/t*100) : 0;
+    });
+    const unifiedSchedule = computed(() => {
+      if(unifiedTasksData.value) return unifiedTasksData.value.schedule||[];
+      return timeBlocks.value;
+    });
+    const unifiedTaskGroups = computed(() => {
+      const tasks = unifiedTasks.value;
+      if(!tasks.length) return [];
+      const groups = {};
+      const weekdays = ['周一','周二','周三','周四','周五','周六','周日'];
+      for(const t of tasks) {
+        let label = t.date || '整周';
+        if(t.date) {
+          const d = new Date(t.date);
+          const today = new Date().toISOString().slice(0,10);
+          if(t.date === today) label = '今天 · ' + t.date;
+          else label = weekdays[d.getDay()===0?6:d.getDay()-1] + ' · ' + t.date;
+        }
+        if(!groups[label]) groups[label] = {label, tasks:[], sortKey:t.date||'9999'};
+        groups[label].tasks.push(t);
+      }
+      return Object.values(groups).sort((a,b)=>a.sortKey.localeCompare(b.sortKey));
+    });
+
+    async function loadUnifiedTasks(tab) {
+      const res = await api(`/tasks/unified?tab=${tab||tasksTab.value}`);
+      if(res) unifiedTasksData.value = res;
+    }
+    async function switchTasksTab(tab) {
+      tasksTab.value = tab;
+      addingTodayTask.value = false;
+      editingTask.value = null;
+      if(tab === 'today') {
+        await Promise.all([loadToday(), loadTimeBlocks()]);
+        todayMood.value = dash.value?.today_mood||'';
+        todayEnergy.value = dash.value?.today_energy||'';
+        todayFocus.value = dash.value?.today_focus||'';
+        unifiedTasksData.value = null; // use existing today data
+      } else if(tab === 'week') {
+        await loadWeek();
+        await loadUnifiedTasks('week');
+      } else if(tab === 'tomorrow' || tab === 'month') {
+        await loadUnifiedTasks(tab);
+      } else if(tab === 'days') {
+        await loadSpecialDays();
+      }
+    }
+    async function toggleUnifiedTask(t) {
+      t.done = !t.done;
+      if(t.source === 'weekly') {
+        await api('/week/toggle',{method:'POST',body:JSON.stringify({text:t.text})});
+      } else {
+        // Toggle in the specific daily file
+        const targetDate = t.date || '';
+        await api('/today/toggle',{method:'POST',body:JSON.stringify({text:t.text, date:targetDate})});
+      }
+      if(t.done) recordInteraction();
+      showToast(t.done ? '已完成' : '已取消完成');
+      // Refresh
+      if(tasksTab.value === 'today') await loadToday();
+      else if(tasksTab.value === 'week') await loadUnifiedTasks('week');
+      else if(tasksTab.value === 'tomorrow' || tasksTab.value === 'month') await loadUnifiedTasks(tasksTab.value);
+    }
+    async function addUnifiedTask() {
+      const text = newTodayTask.value.trim();
+      if(!text) return;
+      const payload = {text, category:newTaskCategory.value, time:buildTaskTime(), repeat:newTaskRepeat.value};
+      if(tasksTab.value === 'week') {
+        if(newTaskTargetDate.value) payload.target_date = newTaskTargetDate.value;
+        const res = await api('/week/add',{method:'POST',body:JSON.stringify(payload)});
+        if(res?.ok) {
+          newTodayTask.value=''; addingTodayTask.value=false; newTaskTargetDate.value=''; resetTaskForm();
+          await loadWeek();
+          await loadUnifiedTasks('week');
+          showToast(res.date ? `已添加到 ${res.date}` : '任务已添加');
+        }
+      } else if(tasksTab.value === 'tomorrow') {
+        const tmr = new Date(Date.now()+86400000).toISOString().slice(0,10);
+        payload.target_date = tmr;
+        const res = await api('/week/add',{method:'POST',body:JSON.stringify(payload)});
+        if(res?.ok) {
+          newTodayTask.value=''; addingTodayTask.value=false; resetTaskForm();
+          await loadUnifiedTasks('tomorrow');
+          showToast('已添加到明日');
+        }
+      } else {
+        const res = await api('/today/add',{method:'POST',body:JSON.stringify(payload)});
+        if(res?.ok) {
+          newTodayTask.value=''; addingTodayTask.value=false; resetTaskForm();
+          await loadToday();
+          showToast('任务已添加');
+        }
+      }
+    }
     const milestones = computed(() => {
       const all = dash.value?.milestones||[];
       const future = all.filter(m=>!m.past);
       const past = all.filter(m=>m.past);
       return [...past.slice(-1), ...future.slice(0,6)];
+    });
+    const filteredMilestones = computed(() => {
+      const all = planData.value?.milestones||[];
+      if(msFilter.value==='past') return all.filter(m=>m.past);
+      if(msFilter.value==='important') return all.filter(m=>m.category && m.category!=='其他');
+      if(msFilter.value==='week'){
+        const now = new Date(); const end = new Date(now); end.setDate(end.getDate()+7);
+        const nowStr = now.toISOString().slice(0,10); const endStr = end.toISOString().slice(0,10);
+        return all.filter(m=>m.date>=nowStr && m.date<=endStr);
+      }
+      return all;
     });
     const todayHtml = computed(() => marked.parse(todayData.value?.content||dash.value?.today?.content||'',{gfm:true,breaks:true}));
     const weekHtml = computed(() => marked.parse(weekData.value?.content||'',{gfm:true,breaks:true}));
@@ -421,6 +714,42 @@ createApp({
       showToast('专注度已记录');
     }
 
+    // Time blocks
+    async function loadTimeBlocks() {
+      const res = await api('/today/timeblocks');
+      if(res?.ok) timeBlocks.value = res.blocks||[];
+    }
+    async function saveTimeBlocks() {
+      const res = await api('/today/timeblocks',{method:'PUT',body:JSON.stringify({blocks:timeBlocks.value})});
+      if(res?.ok) { timeBlocks.value = res.blocks||[]; showToast('时间块已保存'); }
+    }
+    function addTimeBlock() {
+      editingBlockIdx.value = -1;
+      blockForm.value = {time:'', item:'', dim:''};
+      showTimeBlockForm.value = true;
+    }
+    function editTimeBlock(idx) {
+      const b = timeBlocks.value[idx];
+      editingBlockIdx.value = idx;
+      blockForm.value = {time:b.time, item:b.item, dim:b.dim};
+      showTimeBlockForm.value = true;
+    }
+    function saveBlockForm() {
+      const b = {...blockForm.value};
+      if(!b.time.trim()) return;
+      if(editingBlockIdx.value >= 0) {
+        timeBlocks.value[editingBlockIdx.value] = b;
+      } else {
+        timeBlocks.value.push(b);
+      }
+      showTimeBlockForm.value = false;
+      saveTimeBlocks();
+    }
+    function deleteTimeBlock(idx) {
+      timeBlocks.value.splice(idx, 1);
+      saveTimeBlocks();
+    }
+
     // AI Reflection
     async function doReflect(type) {
       reflectLoading.value = true; reflectResult.value = '';
@@ -435,6 +764,57 @@ createApp({
     async function loadOnThisDay() {
       const res = await api('/on-this-day');
       if(res) onThisDayEntries.value = res.entries||[];
+    }
+
+    // Growth / 养成
+    async function loadGrowth() {
+      const res = await api('/growth');
+      if(res) growthData.value = res;
+    }
+    async function recordInteraction(count=1) {
+      const res = await api('/growth/interact',{method:'POST',body:JSON.stringify({count})});
+      // Auto-trigger AI evolution every 20 interactions
+      if(res && res.evolution_pending) {
+        triggerEvolve();
+      }
+      // Refresh growth data if on growth page
+      if(view.value === 'growth') await loadGrowth();
+    }
+    function startEditOmeProfile() {
+      editingOmeProfile.value = true;
+      omeNameEdit.value = growthData.value?.ome_name || 'Ome';
+      omePersonalityEdit.value = growthData.value?.ome_personality || '';
+    }
+    const growthPhases = [
+      {id:'newborn',name:'初生',icon:'🌱'},{id:'forming',name:'成长',icon:'🌿'},
+      {id:'distinct',name:'独立',icon:'🌳'},{id:'soulmate',name:'知己',icon:'🌟'},
+    ];
+    function phaseClass(phaseId) {
+      if(!growthData.value) return '';
+      const order = ['newborn','forming','distinct','soulmate'];
+      const cur = order.indexOf(growthData.value.phase.id);
+      const idx = order.indexOf(phaseId);
+      if(idx===cur) return 'phase-active';
+      if(idx<cur) return 'phase-done';
+      return '';
+    }
+    const evolving = ref(false);
+    async function triggerEvolve() {
+      evolving.value = true;
+      const res = await api('/growth/evolve',{method:'POST'});
+      evolving.value = false;
+      if(res?.ok) {
+        showToast(`进化: ${res.evolution?.shift||'新特征'}`);
+        await loadGrowth();
+      } else {
+        showToast(res?.error||'进化失败', 'error');
+      }
+    }
+    async function saveOmeProfile() {
+      await api('/growth/profile',{method:'PUT',body:JSON.stringify({ome_name:omeNameEdit.value.trim()||'Ome',ome_personality:omePersonalityEdit.value.trim()})});
+      editingOmeProfile.value = false;
+      await loadGrowth();
+      showToast('档案已更新');
     }
 
     // Settings
@@ -523,14 +903,16 @@ createApp({
       loading.value = true;
       switch(key){
         case 'dashboard': await Promise.all([loadDashboard(), loadStreaks(), loadOnThisDay()]); break;
-        case 'today': await loadToday(); todayMood.value=dash.value?.today_mood||''; todayEnergy.value=dash.value?.today_energy||''; todayFocus.value=dash.value?.today_focus||''; break;
-        case 'week': await loadWeek(); break;
+        case 'tasks': await switchTasksTab(tasksTab.value); break;
+        case 'today': view.value='tasks'; tasksTab.value='today'; await switchTasksTab('today'); break;
+        case 'week': view.value='tasks'; tasksTab.value='week'; await switchTasksTab('week'); break;
+        case 'days': view.value='tasks'; tasksTab.value='days'; await switchTasksTab('days'); break;
         case 'plan': await loadPlan(); break;
         case 'decisions': await loadDecisions(); break;
         case 'notes': await loadNotes(); break;
         case 'contacts': await Promise.all([loadContacts(), loadColdContacts(), loadContactCategories()]); break;
         case 'memory': await loadMemories(); break;
-        case 'days': await loadSpecialDays(); break;
+        case 'growth': await loadGrowth(); break;
         case 'files': await loadFileTree(); break;
         case 'settings': await loadSettings(); break;
       }
@@ -541,6 +923,7 @@ createApp({
     async function toggleToday(t){
       t.done=!t.done;
       await api('/today/toggle',{method:'POST',body:JSON.stringify({text:t.text})});
+      if(t.done) recordInteraction();
       if(t.done && t.repeat === 'daily') showToast('已完成 · 明天自动重新出现 🔁');
       else if(t.done && t.repeat === 'weekly') showToast('已完成 · 下周自动重新出现 🔁');
       else showToast(t.done ? '已完成' : '已取消完成');
@@ -572,29 +955,70 @@ createApp({
     }
 
     // Task add with category
+    function buildTaskTime() {
+      if(!newTaskTime.value) return '';
+      if(newTaskTimeRange.value && newTaskTimeEnd.value) return `${newTaskTime.value}-${newTaskTimeEnd.value}`;
+      return newTaskTime.value;
+    }
+    function resetTaskForm() {
+      newTaskCategory.value=''; newTaskTime.value=''; newTaskTimeEnd.value=''; newTaskTimeRange.value=false; newTaskRepeat.value='none';
+    }
     async function addTodayTask(){
       const text = newTodayTask.value.trim(); if(!text) return;
-      const res = await api('/today/add',{method:'POST',body:JSON.stringify({text, category:newTaskCategory.value, time:newTaskTime.value, repeat:newTaskRepeat.value})});
-      if(res?.ok){ newTodayTask.value=''; addingTodayTask.value=false; newTaskCategory.value=''; newTaskTime.value=''; newTaskRepeat.value='none'; await loadToday(); showToast(newTaskRepeat.value!=='none'?'任务已添加（重复）':'任务已添加'); }
+      const res = await api('/today/add',{method:'POST',body:JSON.stringify({text, category:newTaskCategory.value, time:buildTaskTime(), repeat:newTaskRepeat.value})});
+      if(res?.ok){ newTodayTask.value=''; addingTodayTask.value=false; resetTaskForm(); await loadToday(); showToast('任务已添加'); }
     }
     async function addWeekTask(){
       const text = newWeekTask.value.trim(); if(!text) return;
-      const res = await api('/week/add',{method:'POST',body:JSON.stringify({text, category:newTaskCategory.value, time:newTaskTime.value, repeat:newTaskRepeat.value})});
-      if(res?.ok){ newWeekTask.value=''; addingWeekTask.value=false; newTaskCategory.value=''; newTaskTime.value=''; newTaskRepeat.value='none'; await loadWeek(); showToast('任务已添加'); }
+      const payload = {text, category:newTaskCategory.value, time:buildTaskTime(), repeat:newTaskRepeat.value};
+      if(newTaskTargetDate.value) payload.target_date = newTaskTargetDate.value;
+      const res = await api('/week/add',{method:'POST',body:JSON.stringify(payload)});
+      if(res?.ok){
+        newWeekTask.value=''; addingWeekTask.value=false; newTaskTargetDate.value=''; resetTaskForm();
+        await loadWeek();
+        if(res.target==='daily') await loadToday(); // Refresh today if added to a daily file
+        showToast(res.date ? `已添加到 ${res.date}` : '任务已添加');
+      }
     }
 
     // Task editing
     function startEditTask(task, type) {
       editingTask.value = {text: task.text, type};
-      editTaskText.value = task.text;
+      // Parse time prefix like [09:00] or [09:00-12:00]
+      const tmRange = task.text.match(/^\[(\d{2}:\d{2})-(\d{2}:\d{2})\]\s*/);
+      const tmPoint = task.text.match(/^\[(\d{2}:\d{2})\]\s*/);
+      if(tmRange) {
+        editTaskTime.value = tmRange[1];
+        editTaskTimeEnd.value = tmRange[2];
+        editTaskTimeRange.value = true;
+        editTaskText.value = task.text.replace(/^\[\d{2}:\d{2}-\d{2}:\d{2}\]\s*/, '');
+      } else if(tmPoint) {
+        editTaskTime.value = tmPoint[1];
+        editTaskTimeEnd.value = '';
+        editTaskTimeRange.value = false;
+        editTaskText.value = task.text.replace(/^\[\d{2}:\d{2}\]\s*/, '');
+      } else {
+        editTaskTime.value = '';
+        editTaskTimeEnd.value = '';
+        editTaskTimeRange.value = false;
+        editTaskText.value = task.text;
+      }
       editTaskDesc.value = task.description || '';
     }
     async function saveEditTask() {
       if (!editingTask.value) return;
       const endpoint = editingTask.value.type === 'today' ? '/today/task' : '/week/task';
+      let newText = editTaskText.value.trim() || editingTask.value.text;
+      // Remove any existing time prefix
+      newText = newText.replace(/^\[\d{2}:\d{2}(?:-\d{2}:\d{2})?\]\s*/, '');
+      if(editTaskTime.value && editTaskTimeRange.value && editTaskTimeEnd.value) {
+        newText = `[${editTaskTime.value}-${editTaskTimeEnd.value}] ${newText}`;
+      } else if(editTaskTime.value) {
+        newText = `[${editTaskTime.value}] ${newText}`;
+      }
       const res = await api(endpoint, {method:'PUT', body:JSON.stringify({
         old_text: editingTask.value.text,
-        new_text: editTaskText.value.trim() || editingTask.value.text,
+        new_text: newText,
         description: editTaskDesc.value.trim(),
       })});
       if (res?.ok) {
@@ -638,7 +1062,7 @@ createApp({
     async function submitNote(){
       const text=noteText.value.trim(); if(!text)return;
       const res=await api('/notes',{method:'POST',body:JSON.stringify({text, category:noteCategory.value})});
-      if(res?.ok){noteSuccess.value=true;noteTime.value=res.time;noteText.value='';await loadNotes();setTimeout(()=>noteSuccess.value=false,2000);}
+      if(res?.ok){noteSuccess.value=true;noteTime.value=res.time;noteText.value='';await loadNotes();setTimeout(()=>noteSuccess.value=false,2000);recordInteraction();}
     }
 
     async function saveAIAsNote(){
@@ -646,6 +1070,66 @@ createApp({
       const text = '🤖 AI整理：\n' + aiResponse.value;
       const res = await api('/notes',{method:'POST',body:JSON.stringify({text})});
       if(res?.ok){ showToast('AI回复已保存为速记'); await loadNotes(); }
+    }
+
+    function confirmDeleteNote(date, idx, text) {
+      const preview = text.length > 20 ? text.slice(0,20)+'...' : text;
+      noteDeleteConfirm.value = { date, idx, preview };
+    }
+    async function executeDeleteNote() {
+      if (!noteDeleteConfirm.value) return;
+      const { date, idx } = noteDeleteConfirm.value;
+      const res = await api(`/notes/${date}/${idx}`, { method: 'DELETE' });
+      if (res?.ok) { showToast('已删除'); await loadNotes(); }
+      noteDeleteConfirm.value = null;
+    }
+
+    async function runSmartInput() {
+      const text = smartInputText.value.trim();
+      if (!text) return;
+      smartInputLoading.value = true;
+      smartInputResult.value = null;
+      try {
+        const res = await api('/ai/smart-input', { method: 'POST', body: JSON.stringify({ text }) });
+        if (res?.ok) {
+          smartInputResult.value = res.data;
+        } else {
+          showToast(res?.error || 'AI分析失败', 'error');
+        }
+      } catch(e) {
+        showToast('网络错误', 'error');
+      }
+      smartInputLoading.value = false;
+    }
+    async function applySmartInput() {
+      if (!smartInputResult.value) return;
+      smartInputApplying.value = true;
+      try {
+        const res = await api('/ai/smart-input/apply', { method: 'POST', body: JSON.stringify({ data: smartInputResult.value }) });
+        if (res?.ok) {
+          const r = res.results;
+          const parts = [];
+          if (r.contacts_created) parts.push(`新建${r.contacts_created}个联系人`);
+          if (r.contacts_updated) parts.push(`更新${r.contacts_updated}个联系人`);
+          if (r.interactions_added) parts.push(`添加${r.interactions_added}条互动`);
+          if (r.todos_added) parts.push(`添加${r.todos_added}条待办`);
+          if (r.notes_added) parts.push(`添加${r.notes_added}条笔记`);
+          showToast(parts.join('、') || '完成');
+          smartInputText.value = '';
+          smartInputResult.value = null;
+          showSmartInput.value = false;
+          recordInteraction(Object.values(r).reduce((a,b)=>a+b,0) || 1);
+          // Refresh relevant data
+          if (view.value === 'today') await loadToday();
+          if (view.value === 'notes') await loadNotes();
+          if (view.value === 'contacts') await loadContacts();
+        } else {
+          showToast(res?.error || '写入失败', 'error');
+        }
+      } catch(e) {
+        showToast('网络错误', 'error');
+      }
+      smartInputApplying.value = false;
     }
 
     async function createDecision(){
@@ -976,6 +1460,7 @@ createApp({
       aiLoading.value=false;
       if(res?.ok){
         aiResponse.value=res.response;
+        recordInteraction();
       }
       else aiError.value=res?.error||'AI请求失败';
     }
@@ -1037,6 +1522,14 @@ createApp({
         await switchView(savedView);
       }
 
+      // Start reminder & proactive timers
+      requestNotifPermission();
+      reminderInterval = setInterval(checkReminders, 30000); // every 30s
+      checkReminders();
+      // Proactive AI every 30 min (first check after 2 min)
+      setTimeout(checkProactive, 120000);
+      proactiveInterval = setInterval(checkProactive, 1800000);
+
       document.addEventListener('keydown', e => {
         if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();showSearchPanel.value=!showSearchPanel.value;if(showSearchPanel.value)nextTick(()=>{const el=document.getElementById('search-input');if(el)el.focus();});}
         if(e.key==='Escape'&&showSearchPanel.value){showSearchPanel.value=false;}
@@ -1063,15 +1556,21 @@ createApp({
       sidebarCollapsed, mobileNavOpen, editingToday, todayEditRaw,
       showDecisionForm, newDecision, isMac,
       heatmapData, heatmapActive, heatmapMonths,
-      planQuarter, currentPlanQ,
+      planQuarter, currentPlanQ, msFilter, filteredMilestones,
       isRecording, recordingTime, aiResponse, aiResponseHtml, aiLoading, aiError,
       isTranscribing,
       navItems, mobileNavItems, currentTitle,
       dateDisplay, weekday, dayNumber, week, quarter, quarterTheme, daysToStart, yearPct,
       todayTasks, todayStats, weekTasks, weekStats, milestones, todayHtml, weekHtml,
       decisionColumns, decisionDetail, decisionDetailHtml,
-      newTodayTask, newWeekTask, addingTodayTask, addingWeekTask, newTaskCategory, newTaskTime, newTaskRepeat,
-      editingTask, editTaskText, editTaskDesc,
+      newTodayTask, newWeekTask, addingTodayTask, addingWeekTask, newTaskCategory, newTaskTime, newTaskRepeat, newTaskTargetDate, weekDayOptions,
+      tasksTab, taskTabs, tasksTabTitle, unifiedTasks, unifiedTasksDone, unifiedTasksPct, unifiedSchedule, unifiedTaskGroups,
+      switchTasksTab, toggleUnifiedTask, addUnifiedTask,
+      editingTask, editTaskText, editTaskDesc, editTaskTime, editTaskTimeEnd, editTaskTimeRange,
+      newTaskTimeEnd, newTaskTimeRange,
+      timeBlocks, showTimeBlockForm, editingBlockIdx, blockForm,
+      notifEnabled, notifSound, proactiveMsg, showProactive,
+      toggleNotif, setNotifSound, playSound, dismissProactive, acknowledgeProactive,
       categories, noteCategory, noteCategoryFilter, showCategoryForm, newCategory,
       contacts, contactGraph, coldContacts, selectedContact, contactDetailHtml,
       showContactForm, contactFilter, contactView, showInteractionForm,
@@ -1098,11 +1597,19 @@ createApp({
       reflectResult, reflectLoading, reflectHtml, doReflect,
       // v0.2: On This Day
       onThisDayEntries,
+      // v0.3: Growth
+      growthData, growthPhases, editingOmeProfile, omeNameEdit, omePersonalityEdit,
+      loadGrowth, startEditOmeProfile, saveOmeProfile, phaseClass, evolving, triggerEvolve,
+      // v0.4: Note delete + Smart Input
+      noteDeleteConfirm, confirmDeleteNote, executeDeleteNote,
+      showSmartInput, smartInputText, smartInputResult, smartInputLoading, smartInputApplying,
+      runSmartInput, applySmartInput,
       // Functions
       loadAudioDevices, selectAudioDevice,
       switchView, toggleToday, toggleWeek, togglePlanTask,
       addTodayTask, addWeekTask, createCategory, deleteCategory,
       startEditTask, saveEditTask, cancelEditTask,
+      loadTimeBlocks, addTimeBlock, editTimeBlock, saveBlockForm, deleteTimeBlock,
       startEditToday, saveToday, submitNote, saveAIAsNote,
       createDecision, toggleDecisionStatus, openDecisionDetail,
       createContact, selectContactDetail, startEditContact, saveEditContact, addInteraction,
