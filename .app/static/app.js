@@ -89,6 +89,7 @@ createApp({
     // Contact editing
     const editingContact = ref(false);
     const editContactData = ref({});
+    const showMergeSelect = ref(false);
 
     // Contact categories
     const contactCategories = ref([]);
@@ -112,6 +113,30 @@ createApp({
     const smartInputResult = ref(null);
     const smartInputLoading = ref(false);
     const smartInputApplying = ref(false);
+    const smartInputSec = ref(0);
+    let _smartInputTimer = null;
+
+    // Plan edit popup
+    const showGoalEdit = ref(false);
+    const goalEditText = ref('');
+    const goalEditStart = ref('');
+    const goalEditDays = ref(365);
+    function openGoalEdit() {
+      goalEditText.value = settings.value.main_goal || '';
+      goalEditStart.value = settings.value.start_date || new Date().toISOString().slice(0,10);
+      // Calculate days from start_date to end (default 365)
+      goalEditDays.value = settings.value.plan_days || 365;
+      showGoalEdit.value = true;
+    }
+    async function saveGoalEdit() {
+      settings.value.main_goal = goalEditText.value.trim();
+      if(goalEditStart.value) settings.value.start_date = goalEditStart.value;
+      settings.value.plan_days = goalEditDays.value || 365;
+      await api('/settings', {method:'PUT', body:JSON.stringify(settings.value)});
+      showGoalEdit.value = false;
+      showToast('计划已更新');
+      await loadDashboard();
+    }
 
     // Toast
     const toastMsg = ref('');
@@ -170,7 +195,11 @@ createApp({
 
     // Reflection
     const reflectResult = ref('');
-    const reflectLoading = ref(false);
+    const reflectLoadingType = ref(''); // 'daily' | 'weekly' | ''
+
+    // Reflections list view
+    const reflectionsList = ref([]);
+    const reflectionsLoading = ref(false);
 
     // On This Day
     const onThisDayEntries = ref([]);
@@ -180,6 +209,9 @@ createApp({
     const editingOmeProfile = ref(false);
     const omeNameEdit = ref('');
     const omePersonalityEdit = ref('');
+    const growthTimeline = ref([]);
+    const emotionHistory = ref([]);
+    const omeMemoryStats = ref(null);
 
     // Notifications & Reminders
     const notifEnabled = ref(localStorage.getItem('ome365_notif') !== '0');
@@ -296,6 +328,8 @@ createApp({
     const aiResponse = ref('');
     const aiLoading = ref(false);
     const aiError = ref('');
+    const aiFollowUps = ref([]);
+    const aiMemoryImpact = ref(null);
 
     // Settings
     const settings = ref({user_name:'', main_goal:'365天个人执行计划', start_date:'2026-04-08', ai_mode:'none', api_base_url:'', api_key:'', api_model:'', ollama_url:'http://localhost:11434', ollama_model:'llama3.1', use_proxy:true});
@@ -322,27 +356,34 @@ createApp({
     const selectedFolder = ref(null);
 
     // Nav
+    const growthBadge = computed(() => {
+      if(!growthData.value) return '';
+      const phase = growthData.value.phase;
+      if(phase?.icon && phase?.name) return phase.icon + phase.name;
+      return '';
+    });
+    const fileCount = computed(() => fileTree.value.reduce((s,g)=>s+g.count,0));
     const navItems = computed(() => [
-      {key:'dashboard',icon:'📊',label:'总览'},
-      {key:'tasks',icon:'✅',label:'清单'},
-      {key:'plan',icon:'🗺️',label:'地图'},
-      {key:'decisions',icon:'⚡',label:'决策',badge:dash.value?.decision_count||''},
-      {key:'notes',icon:'✏️',label:'速记',badge:dash.value?.notes_count||''},
-      {key:'contacts',icon:'👤',label:'关系',badge:dash.value?.contact_count||''},
-      {key:'memory',icon:'🧠',label:'记忆',badge:dash.value?.memory_count||''},
-      {key:'growth',icon:'🌱',label:'养成'},
-      {key:'days',icon:'🗓',label:'日子'},
-      {key:'files',icon:'📁',label:'文件'},
+      {key:'dashboard',icon:'🔭',label:'全景',badge:todayStats.value.total?todayStats.value.pct+'%':'',badgeColor:'#c8a96e'},
+      {key:'tasks',icon:'✅',label:'清单',badge:todayStats.value.total||'',badgeColor:'#f59e0b'},
+      {key:'plan',icon:'🗺️',label:'地图',badge:dash.value?.plan_pct!=null?dash.value.plan_pct+'%':'',badgeColor:'#c8a96e'},
+      {key:'notes',icon:'📝',label:'速记',badge:dash.value?.notes_count||'',badgeColor:'#38bdf8'},
+      {key:'reflections',icon:'🔮',label:'反思',badge:reflectionsList.value.length||'',badgeColor:'#e879f9'},
+      {key:'decisions',icon:'⚖️',label:'决策',badge:dash.value?.decision_count!=null?dash.value.decision_count:'',badgeColor:'#fb923c'},
+      {key:'contacts',icon:'👥',label:'关系',badge:dash.value?.contact_count||'',badgeColor:'#4ade80'},
+      {key:'memory',icon:'💎',label:'记忆',badge:omeMemoryStats.value?.total||dash.value?.memory_count||'',badgeColor:'#a78bfa'},
+      {key:'growth',icon:'🌿',label:'养成',badge:growthBadge.value,badgeColor:'#34d399'},
+      {key:'files',icon:'📂',label:'文件',badge:fileCount.value||'',badgeColor:'#94a3b8'},
       {key:'settings',icon:'⚙️',label:'设置'},
     ]);
     const mobileNavItems = [
-      {key:'dashboard',icon:'📊',label:'总览'},
-      {key:'tasks',icon:'✅',label:'清单'},
+      {key:'dashboard',icon:'🔭',label:'全景'},
+      {key:'tasks',icon:'📋',label:'清单'},
       {key:'notes',icon:'✏️',label:'速记'},
       {key:'contacts',icon:'👤',label:'关系'},
       {key:'files',icon:'📁',label:'更多'},
     ];
-    const titles = {dashboard:'总览',tasks:'清单',plan:'365天作战地图',decisions:'决策日志',notes:'速记',contacts:'关系网络',memory:'记忆',growth:'养成',files:'文件',settings:'设置'};
+    const titles = {dashboard:'全景',tasks:'清单',plan:'365天作战地图',decisions:'决策日志',notes:'速记',reflections:'反思',contacts:'关系网络',memory:'记忆',growth:'养成',files:'文件',settings:'设置'};
     const currentTitle = computed(() => titles[view.value]||'');
     const notePlaceholder = computed(() => isRecording.value ? '录音中...' : isTranscribing.value ? '语音识别中...' : '写下想法、灵感、待办...');
 
@@ -359,7 +400,8 @@ createApp({
     const quarter = computed(() => dash.value?.quarter||1);
     const quarterTheme = computed(() => dash.value?.quarter_theme||'');
     const daysToStart = computed(() => dash.value?.days_to_start||0);
-    const yearPct = computed(() => Math.min(100,Math.round(dayNumber.value/365*100)));
+    const planDays = computed(() => settings.value?.plan_days || 365);
+    const yearPct = computed(() => Math.min(100,Math.round(dayNumber.value/planDays.value*100)));
 
     const todayTasks = computed(() => {
       const src = view.value==='today' ? todayData.value?.tasks : dash.value?.today?.tasks;
@@ -431,19 +473,122 @@ createApp({
       if(!tasks.length) return [];
       const groups = {};
       const weekdays = ['周一','周二','周三','周四','周五','周六','周日'];
+      const todayStr = new Date().toISOString().slice(0,10);
       for(const t of tasks) {
         let label = t.date || '整周';
         if(t.date) {
           const d = new Date(t.date);
-          const today = new Date().toISOString().slice(0,10);
-          if(t.date === today) label = '今天 · ' + t.date;
+          if(t.date === todayStr) label = '今天 · ' + t.date;
           else label = weekdays[d.getDay()===0?6:d.getDay()-1] + ' · ' + t.date;
         }
-        if(!groups[label]) groups[label] = {label, tasks:[], sortKey:t.date||'9999'};
+        if(!groups[label]) groups[label] = {label, date:t.date||'', tasks:[], sortKey:t.date||'9999'};
         groups[label].tasks.push(t);
       }
-      return Object.values(groups).sort((a,b)=>a.sortKey.localeCompare(b.sortKey));
+      const sorted = Object.values(groups).sort((a,b)=>a.sortKey.localeCompare(b.sortKey));
+      // Enrich each group with timeline state
+      for(const g of sorted) {
+        g.done = g.tasks.filter(t=>t.done).length;
+        g.total = g.tasks.length;
+        g.pct = g.total ? Math.round(g.done/g.total*100) : 0;
+        g.isToday = g.date === todayStr;
+        g.isPast = g.date && g.date < todayStr;
+        g.isFuture = !g.date || g.date > todayStr;
+        g.allDone = g.done === g.total && g.total > 0;
+      }
+      return sorted;
     });
+
+    // Unified agenda: merge tasks + schedule + reminders into one timeline
+    const agendaItems = computed(() => {
+      if (tasksTab.value === 'week' || tasksTab.value === 'month' || tasksTab.value === 'days') return [];
+      const items = [];
+      // Collect task titles (normalized) to dedup auto-reminders
+      const taskTitles = new Set();
+      for (const t of unifiedTasks.value) {
+        // Extract time from [HH:MM] prefix if present
+        const tm = t.text.match(/^\[(\d{2}:\d{2})(?:-(\d{2}:\d{2}))?\]\s*(.+)/);
+        const time = tm ? tm[1] : (t.time||'');
+        const timeEnd = tm ? (tm[2]||'') : (t.timeEnd||'');
+        const title = tm ? tm[3] : t.text;
+        taskTitles.add(title.trim().toLowerCase());
+        items.push({ type:'task', time, timeEnd, title, done:t.done, repeat:t.repeat, data:t, badge:'任务', cls:'ag-task' });
+      }
+      for (const b of unifiedSchedule.value) {
+        // Dedup: skip schedule items that match a task title
+        const schedTitle = (b.item||'').trim().toLowerCase();
+        if(taskTitles.has(schedTitle)) continue;
+        items.push({ type:'schedule', time:b.time||'', title:b.item||'—', dim:b.dim, badge:'日程', cls:'ag-schedule' });
+      }
+      for (const r of reminders.value) {
+        // Skip auto-reminders that duplicate a timed task
+        if(!r.custom) {
+          const rTitle = (r.title||'').trim().toLowerCase();
+          if(taskTitles.has(rTitle)) continue;
+        }
+        items.push({ type:'reminder', time:r.time||'', title:r.title, data:r, badge:r.custom?'提醒':'自动', cls:r.custom?'ag-reminder':'ag-auto', custom:r.custom });
+      }
+      items.sort((a,b) => {
+        if(a.time && !b.time) return -1;
+        if(!a.time && b.time) return 1;
+        if(a.time && b.time) return a.time.localeCompare(b.time);
+        const order = {task:0, schedule:1, reminder:2};
+        return (order[a.type]||9) - (order[b.type]||9);
+      });
+      return items;
+    });
+    const agendaTimed = computed(() => agendaItems.value.filter(a => a.time));
+    const agendaUntimed = computed(() => agendaItems.value.filter(a => !a.time));
+
+    // Ome memory search
+    const omeMemoryQuery = ref('');
+    const omeMemories = ref([]);
+    const omeMemoryLoading = ref(false);
+    const omeMemTypeFilter = ref('');
+    const editingOmeMemId = ref(null);
+    const editingOmeMemContent = ref('');
+    const confirmingDeleteId = ref(null);
+    let _confirmDeleteTimer = null;
+    async function searchOmeMemories(q, types) {
+      omeMemoryLoading.value = true;
+      let url = '/memories?q=' + encodeURIComponent(q || '最近的事') + '&limit=20';
+      if(types) url += '&types=' + encodeURIComponent(types);
+      const res = await api(url);
+      if (res?.memories) omeMemories.value = res.memories;
+      omeMemoryLoading.value = false;
+    }
+    function startEditOmeMem(m) {
+      confirmingDeleteId.value = null;
+      editingOmeMemId.value = m.id;
+      editingOmeMemContent.value = m.content;
+    }
+    async function saveOmeMemEdit(m) {
+      if (!editingOmeMemContent.value.trim()) return;
+      const res = await api(`/memories/${encodeURIComponent(m.id)}`, { method: 'PUT', body: JSON.stringify({ content: editingOmeMemContent.value.trim() }) });
+      if (res?.ok) {
+        m.content = editingOmeMemContent.value.trim();
+        editingOmeMemId.value = null;
+        showToast('记忆已更新');
+      } else { showToast(res?.error || '更新失败', 'error'); }
+    }
+    function askDeleteOmeMem(m) {
+      editingOmeMemId.value = null;
+      confirmingDeleteId.value = m.id;
+      clearTimeout(_confirmDeleteTimer);
+      _confirmDeleteTimer = setTimeout(() => { confirmingDeleteId.value = null; }, 4000);
+    }
+    async function confirmDeleteOmeMem(m) {
+      clearTimeout(_confirmDeleteTimer);
+      const res = await api(`/memories/${encodeURIComponent(m.id)}`, { method: 'DELETE' });
+      if (res?.ok) {
+        omeMemories.value = omeMemories.value.filter(x => x.id !== m.id);
+        showToast('记忆已删除');
+      } else { showToast(res?.error || '删除失败', 'error'); }
+      confirmingDeleteId.value = null;
+    }
+    async function loadMemoryStats() {
+      const res = await api('/memory-stats');
+      if(res?.stats) omeMemoryStats.value = res.stats;
+    }
 
     async function loadUnifiedTasks(tab) {
       const res = await api(`/tasks/unified?tab=${tab||tasksTab.value}`);
@@ -556,6 +701,7 @@ createApp({
       }
       return all;
     });
+    function renderMd(s) { return s ? marked.parse(s, {gfm:true, breaks:true}) : ''; }
     const todayHtml = computed(() => marked.parse(todayData.value?.content||dash.value?.today?.content||'',{gfm:true,breaks:true}));
     const weekHtml = computed(() => marked.parse(weekData.value?.content||'',{gfm:true,breaks:true}));
     const currentFileHtml = computed(() => {
@@ -729,6 +875,7 @@ createApp({
     // Mood/Energy/Focus
     async function setMood(val) {
       todayMood.value = val;
+      if(dash.value) dash.value.today_mood = val; // 同步更新总览
       await api('/today/meta',{method:'PUT',body:JSON.stringify({mood:val})});
       showToast('心情已记录');
     }
@@ -779,15 +926,35 @@ createApp({
       saveTimeBlocks();
     }
 
+    // Go to notes with focus (called from floating AI bar)
+    async function goSmartNotes() {
+      await switchView('notes');
+      await nextTick();
+      const el = document.querySelector('.notes-editor');
+      if (el) { el.focus(); el.scrollIntoView({behavior:'smooth', block:'center'}); }
+    }
+
     // AI Reflection
     async function doReflect(type) {
-      reflectLoading.value = true; reflectResult.value = '';
+      reflectLoadingType.value = type; reflectResult.value = '';
       const res = await api('/reflect',{method:'POST',body:JSON.stringify({type})});
-      reflectLoading.value = false;
-      if(res?.ok) reflectResult.value = res.response;
+      reflectLoadingType.value = '';
+      if(res?.ok) {
+        reflectResult.value = res.response;
+        // Refresh reflections list if on that view
+        if (view.value === 'reflections') await loadReflections();
+      }
       else reflectResult.value = '反思失败: ' + (res?.error||'');
     }
     const reflectHtml = computed(() => reflectResult.value ? marked.parse(reflectResult.value,{gfm:true,breaks:true}) : '');
+
+    // Reflections list
+    async function loadReflections() {
+      reflectionsLoading.value = true;
+      const res = await api('/reflections');
+      if (res?.ok) reflectionsList.value = res.items || [];
+      reflectionsLoading.value = false;
+    }
 
     // On This Day
     async function loadOnThisDay() {
@@ -797,8 +964,14 @@ createApp({
 
     // Growth / 养成
     async function loadGrowth() {
-      const res = await api('/growth');
+      const [res, tl, eh] = await Promise.all([
+        api('/growth'),
+        api('/growth/timeline?limit=20'),
+        api('/growth/emotion-history?days=30'),
+      ]);
       if(res) growthData.value = res;
+      if(tl?.timeline) growthTimeline.value = tl.timeline;
+      if(eh?.history) emotionHistory.value = eh.history;
     }
     async function recordInteraction(count=1) {
       const res = await api('/growth/interact',{method:'POST',body:JSON.stringify({count})});
@@ -819,26 +992,198 @@ createApp({
       {id:'distinct',name:'独立',icon:'🌳'},{id:'soulmate',name:'知己',icon:'🌟'},
     ];
     function phaseClass(phaseId) {
-      if(!growthData.value) return '';
+      if(!growthData.value || !growthData.value.phase) return '';
       const order = ['newborn','forming','distinct','soulmate'];
-      const cur = order.indexOf(growthData.value.phase.id);
+      const cur = order.indexOf(growthData.value.phase.id || 'newborn');
       const idx = order.indexOf(phaseId);
       if(idx===cur) return 'phase-active';
       if(idx<cur) return 'phase-done';
       return '';
     }
     const evolving = ref(false);
+    const evolveError = ref('');
     async function triggerEvolve() {
       evolving.value = true;
-      const res = await api('/growth/evolve',{method:'POST'});
-      evolving.value = false;
-      if(res?.ok) {
-        showToast(`进化: ${res.evolution?.shift||'新特征'}`);
-        await loadGrowth();
-      } else {
-        showToast(res?.error||'进化失败', 'error');
+      evolveError.value = '';
+      try {
+        const res = await api('/growth/evolve',{method:'POST'});
+        evolving.value = false;
+        if(res?.ok) {
+          await loadGrowth(); // refresh timeline — new entry will show with "最新" badge
+        } else {
+          evolveError.value = res?.error||'进化失败，请稍后再试';
+        }
+      } catch(e) {
+        evolving.value = false;
+        evolveError.value = '网络错误，请稍后再试';
       }
     }
+    // ═══ Growth Page v2 — Computed & Methods ═══
+    const achFilter = ref('all');
+
+    // Soul Orb
+    const orbColor = computed(() => {
+      const mood = growthData.value?.emotion?.mood || 'neutral';
+      const map = {happy:'#d4b07a',curious:'#8b7ad4',excited:'#e8a87c',focused:'#7ad4c8',anxious:'#d47a7a',sad:'#7a9ad4',calm:'#7abf7a',neutral:'#a0a0b8'};
+      return map[mood] || map.neutral;
+    });
+    const orbWarmth = computed(() => growthData.value?.emotion?.warmth || 0.3);
+    const orbEnergy = computed(() => growthData.value?.emotion?.energy || 0.5);
+    const maturityPct = computed(() => growthData.value?.maturity?.score || 0);
+
+    // Maturity Radar — equilateral triangle, 3 axes at 90°/210°/330°
+    const radarVals = computed(() => {
+      const m = growthData.value?.maturity || {};
+      return [m.reflection_depth||0, m.memory_complexity||0, m.behavioral_consistency||0];
+    });
+    const radarAngles = [-Math.PI/2, -Math.PI/2+2*Math.PI/3, -Math.PI/2+4*Math.PI/3];
+    const radarCx = 120, radarCy = 105, radarR = 80;
+    function radarPt(axis, val) {
+      const a = radarAngles[axis];
+      return { x: radarCx + radarR * val * Math.cos(a), y: radarCy + radarR * val * Math.sin(a) };
+    }
+    function radarTri(scale) {
+      return [0,1,2].map(i => { const p = radarPt(i, scale); return p.x+','+p.y; }).join(' ');
+    }
+    const radarDataPts = computed(() => radarVals.value.map((v,i) => { const p = radarPt(i, v); return p.x+','+p.y; }).join(' '));
+    function radarLbl(i) {
+      const offset = [{x:0,y:-12},{x:-50,y:18},{x:50,y:18}];
+      const p = radarPt(i, 1.0);
+      return { x: p.x + offset[i].x, y: p.y + offset[i].y };
+    }
+
+    // Mood Chinese name
+    const moodCn = computed(() => {
+      const mood = growthData.value?.emotion?.mood || 'neutral';
+      const map = {happy:'愉悦',curious:'好奇',excited:'兴奋',focused:'专注',anxious:'焦虑',sad:'低落',calm:'平静',neutral:'平和'};
+      return map[mood] || mood;
+    });
+    function signalCn(s) {
+      const map = {gratitude:'感恩',curiosity:'好奇',excitement:'兴奋',frustration:'沮丧',nostalgia:'怀旧',determination:'坚定',vulnerability:'脆弱',joy:'喜悦',worry:'担忧',pride:'自豪',loneliness:'孤独',hope:'希望',confusion:'困惑',love:'爱',anger:'愤怒',peace:'平和',surprise:'惊喜',fear:'恐惧',trust:'信任',awe:'敬畏'};
+      return map[s] || s;
+    }
+
+    // Valence line chart
+    const valencePoints = computed(() => {
+      const h = emotionHistory.value;
+      if (!h || h.length < 2) return [];
+      const n = h.length;
+      return h.map((e, i) => ({
+        x: (i / (n - 1)) * 400,
+        y: 35 - (e.valence || 0) * 30
+      }));
+    });
+    const valenceLine = computed(() => valencePoints.value.map(p => p.x+','+p.y).join(' '));
+    const valenceArea = computed(() => {
+      const pts = valencePoints.value;
+      if (pts.length < 2) return '';
+      return 'M' + pts[0].x + ',35 L' + pts.map(p => p.x+','+p.y).join(' L') + ' L' + pts[pts.length-1].x + ',35 Z';
+    });
+
+    // Capability unlock tree
+    const capabilityMeta = [
+      {id:'CHAT',name:'对话',icon:'💬',phase:'newborn'},
+      {id:'RECALL',name:'回忆',icon:'🧠',phase:'newborn'},
+      {id:'REMEMBER',name:'记忆',icon:'💾',phase:'newborn'},
+      {id:'WRITE',name:'写作',icon:'✍️',phase:'newborn'},
+      {id:'RESEARCH',name:'研究',icon:'🔬',phase:'forming'},
+      {id:'PROACTIVE_GREET',name:'主动问候',icon:'👋',phase:'forming'},
+      {id:'FOLLOW_UPS',name:'追问',icon:'🔄',phase:'forming'},
+      {id:'SCHEDULE',name:'日程',icon:'📅',phase:'distinct'},
+      {id:'EVOLVE',name:'进化',icon:'🧬',phase:'distinct'},
+      {id:'SOCIAL',name:'社交',icon:'🤝',phase:'distinct'},
+      {id:'SMART_EXTRACT',name:'智能提取',icon:'✨',phase:'distinct'},
+      {id:'SPATIAL',name:'空间感知',icon:'🗺️',phase:'soulmate'},
+      {id:'MIRROR',name:'镜像对话',icon:'🪞',phase:'soulmate'},
+    ];
+    const phaseLabels = {newborn:'初生',forming:'成长',distinct:'独立',soulmate:'知己'};
+    const currentPhaseId = computed(() => {
+      const order = ['newborn','forming','distinct','soulmate'];
+      return order.indexOf(growthData.value?.phase?.id || 'newborn');
+    });
+    const capPhases = computed(() => {
+      const unlocked = new Set((growthData.value?.capabilities?.unlocked || []).map(c => c.toUpperCase().replace(/ /g,'_')));
+      const phases = ['newborn','forming','distinct','soulmate'];
+      return phases.map(ph => ({
+        label: phaseLabels[ph],
+        caps: capabilityMeta.filter(c => c.phase === ph).map(c => ({
+          id: c.id, name: c.name, icon: c.icon,
+          on: unlocked.has(c.id)
+        }))
+      }));
+    });
+
+    // Skills
+    const skillNames = {chat:'对话',recall:'检索',write:'写作',research:'研究',schedule:'日程',social:'社交',spatial:'空间'};
+    function skillNm(key) { return skillNames[key] || key; }
+    const skillArr = computed(() => {
+      const skills = growthData.value?.skills || {};
+      const bondLevel = growthData.value?.bond?.level || 0;
+      const minBondMap = {chat:0,recall:0,write:0,research:0,schedule:2,social:4,spatial:4};
+      return Object.entries(skills).map(([key, s]) => ({
+        key, ...s,
+        locked: bondLevel < (minBondMap[key] || 0),
+        min_bond_level: minBondMap[key] || 0,
+      }));
+    });
+
+    // Achievements
+    const achMeta = {
+      first_chat:{name:'初次对话',icon:'💬',desc:'完成第一次对话',tier:'basic'},
+      first_recall:{name:'初次回忆',icon:'🧠',desc:'第一次调用记忆',tier:'basic'},
+      streak_3:{name:'三日之约',icon:'🔥',desc:'连续3天互动',tier:'basic'},
+      streak_7:{name:'一周不离',icon:'⚡',desc:'连续7天互动',tier:'basic'},
+      streak_30:{name:'月度挚友',icon:'🌟',desc:'连续30天互动',tier:'deep'},
+      memories_50:{name:'记忆满溢',icon:'💎',desc:'积累50条记忆',tier:'deep'},
+      memories_200:{name:'记忆宝库',icon:'🏛️',desc:'积累200条记忆',tier:'deep'},
+      evolve_first:{name:'首次进化',icon:'🧬',desc:'触发第一次人格进化',tier:'deep'},
+      bond_companion:{name:'同行者',icon:'🤝',desc:'达到同行者羁绊',tier:'basic'},
+      bond_confidant:{name:'知心人',icon:'💝',desc:'达到知心人羁绊',tier:'deep'},
+      bond_soulmate:{name:'灵魂伴侣',icon:'🌌',desc:'达到灵魂伴侣羁绊',tier:'hidden'},
+      skill_master:{name:'技能大师',icon:'🏆',desc:'任一技能熟练度满级',tier:'hidden'},
+      night_owl:{name:'夜猫子',icon:'🦉',desc:'凌晨互动',tier:'hidden'},
+      early_bird:{name:'早起鸟',icon:'🐦',desc:'清晨6点前互动',tier:'hidden'},
+      mood_swing:{name:'情绪过山车',icon:'🎢',desc:'一天内经历3种情绪',tier:'hidden'},
+      deep_reflect:{name:'深度反思',icon:'🔮',desc:'L4反思发现新特征',tier:'deep'},
+      wordsmith:{name:'文字匠人',icon:'📝',desc:'累计10万字对话',tier:'deep'},
+      explorer:{name:'探索者',icon:'🗺️',desc:'使用全部5种技能',tier:'basic'},
+      growth_spurt:{name:'成长突增',icon:'📈',desc:'一周互动50次',tier:'deep'},
+      century:{name:'百日陪伴',icon:'💯',desc:'相识满100天',tier:'hidden'},
+    };
+    const filteredAch = computed(() => {
+      const achs = growthData.value?.achievements || [];
+      // Use SDK achievements directly — they already have name, icon, desc, tier, unlocked
+      const all = achs.map(a => ({
+        id: a.id, name: a.name || achMeta[a.id]?.name || a.id,
+        icon: a.icon || achMeta[a.id]?.icon || '🏅',
+        desc: a.desc || a.description || achMeta[a.id]?.desc || '',
+        tier: a.tier || achMeta[a.id]?.tier || 'basic',
+        unlocked: a.unlocked !== false,
+        unlocked_at: a.unlocked_at || null,
+      }));
+      if (achFilter.value === 'all') return all;
+      return all.filter(a => a.tier === achFilter.value);
+    });
+    const achUnlocked = computed(() => (growthData.value?.achievements || []).filter(a => a.unlocked !== false).length);
+    const achTotal = computed(() => (growthData.value?.achievements || []).length);
+    function achClass(a) { return a.unlocked ? 'ach-unlocked' : 'ach-locked'; }
+    function achIcon(a) { return a.unlocked ? a.icon : '🔒'; }
+    function achName(a) { return a.name; }
+    function achDesc(a) { return a.desc; }
+
+    // Stats chips
+    const statsChips = computed(() => {
+      const s = growthData.value?.stats || {};
+      return [
+        {v: s.total_chats || growthData.value?.total_interactions || 0, l:'对话', c:'#c8a96e'},
+        {v: s.total_memories || 0, l:'记忆', c:'#a78bfa'},
+        {v: s.total_reflections || 0, l:'反思', c:'#38bdf8'},
+        {v: s.streak || 0, l:'连续', c:'#f59e0b'},
+        {v: s.total_extractions || 0, l:'提取', c:'#4ade80'},
+        {v: growthData.value?.days_since_first || 0, l:'天数', c:'#f472b6'},
+      ];
+    });
+
     async function saveOmeProfile() {
       await api('/growth/profile',{method:'PUT',body:JSON.stringify({ome_name:omeNameEdit.value.trim()||'Ome',ome_personality:omePersonalityEdit.value.trim()})});
       editingOmeProfile.value = false;
@@ -889,7 +1234,7 @@ createApp({
           if(sd.repeat==='monthly') return parseInt(sd.date) === d;
           return sd.date === ds;
         });
-        cells.push({day:d, date:ds, isToday, events});
+        cells.push({day:d, date:ds, isToday, events, hasDays: events.length > 0});
       }
       return cells;
     });
@@ -931,7 +1276,7 @@ createApp({
       localStorage.setItem('ome365_view', key);
       loading.value = true;
       switch(key){
-        case 'dashboard': await Promise.all([loadDashboard(), loadStreaks(), loadOnThisDay()]); break;
+        case 'dashboard': await Promise.all([loadDashboard(), loadStreaks(), loadOnThisDay(), loadGrowth()]); break;
         case 'tasks': await switchTasksTab(tasksTab.value); break;
         case 'today': view.value='tasks'; tasksTab.value='today'; await switchTasksTab('today'); break;
         case 'week': view.value='tasks'; tasksTab.value='week'; await switchTasksTab('week'); break;
@@ -939,8 +1284,9 @@ createApp({
         case 'plan': await loadPlan(); break;
         case 'decisions': await loadDecisions(); break;
         case 'notes': await loadNotes(); break;
+        case 'reflections': await loadReflections(); break;
         case 'contacts': await Promise.all([loadContacts(), loadColdContacts(), loadContactCategories()]); break;
-        case 'memory': await loadMemories(); break;
+        case 'memory': await Promise.all([loadMemories(), searchOmeMemories(''), loadMemoryStats()]); break;
         case 'growth': await loadGrowth(); break;
         case 'files': await loadFileTree(); break;
         case 'settings': await loadSettings(); break;
@@ -950,16 +1296,20 @@ createApp({
 
     // Actions
     async function toggleToday(t){
+      if(t._toggling) return; t._toggling = true;
       t.done=!t.done;
       await api('/today/toggle',{method:'POST',body:JSON.stringify({text:t.text})});
+      t._toggling = false;
       if(t.done) recordInteraction();
       if(t.done && t.repeat === 'daily') showToast('已完成 · 明天自动重新出现 🔁');
       else if(t.done && t.repeat === 'weekly') showToast('已完成 · 下周自动重新出现 🔁');
       else showToast(t.done ? '已完成' : '已取消完成');
     }
     async function toggleWeek(t){
+      if(t._toggling) return; t._toggling = true;
       t.done=!t.done;
       await api('/week/toggle',{method:'POST',body:JSON.stringify({text:t.text})});
+      t._toggling = false;
       if(t.done && t.repeat) showToast('已完成 · 自动重复 🔁');
       else showToast(t.done ? '已完成' : '已取消完成');
     }
@@ -1012,7 +1362,7 @@ createApp({
 
     // Task editing
     function startEditTask(task, type) {
-      editingTask.value = {text: task.text, type};
+      editingTask.value = {text: task.text, type, date: task.date || ''};
       // Parse time prefix like [09:00] or [09:00-12:00]
       const tmRange = task.text.match(/^\[(\d{2}:\d{2})-(\d{2}:\d{2})\]\s*/);
       const tmPoint = task.text.match(/^\[(\d{2}:\d{2})\]\s*/);
@@ -1034,11 +1384,16 @@ createApp({
       }
       editTaskDesc.value = task.description || '';
     }
+    async function _refreshCurrentTab() {
+      const tab = tasksTab.value;
+      if (tab === 'today') await loadToday();
+      else if (tab === 'week') { await loadWeek(); await loadUnifiedTasks('week'); }
+      else if (tab === 'tomorrow' || tab === 'month') await loadUnifiedTasks(tab);
+    }
     async function saveEditTask() {
       if (!editingTask.value) return;
       const endpoint = editingTask.value.type === 'today' ? '/today/task' : '/week/task';
       let newText = editTaskText.value.trim() || editingTask.value.text;
-      // Remove any existing time prefix
       newText = newText.replace(/^\[\d{2}:\d{2}(?:-\d{2}:\d{2})?\]\s*/, '');
       if(editTaskTime.value && editTaskTimeRange.value && editTaskTimeEnd.value) {
         newText = `[${editTaskTime.value}-${editTaskTimeEnd.value}] ${newText}`;
@@ -1052,11 +1407,35 @@ createApp({
       })});
       if (res?.ok) {
         editingTask.value = null;
-        if (endpoint.includes('today')) await loadToday(); else await loadWeek();
+        await _refreshCurrentTab();
         showToast('任务已更新');
       }
     }
     function cancelEditTask() { editingTask.value = null; }
+
+    async function deleteTask() {
+      if (!editingTask.value) return;
+      const endpoint = editingTask.value.type === 'today' ? '/today/task' : '/week/task';
+      const payload = {text: editingTask.value.text};
+      if (editingTask.value.date) payload.date = editingTask.value.date;
+      const res = await api(endpoint, {method:'DELETE', body:JSON.stringify(payload)});
+      if (res?.ok) {
+        editingTask.value = null;
+        await _refreshCurrentTab();
+        showToast('任务已删除');
+      }
+    }
+    async function quickDeleteTask(task, type) {
+      const endpoint = type === 'today' ? '/today/task' : '/week/task';
+      // For tasks from specific dates (tomorrow/week/month), pass date context
+      const payload = {text: task.text};
+      if (task.date) payload.date = task.date;
+      const res = await api(endpoint, {method:'DELETE', body:JSON.stringify(payload)});
+      if (res?.ok) {
+        await _refreshCurrentTab();
+        showToast('已删除');
+      }
+    }
 
     // Categories
     async function createCategory(){
@@ -1114,10 +1493,12 @@ createApp({
     }
 
     async function runSmartInput() {
-      const text = smartInputText.value.trim();
+      const text = noteText.value.trim();
       if (!text) return;
       smartInputLoading.value = true;
       smartInputResult.value = null;
+      smartInputSec.value = 0;
+      _smartInputTimer = setInterval(() => smartInputSec.value++, 1000);
       try {
         const res = await api('/ai/smart-input', { method: 'POST', body: JSON.stringify({ text }) });
         if (res?.ok) {
@@ -1128,6 +1509,7 @@ createApp({
       } catch(e) {
         showToast('网络错误', 'error');
       }
+      clearInterval(_smartInputTimer);
       smartInputLoading.value = false;
     }
     async function applySmartInput() {
@@ -1144,9 +1526,8 @@ createApp({
           if (r.todos_added) parts.push(`添加${r.todos_added}条待办`);
           if (r.notes_added) parts.push(`添加${r.notes_added}条笔记`);
           showToast(parts.join('、') || '完成');
-          smartInputText.value = '';
+          noteText.value = '';
           smartInputResult.value = null;
-          showSmartInput.value = false;
           recordInteraction(Object.values(r).reduce((a,b)=>a+b,0) || 1);
           // Refresh relevant data
           if (view.value === 'today') await loadToday();
@@ -1228,6 +1609,17 @@ createApp({
         showInteractionForm.value=false; newInteraction.value={method:'微信',summary:''};
         await selectContactDetail(selectedContact.value);
         await loadContacts(); showToast('互动已记录');
+      }
+    }
+
+    async function mergeContacts(primarySlug, secondarySlug) {
+      const res = await api('/contacts/merge', {method:'POST', body:JSON.stringify({primary:primarySlug, secondary:secondarySlug})});
+      if(res?.ok) {
+        showToast(`已合并到 ${res.merged_into}`);
+        selectedContact.value = null;
+        await loadContacts();
+      } else {
+        showToast(res?.error||'合并失败', 'error');
       }
     }
 
@@ -1382,8 +1774,14 @@ createApp({
     }
 
     // Voice Recording
-    async function toggleRecording(){
+    // ── Input target routing ──
+    // All input now routes to noteText (unified notes input)
+    function _target(source) { return noteText; }
+    function _append(target, text) { target.value = (target.value ? target.value + '\n' : '') + text; }
+
+    async function toggleRecording(source){
       if(isRecording.value){stopRecording();return;}
+      const target = _target(source); // lock at start
       try{
         const constraints = {audio: selectedDevice.value ? {deviceId:{exact:selectedDevice.value}} : true};
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -1397,12 +1795,17 @@ createApp({
           const blob = new Blob(recordingChunks, {type:'audio/webm'});
           const formData = new FormData();
           formData.append('file', blob, `voice_${Date.now()}.webm`);
-          const res = await fetch('/api/media/upload', {method:'POST',body:formData});
-          const data = await res.json();
-          if(data.ok){
-            const entry = `🎤 [语音](${data.url}) (${recordingTime.value}s)`;
-            noteText.value = (noteText.value ? noteText.value+'\n' : '') + entry;
-            showToast('录音已上传');
+          try {
+            const res = await fetch('/api/media/upload', {method:'POST',body:formData});
+            const data = await res.json();
+            if(data.ok){
+              _append(target, `🎤 [语音](${data.url}) (${recordingTime.value}s)`);
+              showToast('录音已上传');
+            } else {
+              showToast(data.error || '录音上传失败', 'error');
+            }
+          } catch(err) {
+            showToast('录音上传失败: ' + err.message, 'error');
           }
         };
         mediaRecorder.start();
@@ -1420,14 +1823,14 @@ createApp({
     }
 
     // Speech-to-text (server-side Whisper)
-    async function startSpeechToText() {
+    async function startSpeechToText(source) {
       if (isTranscribing.value) {
-        // Stop recording and transcribe
         if (mediaRecorder && mediaRecorder.state !== 'inactive') {
           mediaRecorder.stop();
         }
         return;
       }
+      const target = _target(source); // lock at start
       try {
         const constraints = {audio: selectedDevice.value ? {deviceId:{exact:selectedDevice.value}} : true};
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -1446,7 +1849,7 @@ createApp({
             const res = await fetch('/api/whisper', {method:'POST', body:formData});
             const data = await res.json();
             if(data.ok && data.text) {
-              noteText.value = (noteText.value ? noteText.value + '\n' : '') + data.text;
+              _append(target, data.text);
               showToast('语音识别完成');
             } else {
               showToast(data.error || '语音识别失败', 'error');
@@ -1465,30 +1868,122 @@ createApp({
     }
 
     // Image Upload
-    async function uploadImage(e){
+    async function uploadImage(e, source){
       const file = e.target.files[0];
       if(!file)return;
+      const target = _target(source);
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch('/api/media/upload', {method:'POST',body:formData});
-      const data = await res.json();
-      if(data.ok){
-        const entry = `![${file.name}](${data.url})`;
-        noteText.value = (noteText.value ? noteText.value+'\n' : '') + entry;
-        showToast('图片已上传');
+      try {
+        const res = await fetch('/api/media/upload', {method:'POST',body:formData});
+        const data = await res.json();
+        if(data.ok){
+          _append(target, `![${file.name}](${data.url})`);
+          showToast('图片已上传');
+        } else {
+          showToast(data.error || '图片上传失败', 'error');
+        }
+      } catch(err) {
+        showToast('上传失败: ' + err.message, 'error');
       }
       e.target.value='';
+    }
+
+    // Image OCR — upload image, extract text via AI vision or local OCR
+    const ocrLoading = ref(false);
+    async function uploadImageOCR(e, source){
+      const file = e.target.files[0];
+      if(!file)return;
+      const target = _target(source);
+      ocrLoading.value = true;
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const res = await fetch('/api/ocr', {method:'POST', body:formData});
+        const data = await res.json();
+        if(data.ok && data.text) {
+          _append(target, data.text);
+          showToast('图片文字已提取');
+        } else {
+          showToast(data.error || 'OCR 识别失败', 'error');
+        }
+      } catch(err) {
+        showToast('OCR 请求失败: ' + err.message, 'error');
+      }
+      ocrLoading.value = false;
+      e.target.value='';
+    }
+
+    // ── Paste image from clipboard ──
+    const pastedImage = ref(null);      // { file, previewUrl, source }
+    const pasteProcessing = ref('');    // '' | 'ocr' | 'upload'
+
+    function handlePaste(e) {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (!file) return;
+          // detect source from which textarea fired the event
+          const source = e.target.classList.contains('ai-bar-textarea') ? 'ai' : 'notes';
+          const url = URL.createObjectURL(file);
+          pastedImage.value = { file, previewUrl: url, source };
+          return;
+        }
+      }
+    }
+
+    async function pasteAction(action) {
+      const img = pastedImage.value;
+      if (!img) return;
+      const target = _target(img.source);
+      pasteProcessing.value = action;
+      const formData = new FormData();
+      formData.append('file', img.file, 'paste_' + Date.now() + '.png');
+      try {
+        if (action === 'ocr') {
+          const res = await fetch('/api/ocr', { method: 'POST', body: formData });
+          const data = await res.json();
+          if (data.ok && data.text) {
+            _append(target, data.text);
+            showToast('图片文字已提取');
+          } else {
+            showToast(data.error || 'OCR 识别失败', 'error');
+          }
+        } else {
+          const res = await fetch('/api/media/upload', { method: 'POST', body: formData });
+          const data = await res.json();
+          if (data.ok) {
+            _append(target, '![粘贴图片](' + data.url + ')');
+            showToast('图片已保存');
+          }
+        }
+      } catch (err) {
+        showToast('处理失败: ' + err.message, 'error');
+      }
+      pasteProcessing.value = '';
+      if (img.previewUrl) URL.revokeObjectURL(img.previewUrl);
+      pastedImage.value = null;
+    }
+
+    function pasteDismiss() {
+      if (pastedImage.value?.previewUrl) URL.revokeObjectURL(pastedImage.value.previewUrl);
+      pastedImage.value = null;
     }
 
     // AI with Anthropic SDK
     async function askAI(){
       const text = noteText.value.trim();
       if(!text)return;
-      aiLoading.value=true; aiError.value=''; aiResponse.value='';
+      aiLoading.value=true; aiError.value=''; aiResponse.value=''; aiFollowUps.value=[]; aiMemoryImpact.value=null;
       const res = await api('/ai',{method:'POST',body:JSON.stringify({prompt:'请帮我整理、分析或补充以下内容：',context:text})});
       aiLoading.value=false;
       if(res?.ok){
         aiResponse.value=res.response;
+        if(res.follow_ups?.length) aiFollowUps.value=res.follow_ups;
+        if(res.memory_impact) aiMemoryImpact.value=res.memory_impact;
         recordInteraction();
       }
       else aiError.value=res?.error||'AI请求失败';
@@ -1540,9 +2035,28 @@ createApp({
     function fabAction(){ switchView('notes'); }
 
     // Init
+    // Milestone editing
+    const editingMilestone = ref(null);
+    const msEditForm = ref({date:'',label:'',category:'',color:''});
+    function openMilestoneEdit(m) {
+      editingMilestone.value = m;
+      msEditForm.value = {date:m.date||'', label:m.label||'', category:m.category||'', color:m.color||'#d4b07a'};
+    }
+    async function saveMilestoneEdit() {
+      const f = msEditForm.value;
+      const orig = editingMilestone.value;
+      const res = await api('/plan/milestone', {method:'PUT', body:JSON.stringify({
+        original_date: orig.date, original_label: orig.label,
+        date: f.date, label: f.label, category: f.category, color: f.color
+      })});
+      editingMilestone.value = null;
+      if(res?.ok) { showToast('里程碑已更新'); await loadPlan(); }
+      else showToast(res?.error||'更新失败', 'error');
+    }
+
     onMounted(async () => {
       loading.value = true;
-      await Promise.all([loadDashboard(), loadCategories(), loadContactCategories(), loadSettings(), loadStreaks(), loadOnThisDay()]);
+      await Promise.all([loadDashboard(), loadCategories(), loadContactCategories(), loadSettings(), loadStreaks(), loadOnThisDay(), loadGrowth(), loadFileTree(), loadReflections()]);
       loading.value = false;
 
       // Restore saved view
@@ -1561,6 +2075,7 @@ createApp({
 
       document.addEventListener('keydown', e => {
         if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();showSearchPanel.value=!showSearchPanel.value;if(showSearchPanel.value)nextTick(()=>{const el=document.getElementById('search-input');if(el)el.focus();});}
+        if((e.metaKey||e.ctrlKey)&&e.key==='j'){e.preventDefault();goSmartNotes();}
         if(e.key==='Escape'&&showSearchPanel.value){showSearchPanel.value=false;}
       });
     });
@@ -1580,6 +2095,7 @@ createApp({
     watch(noteCategoryFilter, () => loadNotes());
 
     return {
+      renderMd,
       view, dash, todayData, weekData, planData, decisions, notes, fileTree, currentFile, currentFilePath, currentFileHtml,
       noteText, noteSuccess, noteTime, notePlaceholder, loading,
       sidebarCollapsed, mobileNavOpen, editingToday, todayEditRaw,
@@ -1589,7 +2105,7 @@ createApp({
       isRecording, recordingTime, aiResponse, aiResponseHtml, aiLoading, aiError,
       isTranscribing,
       navItems, mobileNavItems, currentTitle,
-      dateDisplay, weekday, dayNumber, week, quarter, quarterTheme, daysToStart, yearPct,
+      dateDisplay, weekday, dayNumber, week, quarter, quarterTheme, daysToStart, yearPct, planDays,
       todayTasks, todayStats, weekTasks, weekStats, milestones, todayHtml, weekHtml,
       decisionColumns, decisionDetail, decisionDetailHtml,
       newTodayTask, newWeekTask, addingTodayTask, addingWeekTask, newTaskCategory, newTaskTime, newTaskRepeat, newTaskTargetDate, weekDayOptions,
@@ -1599,13 +2115,17 @@ createApp({
       newTaskTimeEnd, newTaskTimeRange,
       timeBlocks, showTimeBlockForm, editingBlockIdx, blockForm,
       reminders, showReminderForm, newReminder, loadReminders, addReminder, deleteReminder,
+      agendaItems, agendaTimed, agendaUntimed,
+      omeMemoryQuery, omeMemories, omeMemoryLoading, searchOmeMemories,
+      editingOmeMemId, editingOmeMemContent, startEditOmeMem, saveOmeMemEdit,
+      confirmingDeleteId, askDeleteOmeMem, confirmDeleteOmeMem,
       notifEnabled, notifSound, proactiveMsg, showProactive,
       toggleNotif, setNotifSound, playSound, dismissProactive, acknowledgeProactive,
       categories, noteCategory, noteCategoryFilter, showCategoryForm, newCategory,
       contacts, contactGraph, coldContacts, selectedContact, contactDetailHtml,
       showContactForm, contactFilter, contactView, showInteractionForm,
       newContact, newInteraction, contactCatLabels, contactCatColors,
-      editingContact, editContactData,
+      editingContact, editContactData, showMergeSelect,
       contactCategories, showContactCatForm, newContactCat,
       toastMsg, toastType, showFab, noteSourceFile,
       aiSuggestion, aiSuggestionHtml, aiSugLoading, greeting, userName,
@@ -1624,31 +2144,46 @@ createApp({
       streakData, todayMood, todayEnergy, todayFocus, moodOptions,
       setMood, setEnergy, setFocus,
       // v0.2: Reflection
-      reflectResult, reflectLoading, reflectHtml, doReflect,
+      reflectResult, reflectLoadingType, reflectHtml, doReflect,
       // v0.2: On This Day
       onThisDayEntries,
-      // v0.3: Growth
+      // v0.3: Growth + v0.5 Ome enhancements
       growthData, growthPhases, editingOmeProfile, omeNameEdit, omePersonalityEdit,
-      loadGrowth, startEditOmeProfile, saveOmeProfile, phaseClass, evolving, triggerEvolve,
+      growthTimeline, emotionHistory, omeMemoryStats, omeMemTypeFilter, loadMemoryStats,
+      aiFollowUps, aiMemoryImpact,
+      loadGrowth, startEditOmeProfile, saveOmeProfile, phaseClass, evolving, evolveError, triggerEvolve,
+      // v0.8: Growth page v2
+      achFilter, orbColor, orbWarmth, orbEnergy, maturityPct,
+      radarVals, radarDataPts, radarPt, radarTri, radarLbl,
+      moodCn, signalCn, valencePoints, valenceLine, valenceArea,
+      capPhases, currentPhaseId,
+      skillArr, skillNm,
+      filteredAch, achUnlocked, achTotal, achClass, achIcon, achName, achDesc,
+      statsChips,
       // v0.4: Note delete + Smart Input
       noteDeleteConfirm, confirmDeleteNote, executeDeleteNote,
-      showSmartInput, smartInputText, smartInputResult, smartInputLoading, smartInputApplying,
-      runSmartInput, applySmartInput,
+      smartInputResult, smartInputLoading, smartInputApplying, smartInputSec,
+      runSmartInput, applySmartInput, goSmartNotes,
+      reflectionsList, reflectionsLoading, loadReflections,
+      showGoalEdit, goalEditText, goalEditStart, goalEditDays, openGoalEdit, saveGoalEdit,
+      editingMilestone, msEditForm, openMilestoneEdit, saveMilestoneEdit,
       // Functions
       loadAudioDevices, selectAudioDevice,
       switchView, toggleToday, toggleWeek, togglePlanTask,
       addTodayTask, addWeekTask, createCategory, deleteCategory,
-      startEditTask, saveEditTask, cancelEditTask,
+      startEditTask, saveEditTask, cancelEditTask, deleteTask, quickDeleteTask,
       loadTimeBlocks, addTimeBlock, editTimeBlock, saveBlockForm, deleteTimeBlock,
       startEditToday, saveToday, submitNote, saveAIAsNote,
       createDecision, toggleDecisionStatus, openDecisionDetail,
-      createContact, selectContactDetail, startEditContact, saveEditContact, addInteraction,
+      createContact, selectContactDetail, startEditContact, saveEditContact, addInteraction, mergeContacts,
       createContactCategory, deleteContactCategory,
       openFile, openNoteFile, heatmapClick,
       barColor, isCurrentMilestone, formatMsDate, renderNoteText, askAISuggestion,
       getCatColor, getCatName, tierLabel, getContactCatName, getContactCatColor, formatNoteDate, notesDisplay,
       resetAISession,
-      toggleRecording, stopRecording, startSpeechToText, uploadImage, askAI,
+      toggleRecording, stopRecording, startSpeechToText, uploadImage, uploadImageOCR, ocrLoading,
+      handlePaste, pastedImage, pasteProcessing, pasteAction, pasteDismiss,
+      askAI,
       loadSpecialDays, createSpecialDay, deleteSpecialDay, prevMonth, nextMonth, openDayFormForDate, onDayTypeChange,
       loadSettings, saveSettings, testAI, toggleProxy,
       fabAction, showToast,
