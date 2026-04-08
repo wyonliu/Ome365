@@ -3,7 +3,7 @@ Ome365 v0.6 — 个人超级助手 + Ome 智能体
 启动: cd .app && python3 server.py
 """
 
-import os, re, json, glob, socket, subprocess, shutil, uuid, threading, logging
+import os, re, json, glob, socket, subprocess, shutil, uuid, threading, logging, asyncio
 from datetime import datetime, date, timedelta
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
@@ -54,6 +54,7 @@ SETTINGS_DEFAULTS = {
     "user_name": "",
     "main_goal": "365天个人执行计划",
     "start_date": "2026-04-08",
+    "plan_days": 365,
     "ai_mode": "none",        # "api" | "ollama" | "none"
     "api_base_url": "",        # e.g. https://api.openai.com/v1 or https://api.anthropic.com/v1
     "api_key": "",
@@ -291,6 +292,23 @@ def edit_task_in_file(fp: Path, old_text: str, new_text: str, description: str =
                 elif has_desc:
                     # Remove existing description
                     lines.pop(i+1)
+            fp.write_text('\n'.join(lines), "utf-8")
+            return True
+    return False
+
+
+def delete_task_in_file(fp: Path, task_text: str) -> bool:
+    """Delete a task line (and its description if any) from a markdown file."""
+    if not fp.exists(): return False
+    raw = fp.read_text("utf-8"); lines = raw.split('\n')
+    for i, line in enumerate(lines):
+        m = re.match(r'^(\s*-\s*\[[ xX]\]\s*)(.*)', line)
+        if m and m.group(2).strip() == task_text.strip():
+            # Check if next line is indented description
+            has_desc = (i + 1 < len(lines) and lines[i+1].strip().startswith('>'))
+            if has_desc:
+                lines.pop(i+1)
+            lines.pop(i)
             fp.write_text('\n'.join(lines), "utf-8")
             return True
     return False
@@ -665,6 +683,7 @@ async def dashboard():
         "today":{"tasks":[t for t in daily["tasks"] if t["text"].strip()],"content":daily["content"],"meta":daily["meta"]},
         "week":{"tasks":[t for t in weekly["tasks"] if t["text"].strip()],"meta":weekly["meta"]},
         "plan_overview":plan["overview"],
+        "plan_pct":plan["overview"]["pct"],
         "milestones":plan["milestones"],
         "decision_count":dec_count,
         "notes_count":notes_count,
@@ -730,6 +749,29 @@ async def get_plan_raw():
 @app.post("/api/plan/toggle")
 async def toggle_plan_task(body: dict):
     return {"ok": toggle_task(VAULT/"000-365-PLAN.md", body.get("text",""))}
+
+@app.put("/api/plan/milestone")
+async def update_milestone(body: dict):
+    fp = VAULT / "000-365-PLAN.md"
+    if not fp.exists(): return {"error": "计划文件不存在"}
+    orig_date = body.get("original_date","")
+    orig_label = body.get("original_label","")
+    new_date = body.get("date", orig_date)
+    new_label = body.get("label", orig_label)
+    text = fp.read_text("utf-8")
+    lines = text.split('\n')
+    found = False
+    for i, line in enumerate(lines):
+        mm = re.match(r'^\|\s*\*?\*?(\d{4}-\d{2}-\d{2})\*?\*?\s*\|\s*\*?\*?(.*?)\*?\*?\s*\|', line)
+        if mm and mm.group(1) == orig_date and orig_label in mm.group(2):
+            # Rebuild the milestone line
+            lines[i] = f"| **{new_date}** | **{new_label}** |"
+            found = True
+            break
+    if not found:
+        return {"error": "未找到匹配的里程碑"}
+    fp.write_text('\n'.join(lines), "utf-8")
+    return {"ok": True}
 
 
 # ── API: Today/Week/Quarter ───────────────────────────
@@ -819,6 +861,15 @@ async def edit_today_task(body:dict):
     ok = edit_task_in_file(find_daily(), old_text, new_text, description)
     return {"ok":ok}
 
+@app.delete("/api/today/task")
+async def delete_today_task(body:dict):
+    text = body.get("text","").strip()
+    if not text: raise HTTPException(400, "Missing text")
+    target_date = body.get("date","").strip()
+    fp = find_daily(target_date) if target_date else find_daily()
+    ok = delete_task_in_file(fp, text)
+    return {"ok":ok}
+
 @app.post("/api/week/add")
 async def add_week_task(body:dict):
     text = body.get("text","").strip()
@@ -897,6 +948,13 @@ async def edit_week_task(body:dict):
     ok = edit_task_in_file(find_weekly(), old_text, new_text, description)
     return {"ok":ok}
 
+@app.delete("/api/week/task")
+async def delete_week_task(body:dict):
+    text = body.get("text","").strip()
+    if not text: raise HTTPException(400, "Missing text")
+    ok = delete_task_in_file(find_weekly(), text)
+    return {"ok":ok}
+
 @app.get("/api/quarter")
 async def get_quarter(q:int=None):
     fp = find_quarterly(q); data = parse_md(fp)
@@ -931,7 +989,7 @@ async def create_decision(body:DecisionCreate):
     d = VAULT/"Decisions"; d.mkdir(exist_ok=True)
     slug = re.sub(r'[^\w\u4e00-\u9fff]','-',body.title)[:30].strip('-')
     fn = f"{today_s()}-{slug}.md"; fp = d/fn
-    vd = (date.today()+timedelta(days=90)).isoformat()
+    vd = (date.today()+timedelta(days=30)).isoformat()
     meta = {"date":today_s(),"scope":body.scope,"impact":body.impact,"status":"待验证","verify_by":vd}
     content = f"""# 决策：{body.title}\n\n## 背景\n{body.background or '（待补充）'}\n\n## 备选方案\n1. **方案A**：\n2. **方案B**：\n\n## 最终选择\n（待补充）\n\n## 验证记录\n> {vd} 回来填写\n"""
     write_md(fp, meta, content)
@@ -1065,6 +1123,8 @@ async def ai_ask(body:dict):
                 "bond": result.get("bond"),
                 "evolution_pending": result.get("evolution_pending", False),
                 "phase": result.get("phase"),
+                "follow_ups": result.get("follow_ups", []),
+                "memory_impact": result.get("memory_impact"),
             }
         except Exception as e:
             return {"ok": False, "error": f"Ome error: {e}"}
@@ -1076,22 +1136,26 @@ async def ai_ask(body:dict):
     if mode == "none":
         return {"ok":False, "error":"请在设置中配置AI服务"}
     system_msg = f"你是 Ome365 AI 助手。今天是 {today_s()}, Day {day_n()}, W{week_n()}, Q{quarter_n()}。请用简洁有力的中文回答。"
-    if mode == "api":
-        base_url = settings.get("api_base_url","").rstrip("/")
-        api_key = settings.get("api_key","")
-        model = settings.get("api_model","")
-        if not all([base_url, api_key, model]):
-            return {"ok":False, "error":"请在设置中填写完整的 API 配置"}
-        try:
-            headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json"}
-            payload = {"model":model,"max_tokens":1024,"messages":[
-                {"role":"system","content":system_msg},{"role":"user","content":full_prompt}]}
-            resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=60, **_proxy_kwargs())
-            resp.raise_for_status()
-            return {"ok":True, "response":resp.json()["choices"][0]["message"]["content"], "provider":"api"}
-        except Exception as e:
-            return {"ok":False, "error":str(e)}
-    return {"ok":False, "error":f"未知模式: {mode}"}
+
+    def _do_ask_sync():
+        if mode == "api":
+            base_url = settings.get("api_base_url","").rstrip("/")
+            api_key = settings.get("api_key","")
+            model_name = settings.get("api_model","")
+            if not all([base_url, api_key, model_name]):
+                return {"ok":False, "error":"请在设置中填写完整的 API 配置"}
+            try:
+                headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json"}
+                payload = {"model":model_name,"max_tokens":1024,"messages":[
+                    {"role":"system","content":system_msg},{"role":"user","content":full_prompt}]}
+                resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=120, **_proxy_kwargs())
+                resp.raise_for_status()
+                return {"ok":True, "response":resp.json()["choices"][0]["message"]["content"], "provider":"api"}
+            except Exception as e:
+                return {"ok":False, "error":str(e)}
+        return {"ok":False, "error":f"未知模式: {mode}"}
+
+    return await asyncio.to_thread(_do_ask_sync)
 
 @app.get("/api/ai/session")
 async def ai_session_info():
@@ -1106,17 +1170,8 @@ async def ai_smart_input(body: dict):
     if not text:
         return {"ok": False, "error": "请输入内容"}
 
-    # Also store in Ome memory for future recall
-    ome = get_ome()
-    if ome:
-        try:
-            with _ome_lock:
-                ome.remember(f"智能录入: {text[:500]}", source="smart_input")
-        except:
-            pass
-
     settings = load_settings()
-    if settings.get("ai_mode", "none") == "none" and not ome:
+    if settings.get("ai_mode", "none") == "none":
         return {"ok": False, "error": "请先在设置中配置AI"}
 
     # Gather existing contacts for matching
@@ -1126,75 +1181,80 @@ async def ai_smart_input(body: dict):
         c = parse_contact(fp)
         existing_contacts.append({"name": c["name"], "slug": c["slug"], "company": c.get("company",""), "title": c.get("title","")})
 
-    prompt = f"""你是一个超级结构化信息提取器。分析以下用户输入（可能是对话记录、会议笔记、微信聊天摘要等），提取以下结构化数据：
+    # Only send names+slugs of existing contacts (save tokens)
+    contact_names = [{"name":c["name"],"slug":c["slug"]} for c in existing_contacts]
 
-1. **联系人**：提到的人名、公司、职位、联系方式等。对于每个人，判断是"new"还是"update"（和已有联系人匹配）。
-2. **事件/互动记录**：谁和谁发生了什么事，什么时候。
-3. **待办事项**：需要跟进/完成的事情，附上时间（如果有）。
-4. **速记/笔记**：值得记录的信息片段。
+    prompt = f"""从以下用户输入中提取结构化数据。今天：{today_s()}
 
-已有联系人列表（用于匹配）：
-{json.dumps(existing_contacts, ensure_ascii=False)[:2000]}
+已有联系人（用于匹配action为update还是new）：
+{json.dumps(contact_names, ensure_ascii=False)[:1500]}
 
-今天是：{today_s()}
+输出JSON：
+{{"contacts":[{{"action":"new"|"update","slug":"匹配到的slug或空","name":"姓名","company":"公司","title":"职位","category":"industry|friend|partner|team|mentor|talent|investor","met_context":"认识场景","info":"关键信息"}}],
+"interactions":[{{"contact_name":"联系人姓名","method":"微信|电话|面聊|其他","summary":"互动摘要（一句话）"}}],
+"todos":[{{"text":"待办内容","time":"HH:MM或空","date":"YYYY-MM-DD或空（明天及以后的任务填日期）","priority":"high|normal"}}],
+"notes":[{{"text":"值得记录的信息或洞察（每条独立主题，加#标签前缀）","category":"标签名"}}],
+"summary":"一句话总结"}}
 
-请输出JSON，格式：
-{{
-  "contacts": [
-    {{"action":"new"|"update", "slug":"已有联系人的slug或空", "name":"姓名", "company":"公司", "title":"职位", "category":"industry|friend|partner|team|mentor|talent|investor", "met_context":"认识场景", "info":"需补充/更新的信息"}}
-  ],
-  "interactions": [
-    {{"contact_name":"联系人姓名", "method":"微信|电话|面聊|其他", "summary":"互动摘要"}}
-  ],
-  "todos": [
-    {{"text":"待办内容", "time":"HH:MM或空", "priority":"high|normal"}}
-  ],
-  "notes": [
-    {{"text":"笔记内容", "category":""}}
-  ],
-  "summary": "一句话总结提取了什么"
-}}
-
-只输出JSON，不要其他文字。
+规则：
+- notes的每条要聚焦单一主题，category用简短中文标签（如 业务数据/产品与技术/团队与挑战/战略方向/人物洞察）
+- 联系人只提取有明确姓名的，不要把泛指的人算进去
+- todos只提取明确需要执行的事项，不要把已完成的当待办
+- interactions按人分条，同一个人多次互动可以合并
+- 只输出JSON
 
 用户输入：
 {text}"""
 
-    try:
-        if settings.get("ai_mode") == "api":
-            base_url = settings.get("api_base_url","").rstrip("/")
-            api_key = settings.get("api_key","")
-            model = settings.get("api_model","")
-            headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json",
-                       "HTTP-Referer":"https://ome365.app","X-Title":"Ome365"}
-            payload = {"model":model,"max_tokens":2000,"messages":[
-                {"role":"system","content":"你是结构化信息提取器，只输出JSON。"},
-                {"role":"user","content":prompt}
-            ]}
-            resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=60, **_proxy_kwargs())
-            resp.raise_for_status()
-            ai_text = resp.json()["choices"][0]["message"]["content"].strip()
-        elif settings.get("ai_mode") == "ollama":
-            ollama_url = settings.get("ollama_url","http://localhost:11434").rstrip("/")
-            payload = {"model":settings.get("ollama_model","llama3.1"),"messages":[
-                {"role":"system","content":"你是结构化信息提取器，只输出JSON。"},
-                {"role":"user","content":prompt}
-            ],"stream":False}
-            resp = req.post(f"{ollama_url}/api/chat", json=payload, timeout=120, **_proxy_kwargs())
-            resp.raise_for_status()
-            ai_text = resp.json().get("message",{}).get("content","").strip()
-        else:
-            return {"ok":False, "error":f"未知AI模式: {settings.get('ai_mode')}"}
+    def _do_smart_input_sync():
+        try:
+            if settings.get("ai_mode") == "api":
+                base_url = settings.get("api_base_url","").rstrip("/")
+                api_key = settings.get("api_key","")
+                model_name = settings.get("api_model","")
+                headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json",
+                           "HTTP-Referer":"https://ome365.app","X-Title":"Ome365"}
+                payload = {"model":model_name,"max_tokens":2000,"temperature":0,"messages":[
+                    {"role":"system","content":"你是结构化信息提取器。只输出合法JSON，不要输出任何其他文字。"},
+                    {"role":"user","content":prompt}
+                ]}
+                resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=120, **_proxy_kwargs())
+                resp.raise_for_status()
+                ai_text = resp.json()["choices"][0]["message"]["content"].strip()
+            elif settings.get("ai_mode") == "ollama":
+                ollama_url = settings.get("ollama_url","http://localhost:11434").rstrip("/")
+                payload = {"model":settings.get("ollama_model","llama3.1"),"temperature":0,"messages":[
+                    {"role":"system","content":"你是结构化信息提取器。只输出合法JSON，不要输出任何其他文字。"},
+                    {"role":"user","content":prompt}
+                ],"stream":False}
+                resp = req.post(f"{ollama_url}/api/chat", json=payload, timeout=120, **_proxy_kwargs())
+                resp.raise_for_status()
+                ai_text = resp.json().get("message",{}).get("content","").strip()
+            else:
+                return {"ok":False, "error":f"未知AI模式: {settings.get('ai_mode')}"}
 
-        # Parse JSON from AI response (handle markdown code blocks)
-        ai_text = re.sub(r'^```json\s*', '', ai_text)
-        ai_text = re.sub(r'\s*```$', '', ai_text)
-        result = json.loads(ai_text)
-        return {"ok": True, "data": result}
-    except json.JSONDecodeError:
-        return {"ok": True, "data": {"contacts":[],"interactions":[],"todos":[],"notes":[],"summary":"AI返回格式异常，请重试"}, "raw": ai_text}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+            # Parse JSON from AI response (handle markdown code blocks)
+            cleaned = re.sub(r'^```(?:json)?\s*', '', ai_text)
+            cleaned = re.sub(r'\s*```\s*$', '', cleaned)
+            cleaned = cleaned.strip()
+            result = json.loads(cleaned)
+
+            # Store extracted summary in Ome memory (not raw text)
+            ome = get_ome()
+            if ome and result.get("summary"):
+                try:
+                    with _ome_lock:
+                        ome.remember(result["summary"], source="smart_input")
+                except:
+                    pass
+
+            return {"ok": True, "data": result}
+        except json.JSONDecodeError:
+            return {"ok": False, "error": "AI返回格式异常，请重试", "raw": ai_text[:500] if 'ai_text' in dir() else ''}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    return await asyncio.to_thread(_do_smart_input_sync)
 
 @app.post("/api/ai/smart-input/apply")
 async def ai_smart_input_apply(body: dict):
@@ -1286,12 +1346,19 @@ async def ai_smart_input_apply(body: dict):
         text = todo.get("text","").strip()
         if not text:
             continue
-        time_str = todo.get("time","")
-        if time_str:
+        time_str = todo.get("time","").strip()
+        target_date = todo.get("date","").strip()  # AI may extract a future date
+        # Determine which day's file to write to
+        if target_date and target_date > today_s():
+            fp = find_daily(target_date)
+        else:
+            fp = find_daily()
+        if time_str and re.match(r'\d{2}:\d{2}', time_str):
             text = f"[{time_str}] {text}"
-        fp = find_daily()
         if not fp.exists():
-            fp.write_text(f"# {today_s()} {WEEKDAYS[date.today().weekday()]}\n\n## 任务\n- [ ] {text}\n", "utf-8")
+            ds = target_date or today_s()
+            wd_idx = date.fromisoformat(ds).weekday()
+            fp.write_text(f"# {ds} {WEEKDAYS[wd_idx]}\n\n## 任务\n- [ ] {text}\n", "utf-8")
         else:
             raw = fp.read_text("utf-8")
             if "## 任务" in raw:
@@ -1451,6 +1518,72 @@ async def whisper_transcribe(file: UploadFile = File(...)):
             "error": "本地 Whisper 未安装。请安装其中之一：\n  pip install faster-whisper\n  pip install openai-whisper"
         }
 
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    finally:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+# ── API: OCR — extract text from image ────────────────
+@app.post("/api/ocr")
+async def ocr_image(file: UploadFile = File(...)):
+    """Extract text from an uploaded image using AI vision or local OCR."""
+    import requests as req
+    ext = Path(file.filename or "img").suffix or ".png"
+    uid = uuid.uuid4().hex[:8]
+    tmp_path = MEDIA / f"ocr_{uid}{ext}"
+    try:
+        with open(tmp_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+
+        # Read image as base64 for AI vision
+        import base64
+        with open(tmp_path, "rb") as f:
+            img_b64 = base64.b64encode(f.read()).decode("utf-8")
+        _mime_map = {".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".gif":"image/gif",".webp":"image/webp",".bmp":"image/bmp",".heic":"image/heic",".heif":"image/heif"}
+        mime = _mime_map.get(ext.lower(), "image/png")
+
+        settings = load_settings()
+        mode = settings.get("ai_mode", "none")
+
+        # Strategy 1: Use configured AI with vision capability
+        if mode == "api":
+            base_url = settings.get("api_base_url","").rstrip("/")
+            api_key = settings.get("api_key","")
+            model = settings.get("api_model","")
+            if all([base_url, api_key, model]):
+                headers = {"Authorization":f"Bearer {api_key}","Content-Type":"application/json",
+                           "HTTP-Referer":"https://ome365.app","X-Title":"Ome365"}
+                payload = {"model":model,"max_tokens":2000,"messages":[
+                    {"role":"user","content":[
+                        {"type":"text","text":"请提取这张图片中的所有文字内容。只输出提取到的文字，不要添加额外说明。如果图片没有文字，回复：图片中没有识别到文字。"},
+                        {"type":"image_url","image_url":{"url":f"data:{mime};base64,{img_b64}"}}
+                    ]}
+                ]}
+                try:
+                    resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=60, **_proxy_kwargs())
+                    resp.raise_for_status()
+                    text = resp.json()["choices"][0]["message"]["content"].strip()
+                    return {"ok": True, "text": text, "backend": "ai-vision"}
+                except Exception as e:
+                    pass  # Fall through to local OCR
+
+        # Strategy 2: Local OCR via pytesseract
+        try:
+            from PIL import Image
+            import pytesseract
+            img = Image.open(tmp_path)
+            text = pytesseract.image_to_string(img, lang="chi_sim+eng").strip()
+            if text:
+                return {"ok": True, "text": text, "backend": "tesseract"}
+            return {"ok": False, "error": "未识别到文字"}
+        except ImportError:
+            pass
+
+        return {"ok": False, "error": "请配置 AI（设置中选择支持图片的模型）或安装 pytesseract"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
     finally:
@@ -1667,6 +1800,70 @@ async def create_contact(body:dict):
     _auto_growth()
     return {"ok":True,"slug":slug}
 
+@app.post("/api/contacts/merge")
+async def merge_contacts(body:dict):
+    """Merge two contacts. Keep primary, merge secondary's data into it, delete secondary."""
+    primary_slug = body.get("primary","")
+    secondary_slug = body.get("secondary","")
+    if not primary_slug or not secondary_slug:
+        raise HTTPException(400, "Need primary and secondary slugs")
+    fp1 = PEOPLE_DIR / f"{primary_slug}.md"
+    fp2 = PEOPLE_DIR / f"{secondary_slug}.md"
+    if not fp1.exists(): raise HTTPException(404, f"Primary {primary_slug} not found")
+    if not fp2.exists(): raise HTTPException(404, f"Secondary {secondary_slug} not found")
+
+    # Parse both
+    raw1 = fp1.read_text("utf-8")
+    raw2 = fp2.read_text("utf-8")
+    meta1 = parse_yaml_meta(raw1)
+    meta2 = parse_yaml_meta(raw2)
+
+    # Merge: fill empty fields in primary from secondary
+    for k in ["company","title","location","wechat","phone","email","met_context"]:
+        if not meta1.get(k) and meta2.get(k):
+            meta1[k] = meta2[k]
+
+    # Merge interaction tables
+    # Extract table rows from secondary
+    sec_rows = []
+    in_table = False
+    for line in raw2.split('\n'):
+        if '联系记录' in line: in_table = True; continue
+        if in_table and line.startswith('|') and not line.startswith('|---') and not line.startswith('| 日期'):
+            sec_rows.append(line)
+        if in_table and line.startswith('## ') and '联系' not in line:
+            break
+
+    # Insert secondary rows into primary
+    if sec_rows:
+        lines1 = raw1.split('\n')
+        insert_idx = -1
+        in_t = False
+        for i, line in enumerate(lines1):
+            if '联系记录' in line: in_t = True; continue
+            if in_t and line.startswith('|') and not line.startswith('|---'):
+                insert_idx = i
+            if in_t and line.startswith('## ') and '联系' not in line:
+                break
+        if insert_idx > 0:
+            for row in sec_rows:
+                insert_idx += 1
+                lines1.insert(insert_idx, row)
+            # Re-parse to get content after meta
+            m1 = re.match(r'^---\s*\n(.*?)\n---\s*\n', raw1, re.DOTALL)
+            content1 = '\n'.join(lines1[len(raw1[:m1.end()].split('\n'))-1:]) if m1 else '\n'.join(lines1)
+            write_md(fp1, meta1, content1)
+        else:
+            m1 = re.match(r'^---\s*\n(.*?)\n---\s*\n', raw1, re.DOTALL)
+            write_md(fp1, meta1, raw1[m1.end():] if m1 else raw1)
+    else:
+        m1 = re.match(r'^---\s*\n(.*?)\n---\s*\n', raw1, re.DOTALL)
+        write_md(fp1, meta1, raw1[m1.end():] if m1 else raw1)
+
+    # Delete secondary
+    fp2.unlink()
+    return {"ok":True,"merged_into":primary_slug,"deleted":secondary_slug}
+
 @app.put("/api/contacts/{slug}")
 async def update_contact(slug:str, body:dict):
     """Update an existing contact's frontmatter fields."""
@@ -1748,13 +1945,17 @@ async def add_interaction(slug:str, body:dict):
 @app.get("/api/heatmap")
 async def heatmap():
     START = get_start()
+    today = date.today()
+    # Include pre-start days if user is active before official start
+    effective_start = min(START, today)
+    total_days = max(365, (START - effective_start).days + 365)
     daily_dir = VAULT/"Journal"/"Daily"
     notes_dir = VAULT/"Notes"
     dec_dir = VAULT/"Decisions"
     days = []
-    for i in range(365):
-        d = START + timedelta(days=i); ds = d.isoformat()
-        level = 0; detail = []
+    for i in range(total_days):
+        d = effective_start + timedelta(days=i); ds = d.isoformat()
+        level = 0; detail = []; acts = []  # acts: activity types for color
         dfp = daily_dir/f"{ds}.md"
         if dfp.exists():
             data = parse_md(dfp)
@@ -1768,16 +1969,20 @@ async def heatmap():
                 elif pct >= 0.3: level = max(level,2)
                 else: level = max(level,1)
                 detail.append(f"任务 {done}/{total}")
-            elif data["content"].strip(): level = max(level,1); detail.append("有日记")
+                acts.append("task")
+            if data["content"].strip():
+                if level == 0: level = 1
+                detail.append("有日记")
+                acts.append("journal")
         nfp = notes_dir/f"{ds}.md"
         if nfp.exists():
             cnt = nfp.read_text("utf-8").count("\n- [")
-            if cnt > 0: level = max(level,1); detail.append(f"速记 {cnt}")
+            if cnt > 0: level = max(level,1); detail.append(f"速记 {cnt}"); acts.append("note")
         for fp in (dec_dir.glob(f"{ds}-*.md") if dec_dir.exists() else []):
-            level = max(level,2); detail.append("决策"); break
+            level = max(level,2); detail.append("决策"); acts.append("decision"); break
         if d > date.today() and level == 0: level = -1
-        days.append({"date":ds,"weekday":d.weekday(),"level":level,"detail":" · ".join(detail)})
-    return {"start_date":START.isoformat(),"days":days}
+        days.append({"date":ds,"weekday":d.weekday(),"level":level,"detail":" · ".join(detail),"acts":acts})
+    return {"start_date":effective_start.isoformat(),"days":days}
 
 
 # ── API: File Browser ─────────────────────────────────
@@ -2242,7 +2447,8 @@ async def on_this_day():
 # ── API: AI Reflection ────────────────────────────────
 @app.post("/api/reflect")
 async def ai_reflect(body: dict):
-    """AI-powered daily/weekly reflection that generates insights and saves to Memory."""
+    """AI-powered daily/weekly reflection with deep data gathering across journal, notes,
+    decisions, contacts, tasks, and memory archives."""
     import requests as req
     reflect_type = body.get("type", "daily")  # "daily" or "weekly"
     settings = load_settings()
@@ -2251,105 +2457,308 @@ async def ai_reflect(body: dict):
     if mode == "none":
         return {"ok": False, "error": "请先配置AI"}
 
-    # Gather context
+    # ── Helper: collect decisions by date range ──
+    def _collect_decisions(dates: list[str]) -> str:
+        dec_dir = VAULT / "Decisions"
+        if not dec_dir.exists():
+            return ""
+        parts = []
+        for fp in sorted(dec_dir.glob("*.md")):
+            for d in dates:
+                if fp.stem.startswith(d):
+                    parts.append(f"### {fp.stem}\n{fp.read_text('utf-8')[:1500]}")
+                    break
+        return ("\n--- 决策记录 ---\n" + "\n\n".join(parts)) if parts else ""
+
+    # ── Helper: collect contact info by date range ──
+    def _collect_interactions(dates: list[str]) -> str:
+        people_dir = VAULT / "Contacts" / "people"
+        if not people_dir.exists():
+            return ""
+        parts = []
+        date_set = set(dates)
+        for fp in sorted(people_dir.glob("*.md")):
+            try:
+                text = fp.read_text("utf-8")
+            except Exception:
+                continue
+            # Check if this contact was met/updated on target dates
+            has_date_match = False
+            for d in date_set:
+                if d in text:
+                    has_date_match = True
+                    break
+            if has_date_match:
+                # Include the whole contact file (truncated) for richer context
+                parts.append(f"### {fp.stem}\n{text[:1500]}")
+        return ("\n--- 今日相关联系人 ---\n" + "\n\n".join(parts)) if parts else ""
+
+    # ── Helper: task completion stats from daily files ──
+    def _task_stats(dates: list[str]) -> str:
+        total, done = 0, 0
+        for d in dates:
+            fp = VAULT / "Journal" / "Daily" / f"{d}.md"
+            if not fp.exists():
+                continue
+            data = parse_md(fp)
+            for t in data["tasks"]:
+                if t["text"].strip():
+                    total += 1
+                    if t["done"]:
+                        done += 1
+        if total == 0:
+            return ""
+        rate = round(done / total * 100)
+        return f"\n--- 任务统计 ---\n完成 {done}/{total} ({rate}%)\n"
+
+    # ── Helper: collect memory files ──
+    def _collect_memory(limit: int = 10, max_chars: int = 800) -> str:
+        ensure_memory_dir()
+        parts = []
+        for fp in sorted(MEMORY_DIR.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True):
+            if fp.name == "MEMORY.md":
+                continue
+            parts.append(f"### {fp.stem}\n{fp.read_text('utf-8')[:max_chars]}")
+            if len(parts) >= limit:
+                break
+        return ("\n--- 记忆档案 ---\n" + "\n\n".join(parts)) if parts else ""
+
+    # ── Helper: last week's reflection ──
+    def _last_week_reflection() -> str:
+        insights_dir = MEMORY_DIR / "insights"
+        if not insights_dir.exists():
+            return ""
+        # Look back 7-14 days for a weekly reflection
+        for offset in range(7, 15):
+            d = (date.today() - timedelta(days=offset)).isoformat()
+            fp = insights_dir / f"{d}_weekly.md"
+            if fp.exists():
+                return f"\n--- 上周反思 ---\n{fp.read_text('utf-8')[:2000]}\n"
+        return ""
+
+    # ── Gather context based on reflect_type ──
     context_parts = []
+    today = today_s()
+
+    def _clean_journal(text: str) -> str:
+        """Strip empty template sections from journal to reduce noise."""
+        lines = text.split('\n')
+        cleaned = []
+        skip_empty_section = False
+        for i, line in enumerate(lines):
+            # Detect empty template fields: "**做了什么：**" followed by blank
+            if re.match(r'^\*\*.*：\*\*\s*$', line):
+                # Check if next non-blank line is another template field or section header
+                rest = [l for l in lines[i+1:i+3] if l.strip()]
+                if not rest or (rest and (rest[0].startswith('**') or rest[0].startswith('##'))):
+                    continue  # Skip empty template field
+            # Skip empty blockquotes (template placeholders like "> ")
+            if line.strip() == '>':
+                continue
+            cleaned.append(line)
+        return '\n'.join(cleaned)
+
     if reflect_type == "daily":
+        dates = [today]
+
+        # Journal (cleaned of empty template noise)
         fp = find_daily()
         if fp.exists():
-            context_parts.append(f"--- 今日日志 ---\n{fp.read_text('utf-8')[:3000]}")
-        notes_fp = VAULT / "Notes" / f"{today_s()}.md"
+            raw = fp.read_text('utf-8')
+            cleaned_journal = _clean_journal(raw)
+            context_parts.append(f"--- 今日日志 ---\n{cleaned_journal}")
+
+        # Notes
+        notes_fp = VAULT / "Notes" / f"{today}.md"
         if notes_fp.exists():
-            context_parts.append(f"--- 今日速记 ---\n{notes_fp.read_text('utf-8')[:2000]}")
-        prompt = """请对我今天的工作做一个深度反思，包含：
-1. 关键成就（做到了什么）
-2. 模式识别（重复出现的行为/思维模式）
-3. 改进建议（明天可以怎么做得更好）
-4. 一句打气的话
-请简洁有力，不要说教。"""
+            context_parts.append(f"--- 今日速记 ---\n{notes_fp.read_text('utf-8')}")
+
+        # Decisions
+        context_parts.append(_collect_decisions(dates))
+
+        # Contact interactions (full file, up to 1500 chars per contact)
+        context_parts.append(_collect_interactions(dates))
+
+        # Task stats
+        context_parts.append(_task_stats(dates))
+
+        # Memory (5 most recent, 500 chars each — just for background context)
+        context_parts.append(_collect_memory(5, 500))
+
+        prompt = """综合以上日志、速记、联系人、任务等全部数据，输出今日复盘（800-1200字）。
+注意：速记和日志可能记录了同一件事的不同角度，合并分析不要重复。
+
+🎯 **今日进展**
+最重要的2-3件事，每件一行。标注 ✅/🔄。引用具体数字或结论。
+
+👥 **人物与沟通**
+今天沟通的关键人物，格式：**姓名**（职位）— 沟通要点。新建联系用🆕标记。
+
+💡 **发现与洞察**
+从今天信息中提炼2-3条有价值的发现。必须包含具体数字、对比或趋势判断。
+
+⚠️ **待解决**
+需要跟进的事项，每条标注负责人或下一步动作。没有写「暂无」。
+
+📌 **明日 Top 3**
+每件一句话，说明为什么明天要做（而不是后天）。
+
+严格基于数据，不编造。"""
+
     else:
-        # Weekly
-        for i in range(7):
-            d = today_s() if i == 0 else (date.today() - timedelta(days=i)).isoformat()
+        # Weekly — 7 days
+        dates = [(date.today() - timedelta(days=i)).isoformat() for i in range(7)]
+
+        # 7 days of journals
+        for d in dates:
             fp = VAULT / "Journal" / "Daily" / f"{d}.md"
             if fp.exists():
-                context_parts.append(f"--- {d} ---\n{fp.read_text('utf-8')[:1500]}")
+                context_parts.append(f"--- {d} 日志 ---\n{fp.read_text('utf-8')}")
+
+        # 7 days of notes
+        for d in dates:
+            notes_fp = VAULT / "Notes" / f"{d}.md"
+            if notes_fp.exists():
+                context_parts.append(f"--- {d} 速记 ---\n{notes_fp.read_text('utf-8')[:2000]}")
+
+        # Weekly plan
         weekly_fp = find_weekly()
         if weekly_fp.exists():
-            context_parts.append(f"--- 本周计划 ---\n{weekly_fp.read_text('utf-8')[:2000]}")
-        prompt = """请对我这一周做一个深度反思，包含：
-1. 本周最大收获
-2. 本周关键洞察（从行为模式中发现了什么）
-3. 需要调整的方向
-4. 下周建议聚焦的1-2件事
-请简洁有力。"""
+            context_parts.append(f"--- 本周计划 ---\n{weekly_fp.read_text('utf-8')}")
 
-    # Memory context
-    ensure_memory_dir()
-    memory_context = ""
-    for fp in sorted(MEMORY_DIR.glob("*.md"))[:5]:
-        if fp.name == "MEMORY.md":
-            continue
-        memory_context += f"\n--- Memory: {fp.stem} ---\n{fp.read_text('utf-8')[:500]}\n"
+        # Decisions
+        context_parts.append(_collect_decisions(dates))
 
-    full_context = "\n".join(context_parts) + memory_context
+        # Contact interactions
+        context_parts.append(_collect_interactions(dates))
 
-    system_msg = f"""你是 Ome365 AI 助手，帮助用户做深度反思和洞察提取。
-今天是: {today_s()} Day {day_n()} W{week_n()} Q{quarter_n()}
-你了解用户的记忆档案，请基于这些做个性化反思。
-用简洁有力的中文，像教练对运动员说话。"""
+        # Task stats
+        context_parts.append(_task_stats(dates))
 
-    # Call AI
-    if mode == "api":
-        base_url = settings.get("api_base_url", "").rstrip("/")
-        api_key = settings.get("api_key", "")
-        model = settings.get("api_model", "")
-        if not all([base_url, api_key, model]):
-            return {"ok": False, "error": "请配置完整的API信息"}
-        try:
-            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json",
-                       "HTTP-Referer": "https://ome365.app", "X-Title": "Ome365"}
-            payload = {"model": model, "max_tokens": 1500, "messages": [
-                {"role": "system", "content": system_msg + "\n" + full_context},
-                {"role": "user", "content": prompt}
-            ]}
-            resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=90, **_proxy_kwargs())
-            resp.raise_for_status()
-            text = resp.json()["choices"][0]["message"]["content"]
+        # Memory
+        context_parts.append(_collect_memory(10, 800))
 
-            # Save insight to Memory/insights/
-            insights_dir = MEMORY_DIR / "insights"
-            insights_dir.mkdir(exist_ok=True)
-            insight_fp = insights_dir / f"{today_s()}_{reflect_type}.md"
-            insight_meta = f"---\nname: {reflect_type}_reflection_{today_s()}\ntype: insight\ndescription: {reflect_type} reflection for {today_s()}\n---\n\n"
-            insight_fp.write_text(insight_meta + text, "utf-8")
+        # Last week's reflection for continuity
+        context_parts.append(_last_week_reflection())
 
-            return {"ok": True, "response": text, "saved_to": str(insight_fp.relative_to(VAULT))}
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
+        prompt = """综合以上7天的全部数据，输出本周复盘（1000-1500字）。
 
-    elif mode == "ollama":
-        ollama_url = settings.get("ollama_url", "http://localhost:11434").rstrip("/")
-        model = settings.get("ollama_model", "llama3.1")
-        try:
-            payload = {"model": model, "messages": [
-                {"role": "system", "content": system_msg + "\n" + full_context},
-                {"role": "user", "content": prompt}
-            ], "stream": False}
-            resp = req.post(f"{ollama_url}/api/chat", json=payload, timeout=120, **_proxy_kwargs())
-            resp.raise_for_status()
-            text = resp.json().get("message", {}).get("content", "")
+📊 **本周主线**
+一句话概括这周在做什么，然后列3-5项成果，每项带具体产出物或数字。
 
-            insights_dir = MEMORY_DIR / "insights"
-            insights_dir.mkdir(exist_ok=True)
-            insight_fp = insights_dir / f"{today_s()}_{reflect_type}.md"
-            insight_meta = f"---\nname: {reflect_type}_reflection_{today_s()}\ntype: insight\ndescription: {reflect_type} reflection for {today_s()}\n---\n\n"
-            insight_fp.write_text(insight_meta + text, "utf-8")
+👥 **关系网络变化**
+本周新认识/深度沟通的关键人物，格式：**姓名**（职位）— 关系进展。用🆕/🔄/⚡标记新建/加深/突破。
 
-            return {"ok": True, "response": text, "saved_to": str(insight_fp.relative_to(VAULT))}
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
+💡 **本周洞察**
+2-3条最重要的发现或认知升级，必须有数据支撑或可验证的判断。
 
-    return {"ok": False, "error": f"未知模式: {mode}"}
+⚠️ **问题与风险**
+当前面临的挑战，每条标注紧急度（🔴🟡🟢）和建议应对。
+
+📌 **下周 Top 3**
+每件说明为什么是本周完不成必须下周做的。
+
+如有上周反思可对比，用↑↓标注趋势。严格基于数据，不编造。"""
+
+    # Filter out empty parts and build full context
+    full_context = "\n\n".join(p for p in context_parts if p)
+
+    system_msg = f"""你是一位CTO级别的个人效能顾问。用户是科技公司高管，输出供他截图分享给同事或上级。
+今天: {today_s()} Day {day_n()} W{week_n()} Q{quarter_n()}
+
+风格：
+- 专业、清晰、有信息密度。像McKinsey汇报，不像朋友圈
+- 用自然的中文，禁用：赋能/维度/杠杆/拓扑/矩阵/降维/预编译/全面/深入/核心/关键性
+- 数字要具体（"外部收入占比20-30%"而非"收入有待提升"）
+- 人名+职位要准确引用，不要泛化
+
+规则：
+1. 严格基于提供的数据，不编造任何细节
+2. 速记和日志可能有重复内容，去重后合并分析
+3. 空白模板字段（未填写的）完全忽略
+4. 每个章节3-5行，控制总长度
+5. 建议必须具体可执行，带时间或对象"""
+
+    # ── Call AI (in thread to avoid blocking event loop) ──
+    import asyncio
+
+    def _do_reflect_sync():
+        if mode == "api":
+            base_url = settings.get("api_base_url", "").rstrip("/")
+            api_key = settings.get("api_key", "")
+            model_name = settings.get("api_model", "")
+            if not all([base_url, api_key, model_name]):
+                return {"ok": False, "error": "请配置完整的API信息"}
+            try:
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json",
+                           "HTTP-Referer": "https://ome365.app", "X-Title": "Ome365"}
+                payload = {"model": model_name, "max_tokens": 4000, "temperature": 0.3, "messages": [
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": full_context + "\n\n" + prompt}
+                ]}
+                resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=120, **_proxy_kwargs())
+                resp.raise_for_status()
+                text = resp.json()["choices"][0]["message"]["content"]
+            except Exception as e:
+                return {"ok": False, "error": str(e)}
+        elif mode == "ollama":
+            ollama_url = settings.get("ollama_url", "http://localhost:11434").rstrip("/")
+            model_name = settings.get("ollama_model", "llama3.1")
+            try:
+                payload = {"model": model_name, "temperature": 0.3, "messages": [
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": full_context + "\n\n" + prompt}
+                ], "stream": False}
+                resp = req.post(f"{ollama_url}/api/chat", json=payload, timeout=120, **_proxy_kwargs())
+                resp.raise_for_status()
+                text = resp.json().get("message", {}).get("content", "")
+            except Exception as e:
+                return {"ok": False, "error": str(e)}
+        else:
+            return {"ok": False, "error": f"未知模式: {mode}"}
+
+        # Save insight
+        insights_dir = MEMORY_DIR / "insights"
+        insights_dir.mkdir(exist_ok=True)
+        insight_fp = insights_dir / f"{today_s()}_{reflect_type}.md"
+        type_label = "今日反思" if reflect_type == "daily" else "本周反思"
+        insight_meta = f"---\ntitle: {type_label} · {today_s()}\ndate: {today_s()}\ntype: {reflect_type}\nauthor: Ome365 AI\n---\n\n# {type_label} · {today_s()}\n\n"
+        insight_fp.write_text(insight_meta + text, "utf-8")
+        return {"ok": True, "response": text, "saved_to": str(insight_fp.relative_to(VAULT))}
+
+    return await asyncio.to_thread(_do_reflect_sync)
+
+
+# ── API: Reflections List ──────────────────────────────
+@app.get("/api/reflections")
+async def list_reflections():
+    """List all saved reflection files from Memory/insights/ for the reflections view."""
+    insights_dir = MEMORY_DIR / "insights"
+    if not insights_dir.exists():
+        return {"ok": True, "items": []}
+    items = []
+    for fp in sorted(insights_dir.glob("*.md"), reverse=True):
+        stem = fp.stem  # e.g. "2026-04-08_daily"
+        parts = stem.rsplit("_", 1)
+        date_str = parts[0] if len(parts) >= 1 else stem
+        rtype = parts[1] if len(parts) >= 2 else "daily"
+        content = fp.read_text("utf-8")
+        # Strip frontmatter
+        if content.startswith("---"):
+            end = content.find("---", 3)
+            if end > 0:
+                content = content[end+3:].strip()
+        lines = content.strip().split("\n")
+        title = lines[0].lstrip("# ").strip() if lines else "反思"
+        items.append({
+            "path": str(fp.relative_to(VAULT)),
+            "date": date_str,
+            "type": rtype,
+            "title": title[:60],
+            "content": content,  # frontend renders with marked.js
+            "_open": False,
+        })
+    return {"ok": True, "items": items}
 
 
 # ── API: Streaks ──────────────────────────────────────
@@ -2455,6 +2864,53 @@ def _auto_growth(count=1):
         save_growth(growth)
     except:
         pass
+
+def _compute_vault_stats() -> dict:
+    """Compute vault statistics for Ome external stats injection."""
+    notes_dir = VAULT / "Notes"
+    notes_count = sum(1 for _ in notes_dir.glob("*.md")) if notes_dir.exists() else 0
+    daily_dir = VAULT / "Journal" / "Daily"
+    tasks_done = 0
+    tasks_total = 0
+    active_dates = set()
+    if daily_dir.exists():
+        for fp in daily_dir.glob("*.md"):
+            try:
+                d = date.fromisoformat(fp.stem)
+                data = parse_md(fp)
+                done = sum(1 for t in data["tasks"] if t["done"])
+                total = len(data["tasks"])
+                tasks_done += done
+                tasks_total += total
+                if done > 0:
+                    active_dates.add(d)
+            except:
+                continue
+    contacts_dir = VAULT / "Contacts" / "people"
+    contacts_count = len(list(contacts_dir.glob("*.md"))) if contacts_dir.exists() else 0
+    plan = parse_plan()
+    plan_pct = plan["overview"]["pct"]
+    active_days = len(active_dates)
+    # Streak
+    streak = 0
+    d = date.today()
+    while d in active_dates:
+        streak += 1
+        d -= timedelta(days=1)
+    memory_count = len(list((VAULT / "Memory").glob("*.md"))) - 1 if (VAULT / "Memory").exists() else 0
+    insights_dir = VAULT / "Memory" / "insights"
+    reflect_count = len(list(insights_dir.glob("*.md"))) if insights_dir.exists() else 0
+    return {
+        "notes_count": notes_count,
+        "tasks_done": tasks_done,
+        "tasks_total": tasks_total,
+        "contacts_count": contacts_count,
+        "plan_pct": plan_pct,
+        "active_days": active_days,
+        "streak": streak,
+        "memory_count": max(0, memory_count),
+        "reflect_count": reflect_count,
+    }
 
 def _compute_growth_state() -> dict:
     """Compute the full growth state from all data sources."""
@@ -2571,26 +3027,107 @@ async def get_growth():
     ome = get_ome()
     if ome:
         try:
+            # Inject vault stats into Ome before dashboard
+            vault_stats = _compute_vault_stats()
             with _ome_lock:
+                try:
+                    ome.report_external_stats(vault_stats)
+                except:
+                    pass
                 dash = ome.life_dashboard()
+
+            ome_bond = dash.get("bond", {})
+            total_interactions = ome_bond.get("total_interactions", 0)
+            days_since = ome_bond.get("days", 0)
+
+            # Map Ome phase to legacy phase (match by interaction/days thresholds)
+            phase = GROWTH_PHASES[0]
+            for p in reversed(GROWTH_PHASES):
+                if total_interactions >= p["min_interactions"] and days_since >= p["min_days"]:
+                    phase = p; break
+
+            # Map Ome bond to legacy bond (add icon, progress)
+            bond_level = ome_bond.get("level", 0)
+            legacy_bond = None
+            for b in BOND_LEVELS:
+                if b["level"] <= max(1, bond_level):
+                    legacy_bond = b
+            if not legacy_bond:
+                legacy_bond = BOND_LEVELS[0]
+
+            # Next bond level
+            next_bond = None
+            for b in BOND_LEVELS:
+                if b["level"] > legacy_bond["level"]:
+                    next_bond = b; break
+
+            # Bond progress
+            bond_progress = 100
+            if next_bond:
+                inter_needed = ome_bond.get("interactions_needed", next_bond["min_interactions"] - legacy_bond["min_interactions"])
+                inter_done = total_interactions - legacy_bond["min_interactions"]
+                bond_progress = min(99, max(0, int(inter_done / max(1, inter_needed) * 100)))
+
+            # Flatten achievements: Ome returns {unlocked:[], locked:[]}
+            ome_ach = dash.get("achievements", {})
+            achievements_list = []
+            for a in ome_ach.get("unlocked", []):
+                achievements_list.append({**a, "unlocked": True, "desc": a.get("description", "")})
+            for a in ome_ach.get("locked", []):
+                achievements_list.append({**a, "unlocked": False, "desc": a.get("description", "")})
+            # If Ome returned no achievements, fall back to legacy
+            if not achievements_list:
+                unlocked = set()
+                for ach in ACHIEVEMENTS:
+                    try:
+                        if eval(ach["check"], {"__builtins__": {}}, vault_stats):
+                            unlocked.add(ach["id"])
+                    except:
+                        pass
+                for ach in ACHIEVEMENTS:
+                    achievements_list.append({**ach, "unlocked": ach["id"] in unlocked})
+
+            growth = load_growth()
+
+            # New Ome 0.5.0 fields
+            daily_challenge = dash.get("daily_challenge")
+            memory_stats = dash.get("memory_stats")
+            ome_phase = dash.get("phase", {})
+            next_milestone = dash.get("next_milestone")
+
             return {
                 "ome_name": ome.name,
                 "ome_personality": ", ".join(ome.traits),
-                "bond": dash.get("bond", {}),
+                "phase": {
+                    **phase,
+                    "phase_id": ome_phase.get("phase_id", phase.get("id", 0)),
+                    "persona": ome_phase.get("persona", ""),
+                    "strategy_hint": ome_phase.get("strategy_hint", ""),
+                },
+                "bond": {**legacy_bond, "progress": bond_progress, "name": ome_bond.get("name", legacy_bond["name"])},
+                "next_bond": next_bond,
                 "emotion": dash.get("emotion", {}),
-                "achievements": dash.get("achievements", {}),
+                "achievements": achievements_list,
                 "skills": dash.get("skills", []),
                 "streak": dash.get("streak", {}),
                 "highlights": dash.get("highlights", []),
                 "evolution_pending": ome.evolution_pending,
                 "commits_since_reflection": ome.commits_since_reflection,
-                # Legacy compat fields
-                "phase": {"name": dash.get("bond", {}).get("name", "初见")},
-                "total_interactions": dash.get("bond", {}).get("total_interactions", 0),
-                "days_since_first": dash.get("bond", {}).get("days", 0),
+                "total_interactions": total_interactions,
+                "days_since_first": days_since,
                 "traits": ome.traits,
+                "stats": vault_stats,
+                "evolution_log": growth.get("evolution_log", [])[-10:],
+                # Ome 0.5.0 new fields
+                "daily_challenge": daily_challenge,
+                "memory_stats": memory_stats,
+                "next_milestone": next_milestone,
+                # Ome 0.7.0 new fields
+                "capabilities": dash.get("capabilities", {}),
+                "maturity": dash.get("maturity", {}),
             }
         except Exception as e:
+            import traceback; traceback.print_exc()
             pass  # Fall through to legacy
     return _compute_growth_state()
 
@@ -2682,6 +3219,48 @@ async def evolve_personality():
         return {"ok": False, "error": str(e)[:100]}
 
 
+# ── Ome 0.5.0 New Endpoints ──────────────────────────
+
+@app.get("/api/growth/timeline")
+async def get_growth_timeline(limit: int = 20):
+    """成长事件流 — growth_timeline()"""
+    ome = get_ome()
+    if not ome:
+        return {"timeline": []}
+    try:
+        with _ome_lock:
+            timeline = ome.growth_timeline(limit)
+        return {"timeline": timeline}
+    except Exception as e:
+        return {"timeline": [], "error": str(e)[:100]}
+
+@app.get("/api/growth/emotion-history")
+async def get_emotion_history(days: int = 30):
+    """情绪变化轨迹 — emotion_history()"""
+    ome = get_ome()
+    if not ome:
+        return {"history": []}
+    try:
+        with _ome_lock:
+            history = ome.emotion_history(days)
+        return {"history": history}
+    except Exception as e:
+        return {"history": [], "error": str(e)[:100]}
+
+@app.get("/api/memory-stats")
+async def get_memory_stats():
+    """记忆健康仪表盘 — memory_stats()"""
+    ome = get_ome()
+    if not ome:
+        return {"stats": {}}
+    try:
+        with _ome_lock:
+            stats = ome.memory_stats()
+        return {"stats": stats}
+    except Exception as e:
+        return {"stats": {}, "error": str(e)[:100]}
+
+
 # ── Reminders & Proactive ─────────────────────────────
 REMINDERS_FILE = Path(__file__).parent / "reminders.json"
 
@@ -2750,6 +3329,74 @@ async def delete_reminder(rid: str):
     reminders = [r for r in reminders if r.get("id") != rid]
     save_reminders(reminders)
     return {"ok": True}
+
+@app.get("/api/memories")
+async def get_ome_memories(q: str = "", limit: int = 20, types: str = ""):
+    """Recall memories from Ome brain, with optional type_filter."""
+    ome = get_ome()
+    if ome:
+        try:
+            type_filter = [t.strip() for t in types.split(",") if t.strip()] or None
+            with _ome_lock:
+                results = ome.recall(q or "最近的事", top_k=limit, type_filter=type_filter)
+            return {"memories": results}
+        except Exception as e:
+            return {"memories": [], "error": str(e)[:100]}
+    return {"memories": []}
+
+@app.post("/api/memories")
+async def add_ome_memory(body: dict):
+    """Store a memory into Ome brain."""
+    ome = get_ome()
+    if ome:
+        try:
+            with _ome_lock:
+                result = ome.remember(body.get("content", ""), source=body.get("source", "manual"))
+            return {"ok": True, "result": result}
+        except Exception as e:
+            return {"ok": False, "error": str(e)[:100]}
+    return {"ok": False, "error": "Ome not available"}
+
+@app.delete("/api/memories/{memory_id}")
+async def delete_ome_memory(memory_id: str):
+    """Delete a specific Ome memory by ID."""
+    ome = get_ome()
+    if ome:
+        try:
+            with _ome_lock:
+                store = ome.soul.store
+                mem = store.get(memory_id)
+                if not mem:
+                    return {"ok": False, "error": "记忆不存在"}
+                store._conn.execute("DELETE FROM memories WHERE id=?", (memory_id,))
+                store._embeddings_cache.pop(memory_id, None)
+                store._conn.commit()
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)[:100]}
+    return {"ok": False, "error": "Ome not available"}
+
+@app.put("/api/memories/{memory_id}")
+async def update_ome_memory(memory_id: str, body: dict):
+    """Update content of a specific Ome memory by ID."""
+    ome = get_ome()
+    new_content = body.get("content", "").strip()
+    if not new_content:
+        return {"ok": False, "error": "内容不能为空"}
+    if ome:
+        try:
+            with _ome_lock:
+                store = ome.soul.store
+                mem = store.get(memory_id)
+                if not mem:
+                    return {"ok": False, "error": "记忆不存在"}
+                store._conn.execute("UPDATE memories SET content=? WHERE id=?", (new_content, memory_id))
+                store._embeddings_cache.pop(memory_id, None)
+                store._conn.commit()
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)[:100]}
+    return {"ok": False, "error": "Ome not available"}
 
 @app.get("/api/proactive")
 async def get_proactive():
