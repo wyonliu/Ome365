@@ -9,8 +9,10 @@
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <title>Ome365</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+SC:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+SC:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="/style.css?v=20260411c">
 </head>
 <body>
 <div id="app" v-cloak>
@@ -696,69 +698,1192 @@
         </div>
       </div>
 
-      <!-- ══ DECISIONS ══ -->
-      <div v-if="view==='decisions'" class="view" key="decisions">
-        <div v-if="decisionDetail" class="card card-highlight">
-          <div class="card-top">
-            <span class="card-label">决策详情</span>
-            <div class="card-actions">
-              <span class="badge" v-if="decisionDetail.meta.status" :class="'badge-'+decisionDetail.meta.status">{{decisionDetail.meta.status}}</span>
-              <button class="btn-ghost" @click="decisionDetail=null">← 返回列表</button>
+      <!-- ══ INSIGHTS (洞察 · flagship) ══ -->
+      <div v-if="view==='insights'" class="view insights-view" key="insights">
+
+        <!-- Hero: control panel + stats -->
+        <div class="insight-hero">
+          <div class="ih-left">
+            <div class="ih-eyebrow">洞察 · INSIGHT ENGINE</div>
+            <div class="ih-title">从你的日常碎片里，看见下一步</div>
+            <div class="ih-sub">AI 读完你的访谈、反思、速记、汇报和长期记忆，告诉你最近在关注什么、哪里有机会、哪些是盲区。</div>
+            <div class="ih-controls">
+              <div class="ih-field">
+                <label>回看范围</label>
+                <select v-model.number="insightsDays" class="input">
+                  <option :value="14">近 2 周</option>
+                  <option :value="30">近 30 天</option>
+                  <option :value="90">近 3 个月</option>
+                  <option :value="180">近 6 个月</option>
+                </select>
+              </div>
+              <div class="ih-field ih-field-grow">
+                <label>特别关注（可选）</label>
+                <input v-model="insightsFocus" class="input" placeholder="例：龙湖千丁下半场 / 365 天 AI 规划 / 和团队的沟通">
+              </div>
+              <button class="btn-insight-run" @click="runSynthesize" :disabled="insightsLoading">
+                <span v-if="!insightsLoading">✨ 生成综合洞察</span>
+                <span v-else>🌀 正在深度分析…</span>
+              </button>
+            </div>
+            <div v-if="insightsError" class="ih-error">{{insightsError}}</div>
+          </div>
+          <div class="ih-right">
+            <div class="ih-stat" v-if="insightsOverview?.stats">
+              <div class="ih-stat-row">
+                <div class="ih-stat-cell"><div class="ih-n">{{insightsOverview.stats.notes_count}}</div><div class="ih-l">速记</div></div>
+                <div class="ih-stat-cell"><div class="ih-n">{{insightsOverview.stats.reflections_count}}</div><div class="ih-l">反思</div></div>
+                <div class="ih-stat-cell"><div class="ih-n">{{insightsOverview.stats.interviews_count}}</div><div class="ih-l">访谈</div></div>
+              </div>
+              <div class="ih-stat-row">
+                <div class="ih-stat-cell"><div class="ih-n">{{insightsOverview.stats.reports_count}}</div><div class="ih-l">汇报</div></div>
+                <div class="ih-stat-cell"><div class="ih-n">{{insightsOverview.stats.memories_count}}</div><div class="ih-l">记忆</div></div>
+                <div class="ih-stat-cell"><div class="ih-n">{{insightsOverview.stats.contacts_count}}</div><div class="ih-l">联系人</div></div>
+              </div>
+              <div class="ih-stat-hint">语料已备好 · 过去 {{insightsOverview.stats.days}} 天</div>
             </div>
           </div>
-          <div class="decision-meta">
-            <span v-if="decisionDetail.meta.scope">📌 {{decisionDetail.meta.scope}}</span>
-            <span v-if="decisionDetail.meta.impact">影响: {{decisionDetail.meta.impact}}</span>
-            <span v-if="decisionDetail.meta.verify_by">验证日期: {{decisionDetail.meta.verify_by}}</span>
-          </div>
-          <div class="rendered-md" v-html="decisionDetailHtml"></div>
         </div>
-        <template v-else>
-          <!-- Usage guide for empty state -->
-          <div v-if="!decisionColumns.some(c=>c.items.length) && !showDecisionForm" class="card decision-guide">
-            <div class="card-top"><span class="card-label">决策日志 · 使用指南</span></div>
-            <div class="guide-content">
-              <p class="guide-intro">决策日志帮你记录重要决策的思考过程，事后可以复盘验证。</p>
-              <div class="guide-steps">
-                <div class="guide-step"><span class="guide-num">1</span><span>遇到需要权衡的选择（技术方案、产品方向、组织决策）</span></div>
-                <div class="guide-step"><span class="guide-num">2</span><span>记录背景、备选方案、最终选择和理由</span></div>
-                <div class="guide-step"><span class="guide-num">3</span><span>设置验证日期，到期回顾决策效果</span></div>
-              </div>
-              <div class="guide-examples">
-                <span class="guide-ex-label">适合记录的决策：</span>
-                <span class="guide-ex-tag">选用什么技术栈</span>
-                <span class="guide-ex-tag">是否接受某个offer</span>
-                <span class="guide-ex-tag">产品先做哪个功能</span>
-                <span class="guide-ex-tag">团队结构调整</span>
+
+        <!-- Tabs -->
+        <div class="insight-tabs">
+          <button :class="{active:insightsTab==='synthesis'}" @click="insightsTab='synthesis'">📊 综合</button>
+          <button :class="{active:insightsTab==='projects'}" @click="insightsTab='projects'">💡 项目点子</button>
+          <button :class="{active:insightsTab==='diagnosis'}" @click="insightsTab='diagnosis'">🔍 诊断</button>
+          <button :class="{active:insightsTab==='ask'}" @click="insightsTab='ask'">❓ 提问</button>
+          <button :class="{active:insightsTab==='saved'}" @click="insightsTab='saved'">📚 已存档 <span v-if="insightsCards.length" class="badge-count">{{insightsCards.length}}</span></button>
+        </div>
+
+        <!-- Synthesis tab -->
+        <div v-if="insightsTab==='synthesis'" class="insight-panel">
+          <div v-if="!insightsLatest" class="insight-empty">
+            <div class="ie-icon">🌌</div>
+            <div class="ie-title">还没有洞察</div>
+            <div class="ie-sub">点击上方「生成综合洞察」，AI 会把你最近的碎片串成一张战略图。</div>
+          </div>
+          <template v-else>
+            <div class="insight-headline">
+              <div class="ih-pulse">●</div>
+              <div class="ih-headline-text">{{insightsLatest.headline}}</div>
+              <div class="ih-headline-actions">
+                <button class="btn-ghost btn-xs" @click="saveInsightCard">📌 存档</button>
               </div>
             </div>
-          </div>
-          <button v-if="!showDecisionForm" class="btn-create" @click="showDecisionForm=true">+ 新建决策</button>
-          <div class="card" v-if="showDecisionForm">
-            <div class="card-top"><span class="card-label">新建决策</span></div>
-            <div class="form-group"><input v-model="newDecision.title" class="input" placeholder="决策标题" @keydown.enter="createDecision"></div>
-            <div class="form-row">
-              <div class="form-group half"><label class="form-label">范围</label><select v-model="newDecision.scope" class="input"><option>架构</option><option>产品</option><option>组织</option><option>商业</option></select></div>
-              <div class="form-group half"><label class="form-label">影响</label><select v-model="newDecision.impact" class="input"><option>高</option><option>中</option><option>低</option></select></div>
+            <div v-if="insightsLatest._meta" class="insight-meta">
+              生成于 {{insightsLatest._meta.generated_at}} · 回看 {{insightsLatest._meta.days}} 天
+              <span v-if="insightsLatest._meta.focus"> · 关注「{{insightsLatest._meta.focus}}」</span>
             </div>
-            <div class="form-group"><label class="form-label">背景</label><textarea v-model="newDecision.background" class="input" rows="3" placeholder="为什么需要做这个决策？"></textarea></div>
-            <div class="form-actions"><button class="btn-primary" @click="createDecision" :disabled="!newDecision.title.trim()">创建</button><button class="btn-ghost" @click="showDecisionForm=false">取消</button></div>
-          </div>
-          <div class="kanban">
-            <div v-for="col in decisionColumns" :key="col.status" class="kanban-col">
-              <div class="kanban-header" :class="col.class"><span>{{col.status}}</span><span class="kanban-count">{{col.items.length}}</span></div>
-              <div class="kanban-cards">
-                <div v-for="d in col.items" :key="d.file" class="kanban-card" @click="openDecisionDetail(d)">
-                  <div class="kc-top"><span class="kc-date">{{d.date}}</span><span class="kc-impact" :class="'impact-'+d.impact">{{d.impact}}</span></div>
-                  <div class="kc-title">{{d.title}}</div>
-                  <div class="kc-scope">{{d.scope}}</div>
-                  <div class="kc-actions"><button class="btn-ghost btn-xs" @click="toggleDecisionStatus(d, $event)">切换状态</button></div>
+
+            <!-- Themes -->
+            <div class="insight-section">
+              <div class="is-title">🎯 正在浮现的主题</div>
+              <div class="theme-grid">
+                <div v-for="(t,i) in insightsLatest.themes" :key="i" class="theme-card">
+                  <div class="tc-num">{{i+1}}</div>
+                  <div class="tc-title">{{t.title}}</div>
+                  <div class="tc-summary">{{t.summary}}</div>
+                  <div v-if="t.signals && t.signals.length" class="tc-signals">
+                    <div class="tc-signals-label">证据</div>
+                    <div v-for="(s,j) in t.signals" :key="j" class="tc-signal">· {{s}}</div>
+                  </div>
                 </div>
-                <div v-if="!col.items.length" class="empty-sm">暂无</div>
+              </div>
+            </div>
+
+            <!-- Opportunities -->
+            <div class="insight-section" v-if="insightsLatest.opportunities?.length">
+              <div class="is-title">🌅 时机窗口</div>
+              <div class="opp-grid">
+                <div v-for="(o,i) in insightsLatest.opportunities" :key="i" class="opp-card">
+                  <div class="opp-title">{{o.title}}</div>
+                  <div class="opp-why"><span>为什么现在 · </span>{{o.why_now}}</div>
+                  <div class="opp-act">→ {{o.action}}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Questions -->
+            <div class="insight-section" v-if="insightsLatest.questions?.length">
+              <div class="is-title">🪞 留给你的问题</div>
+              <div class="question-list">
+                <div v-for="(q,i) in insightsLatest.questions" :key="i" class="question-item" @click="setInsightFollowup(q)">
+                  <div class="qi-num">{{String(i+1).padStart(2,'0')}}</div>
+                  <div class="qi-text">{{q}}</div>
+                  <div class="qi-action">去追问 →</div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Projects tab -->
+        <div v-if="insightsTab==='projects'" class="insight-panel">
+          <div v-if="!insightsLatest?.projects?.length" class="insight-empty">
+            <div class="ie-icon">💡</div>
+            <div class="ie-title">还没有项目点子</div>
+            <div class="ie-sub">先到「综合」tab 生成一轮洞察，AI 会基于你的语料提炼可执行的项目假设。</div>
+          </div>
+          <div v-else class="project-grid">
+            <div v-for="(p,i) in insightsLatest.projects" :key="i" class="project-card" :class="'conf-'+p.confidence">
+              <div class="pc-top">
+                <div class="pc-title">{{p.title}}</div>
+                <div class="pc-conf">信心 · {{p.confidence}}</div>
+              </div>
+              <div class="pc-row"><span class="pc-k">核心假设</span><span class="pc-v">{{p.hypothesis}}</span></div>
+              <div class="pc-row"><span class="pc-k">目标用户</span><span class="pc-v">{{p.audience}}</span></div>
+              <div class="pc-row"><span class="pc-k">能得到什么</span><span class="pc-v">{{p.value}}</span></div>
+              <div class="pc-next">
+                <div class="pc-next-label">本周第一步</div>
+                <div class="pc-next-text">{{p.next_step}}</div>
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- Diagnosis tab -->
+        <div v-if="insightsTab==='diagnosis'" class="insight-panel">
+          <div v-if="!insightsLatest?.diagnosis" class="insight-empty">
+            <div class="ie-icon">🔍</div>
+            <div class="ie-title">还没有业务诊断</div>
+            <div class="ie-sub">先生成综合洞察后，这里会显示优势/风险/盲区分析。</div>
+          </div>
+          <div v-else class="diag-grid">
+            <div class="diag-card diag-strength">
+              <div class="diag-title">💪 优势</div>
+              <ul><li v-for="(s,i) in insightsLatest.diagnosis.strengths" :key="i">{{s}}</li></ul>
+            </div>
+            <div class="diag-card diag-risk">
+              <div class="diag-title">⚠️ 风险</div>
+              <ul><li v-for="(r,i) in insightsLatest.diagnosis.risks" :key="i">{{r}}</li></ul>
+            </div>
+            <div class="diag-card diag-blind">
+              <div class="diag-title">🫥 盲区</div>
+              <ul><li v-for="(b,i) in insightsLatest.diagnosis.blind_spots" :key="i">{{b}}</li></ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ask tab -->
+        <div v-if="insightsTab==='ask'" class="insight-panel">
+          <div class="ask-box">
+            <div class="ask-label">对你自己的语料提问</div>
+            <div class="ask-hint">AI 只能基于你的访谈/反思/速记/记忆回答，不会编。</div>
+            <div class="ask-input-row">
+              <textarea v-model="insightsAskQ" class="input ask-input" rows="2" placeholder="例：最近我在反复纠结什么？哪些人给我能量？"></textarea>
+              <button class="btn-insight-run" @click="askInsight" :disabled="insightsAskLoading || !insightsAskQ.trim()">
+                <span v-if="!insightsAskLoading">问</span>
+                <span v-else>🌀</span>
+              </button>
+            </div>
+          </div>
+          <div v-if="insightsAskReply" class="ask-reply">
+            <div class="ask-reply-answer">{{insightsAskReply.answer}}</div>
+            <div v-if="insightsAskReply.evidence?.length" class="ask-reply-evidence">
+              <div class="arre-label">证据</div>
+              <div v-for="(e,i) in insightsAskReply.evidence" :key="i" class="arre-item">· {{e}}</div>
+            </div>
+            <div v-if="insightsAskReply.followups?.length" class="ask-reply-followups">
+              <div class="arf-label">顺势追问</div>
+              <button v-for="(f,i) in insightsAskReply.followups" :key="i" class="arf-chip" @click="insightsAskQ=f">{{f}}</button>
+            </div>
+          </div>
+          <div v-if="insightsAskHistory.length" class="ask-history">
+            <div class="ah-label">历史追问</div>
+            <div v-for="(h,i) in insightsAskHistory" :key="i" class="ah-item">
+              <div class="ah-q">Q · {{h.q}} <span class="ah-t">{{h.at}}</span></div>
+              <div class="ah-a">A · {{h.reply.answer}}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Saved tab -->
+        <div v-if="insightsTab==='saved'" class="insight-panel">
+          <div v-if="!insightsCards.length" class="insight-empty">
+            <div class="ie-icon">📚</div>
+            <div class="ie-title">还没有存档</div>
+            <div class="ie-sub">点击综合洞察右侧的「📌 存档」，把这一刻的思考冻结成卡片。</div>
+          </div>
+          <div v-else class="saved-grid">
+            <div v-for="c in insightsCards" :key="c.id" class="saved-card">
+              <div class="sc-top">
+                <div class="sc-id">#{{c.id}}</div>
+                <button class="btn-ghost btn-xs" @click="deleteInsightCard(c)">删除</button>
+              </div>
+              <div class="sc-headline">{{(c.insight && c.insight.headline) || '未命名洞察'}}</div>
+              <div class="sc-date">{{c.saved_at}}</div>
+              <div class="sc-preview">
+                <span v-for="(t,i) in ((c.insight && c.insight.themes) || []).slice(0,3)" :key="i" class="sc-chip">{{t.title}}</span>
+              </div>
+              <button class="btn-ghost btn-xs sc-view" @click="insightsLatest=c.insight; insightsTab='synthesis'">查看详情 →</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ══ LIFE (生活 · 家庭 / 健康 / 仪式 / 时刻) ══ -->
+      <div v-if="view==='life'" class="view life-view" key="life">
+
+        <!-- Tabs -->
+        <div class="life-tabs">
+          <button :class="{active:lifeTab==='daughter'}" @click="lifeTab='daughter'">🌸 与女儿</button>
+          <button :class="{active:lifeTab==='health'}" @click="lifeTab='health'">💪 健康</button>
+          <button :class="{active:lifeTab==='rituals'}" @click="lifeTab='rituals'">🌅 日常仪式</button>
+          <button :class="{active:lifeTab==='moments'}" @click="lifeTab='moments'">✨ 高光时刻</button>
+        </div>
+
+        <!-- Daughter tab -->
+        <div v-if="lifeTab==='daughter'" class="life-panel">
+          <!-- Countdown hero -->
+          <div class="daughter-hero" v-if="lifeOverview?.weekend_info">
+            <div class="dh-left">
+              <div class="dh-eyebrow">{{lifeOverview.daughter.name}} 现在</div>
+              <div class="dh-age"><span class="dh-big">{{lifeOverview.weekend_info.age}}</span> 岁</div>
+              <div class="dh-label">距离她上大学离家，还有：</div>
+              <div class="dh-weekends">
+                <span class="dh-huge">{{lifeOverview.weekend_info.weekends_left}}</span>
+                <span class="dh-unit">个周末</span>
+              </div>
+              <div class="dh-days">约 {{lifeOverview.weekend_info.days_to_college}} 天</div>
+              <button class="btn-ghost btn-xs dh-edit" @click="lifeEditDaughter = !lifeEditDaughter">编辑资料</button>
+            </div>
+            <div class="dh-right">
+              <div class="dh-quote">"这不是一个可以重来的项目。"</div>
+              <div class="dh-sub">每个周末，都值得被认真规划。</div>
+              <div class="dh-next">
+                <div class="dh-next-label">下个周末</div>
+                <div class="dh-next-date">{{lifeOverview.next_weekend.saturday}} · {{lifeOverview.next_weekend.sunday}}</div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="lifeEditDaughter" class="card daughter-edit-form">
+            <div class="card-top"><span class="card-label">编辑女儿资料</span></div>
+            <div class="form-row">
+              <div class="form-group third"><label class="form-label">名字</label><input v-model="lifeDaughterEdit.name" class="input"></div>
+              <div class="form-group third"><label class="form-label">生日</label><input v-model="lifeDaughterEdit.birth_date" type="date" class="input"></div>
+              <div class="form-group third"><label class="form-label">预计上大学年龄</label><input v-model.number="lifeDaughterEdit.college_age" type="number" min="15" max="22" class="input"></div>
+            </div>
+            <div class="form-actions">
+              <button class="btn-primary" @click="saveDaughter">保存</button>
+              <button class="btn-ghost" @click="lifeEditDaughter=false">取消</button>
+            </div>
+          </div>
+
+          <!-- Action row -->
+          <div class="daughter-actions">
+            <button class="btn-life-primary" @click="lifeShowWeekendForm=true">+ 新建周末计划</button>
+            <button class="btn-life-accent" @click="generateWeekendIdeas" :disabled="lifeIdeasLoading">
+              <span v-if="!lifeIdeasLoading">✨ AI 帮我想周末点子</span>
+              <span v-else>🌀 正在为米莱想点子…</span>
+            </button>
+            <input v-model="lifeIdeasVibe" class="input ideas-vibe" placeholder="特别要求：比如「下雨天/室内/科技感」">
+          </div>
+
+          <!-- New weekend form -->
+          <div v-if="lifeShowWeekendForm" class="card weekend-form">
+            <div class="card-top"><span class="card-label">新建周末计划</span></div>
+            <div class="form-row">
+              <div class="form-group half"><label class="form-label">日期</label><input v-model="lifeNewWeekend.date" type="date" class="input"></div>
+              <div class="form-group half"><label class="form-label">主题（可选）</label><input v-model="lifeNewWeekend.theme" class="input" placeholder="自然 / 创作 / 探索…"></div>
+            </div>
+            <div class="form-group"><label class="form-label">标题</label><input v-model="lifeNewWeekend.title" class="input" placeholder="例：去植物园听鸟叫"></div>
+            <div class="form-group"><label class="form-label">活动安排</label><textarea v-model="lifeNewWeekend.activities" class="input" rows="3" placeholder="每行一项"></textarea></div>
+            <div class="form-group"><label class="form-label">备注</label><textarea v-model="lifeNewWeekend.notes" class="input" rows="2" placeholder="为什么选这个 / 带什么 / 米莱怎么想的"></textarea></div>
+            <div class="form-actions">
+              <button class="btn-primary" @click="createWeekend">创建</button>
+              <button class="btn-ghost" @click="lifeShowWeekendForm=false">取消</button>
+            </div>
+          </div>
+
+          <!-- AI Ideas -->
+          <div v-if="lifeOverview?.weekend_ideas?.length" class="ideas-section">
+            <div class="is-title">✨ AI 为米莱想的点子</div>
+            <div class="ideas-grid">
+              <div v-for="(idea, i) in lifeOverview.weekend_ideas.slice().reverse()" :key="idea.id || i" class="idea-card" :class="'vibe-'+idea.vibe">
+                <div class="ic-top">
+                  <div class="ic-vibe">{{idea.vibe}}</div>
+                  <div class="ic-duration">{{idea.duration}}</div>
+                </div>
+                <div class="ic-title">{{idea.title}}</div>
+                <div class="ic-what">{{idea.what}}</div>
+                <div class="ic-why">💗 {{idea.why}}</div>
+                <div v-if="idea.supplies?.length" class="ic-supplies">
+                  <span v-for="(s,j) in idea.supplies" :key="j" class="ic-sup">{{s}}</span>
+                </div>
+                <button class="btn-ghost btn-xs ic-use" @click="ideaToWeekend(idea)">→ 用这个点子</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Upcoming -->
+          <div v-if="lifeOverview?.upcoming_weekends?.length" class="weekend-section">
+            <div class="is-title">📅 即将到来的周末</div>
+            <div class="weekend-grid">
+              <div v-for="wk in lifeOverview.upcoming_weekends" :key="wk.id" class="weekend-card" :class="{done:wk.done}">
+                <div class="wc-top">
+                  <div class="wc-date">{{wk.date}}</div>
+                  <div class="wc-actions">
+                    <button class="btn-ghost btn-xs" @click="toggleWeekendDone(wk)">{{wk.done?'✓ 已完成':'标记完成'}}</button>
+                    <button class="btn-ghost btn-xs" @click="deleteWeekend(wk)">✕</button>
+                  </div>
+                </div>
+                <div class="wc-title">{{wk.title}}</div>
+                <div v-if="wk.theme" class="wc-theme">#{{wk.theme}}</div>
+                <ul v-if="wk.activities?.length" class="wc-activities">
+                  <li v-for="(a,i) in wk.activities" :key="i">{{a}}</li>
+                </ul>
+                <div v-if="wk.notes" class="wc-notes">{{wk.notes}}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Past -->
+          <div v-if="lifeOverview?.past_weekends?.length" class="weekend-section">
+            <div class="is-title">🌿 走过的周末</div>
+            <div class="past-grid">
+              <div v-for="wk in lifeOverview.past_weekends" :key="wk.id" class="past-card">
+                <div class="pst-date">{{wk.date}}</div>
+                <div class="pst-title">{{wk.title}}</div>
+                <div v-if="wk.theme" class="pst-theme">#{{wk.theme}}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Health tab -->
+        <div v-if="lifeTab==='health'" class="life-panel">
+          <div class="health-hero">
+            <div class="hh-title">今天的四个圈</div>
+            <div class="hh-sub">睡眠 · 运动 · 冥想 · 饮食 — 拖动或点击圆环调整今日完成度</div>
+          </div>
+
+          <div class="ring-grid">
+            <div v-for="(k, idx) in ['sleep','exercise','meditate','diet']" :key="k" class="ring-card" :class="'ring-'+k">
+              <div class="rc-name">{{['睡眠','运动','冥想','饮食'][idx]}}</div>
+              <svg class="ring-svg" viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="50" class="ring-bg"/>
+                <circle cx="60" cy="60" r="50" class="ring-fg"
+                  :style="{strokeDasharray: (lifeHealthDraft[k]*3.14) + ' 314'}"/>
+                <text x="60" y="68" text-anchor="middle" class="ring-num">{{lifeHealthDraft[k]}}</text>
+              </svg>
+              <input type="range" min="0" max="100" step="5" v-model.number="lifeHealthDraft[k]" class="ring-slider">
+              <div class="ring-quick">
+                <button class="btn-ghost btn-xs" @click="setHealthRing(k, 0)">0</button>
+                <button class="btn-ghost btn-xs" @click="setHealthRing(k, 50)">50</button>
+                <button class="btn-ghost btn-xs" @click="setHealthRing(k, 100)">100</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card health-note-card">
+            <div class="form-group"><label class="form-label">今日小记（可选）</label><textarea v-model="lifeHealthNote" class="input" rows="2" placeholder="睡了多久 / 做了什么运动 / 吃得怎样"></textarea></div>
+            <div class="form-actions">
+              <button class="btn-primary" @click="saveHealth">保存打卡</button>
+            </div>
+          </div>
+
+          <!-- Trend -->
+          <div v-if="lifeOverview?.health?.recent_logs?.length" class="trend-section">
+            <div class="is-title">📈 近 7 天趋势</div>
+            <div class="trend-bars">
+              <div v-for="(log, i) in lifeOverview.health.recent_logs" :key="i" class="trend-day">
+                <div class="td-bars">
+                  <div class="td-bar td-sleep" :style="{height: log.sleep+'%'}"></div>
+                  <div class="td-bar td-exercise" :style="{height: log.exercise+'%'}"></div>
+                  <div class="td-bar td-meditate" :style="{height: log.meditate+'%'}"></div>
+                  <div class="td-bar td-diet" :style="{height: log.diet+'%'}"></div>
+                </div>
+                <div class="td-date">{{log.date.slice(5)}}</div>
+              </div>
+            </div>
+            <div class="trend-legend">
+              <span class="tl-dot tl-sleep"></span>睡眠
+              <span class="tl-dot tl-exercise"></span>运动
+              <span class="tl-dot tl-meditate"></span>冥想
+              <span class="tl-dot tl-diet"></span>饮食
+            </div>
+          </div>
+        </div>
+
+        <!-- Rituals tab -->
+        <div v-if="lifeTab==='rituals'" class="life-panel">
+          <div class="ritual-hero">
+            <div class="rh-title">日常仪式</div>
+            <div class="rh-sub">小小的坚持，长久的塑造。每天给自己的底盘拧一颗螺丝。</div>
+          </div>
+
+          <div class="ritual-slots" v-if="lifeOverview?.rituals">
+            <div class="ritual-slot" v-for="(slot, idx) in ['morning','evening','weekly']" :key="slot">
+              <div class="rs-header">
+                <div class="rs-title">{{['🌅 晨间仪式','🌙 晚间仪式','🌿 周度仪式'][idx]}}</div>
+                <div class="rs-streak" v-if="lifeOverview.rituals.streaks && lifeOverview.rituals.streaks[slot]">🔥 {{lifeOverview.rituals.streaks[slot]}} 天</div>
+              </div>
+              <div class="rs-list">
+                <div v-for="r in (lifeOverview.rituals[slot]||[])" :key="r.id" class="rs-item" :class="{done:r.done}">
+                  <label class="rs-check">
+                    <input type="checkbox" :checked="r.done" @change="toggleRitual(slot, r)">
+                    <span class="rs-text">{{r.text}}</span>
+                  </label>
+                  <button class="btn-ghost btn-xs" @click="deleteRitual(slot, r)">✕</button>
+                </div>
+                <div v-if="!(lifeOverview.rituals[slot]||[]).length" class="empty-sm">还没有设定</div>
+              </div>
+              <div class="rs-add">
+                <input v-model="lifeNewRitual.text" class="input" :placeholder="'加一条'+['晨间','晚间','周度'][idx]+'仪式'" @focus="lifeNewRitual.slot=slot" @keydown.enter="addRitual">
+                <button class="btn-ghost btn-xs" @click="lifeNewRitual.slot=slot; addRitual()">+</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Moments tab -->
+        <div v-if="lifeTab==='moments'" class="life-panel">
+          <div class="moment-hero">
+            <div class="mh-title">生活高光时刻</div>
+            <div class="mh-sub">那些值得被记住的小事，以后翻出来会笑。</div>
+            <button class="btn-life-primary" @click="lifeShowMomentForm=true">+ 记录一个时刻</button>
+          </div>
+
+          <div v-if="lifeShowMomentForm" class="card moment-form">
+            <div class="form-row">
+              <div class="form-group third"><label class="form-label">类型</label>
+                <select v-model="lifeNewMoment.category" class="input">
+                  <option>高光</option><option>平静</option><option>挑战</option><option>成长</option>
+                </select>
+              </div>
+              <div class="form-group form-group-grow"><label class="form-label">时刻</label><textarea v-model="lifeNewMoment.text" class="input" rows="2" placeholder="今天发生了什么值得被记住的事"></textarea></div>
+            </div>
+            <div class="form-actions">
+              <button class="btn-primary" @click="addMoment">记录</button>
+              <button class="btn-ghost" @click="lifeShowMomentForm=false">取消</button>
+            </div>
+          </div>
+
+          <div class="moments-timeline" v-if="lifeOverview?.moments?.length">
+            <div v-for="m in lifeOverview.moments" :key="m.id" class="moment-item" :class="'cat-'+m.category">
+              <div class="mi-date">{{m.date}}</div>
+              <div class="mi-content">
+                <div class="mi-cat">#{{m.category}}</div>
+                <div class="mi-text">{{m.text}}</div>
+              </div>
+              <button class="btn-ghost btn-xs mi-del" @click="deleteMoment(m)">✕</button>
+            </div>
+          </div>
+          <div v-else-if="!lifeShowMomentForm" class="insight-empty">
+            <div class="ie-icon">✨</div>
+            <div class="ie-title">还没有记录的时刻</div>
+            <div class="ie-sub">第一个时刻，可以是今天早晨米莱说的一句话，也可以是你刚刚看完的一本书。</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ══ COCKPIT · 千丁战略驾舱 (data: Vault/Longfor/cockpit.md) ══ -->
+      <div v-if="view==='cockpit'" class="view cockpit-view view-wide" key="cockpit">
+
+        <div v-if="cockpitLoading && !cockpitData" class="cockpit-loading">加载战略驾舱中…</div>
+        <div v-else-if="cockpitError" class="cockpit-error">
+          <div class="ce-icon">⚠️</div>
+          <div>{{cockpitError}}</div>
+          <button class="btn btn-sm" @click="loadCockpit">重试</button>
+        </div>
+
+        <template v-else-if="cockpitData">
+          <!-- ═══ Branch A: Doc reader · in-page, replaces everything below ═══ -->
+          <div v-if="cockpitOpenReport && reportParsed" class="rv-wrap cp-reader">
+            <nav class="rv-crumbs">
+              <a class="rv-crumb" @click="cockpitGoHome()">🧭 驾舱</a>
+              <template v-if="cockpitActiveBlockData">
+                <span class="rv-crumb-sep">›</span>
+                <a class="rv-crumb" @click="cockpitCloseReport()">{{cockpitActiveBlockData.label}}</a>
+              </template>
+              <template v-if="cockpitDrillPerson">
+                <span class="rv-crumb-sep">›</span>
+                <a class="rv-crumb" @click="cockpitCloseReport()">{{cockpitDrillPerson.personLabel}}</a>
+              </template>
+              <span class="rv-crumb-sep">›</span>
+              <span class="rv-crumb is-current">{{reportParsed.title || cockpitOpenReport.title}}</span>
+            </nav>
+            <div class="rv-actionbar">
+              <button class="btn-ghost rv-back" @click="cockpitCloseReport()">← 返回 {{cockpitActiveBlockData?.label || '驾舱'}}</button>
+              <button class="btn-ghost" @click="openCockpitEditor" title="编辑数据源">✎ 编辑</button>
+            </div>
+            <section class="rv-hero">
+              <div class="rv-hero-eyebrow" v-if="reportParsed.eyebrow || cockpitOpenReport.eyebrow">{{reportParsed.eyebrow || cockpitOpenReport.eyebrow}}</div>
+              <h1 class="rv-hero-title">{{reportParsed.title || cockpitOpenReport.title}}</h1>
+              <div class="rv-hero-pills" v-if="(reportParsed.metaPills||[]).length">
+                <div v-for="(mp, mpi) in reportParsed.metaPills" :key="mpi" class="rv-pill">
+                  <span class="rv-pill-k">{{mp.key}}</span>
+                  <span class="rv-pill-v">{{mp.val}}</span>
+                </div>
+              </div>
+              <div class="rv-hero-line"></div>
+            </section>
+            <div class="rv-body">
+              <aside class="rv-toc" v-if="reportParsed.sections.length > 1" :class="'rv-toc--' + tocMode">
+                <button class="rv-toc-toggle" @click="cycleTocMode" :title="tocMode==='full'?'收起目录':tocMode==='slim'?'隐藏目录':'展开目录'">
+                  <span class="rv-toc-toggle-icon" :class="'is-' + tocMode">{{ tocMode==='hidden'?'☰':tocMode==='slim'?'◀':'✕' }}</span>
+                </button>
+                <div class="rv-toc-label" v-if="tocMode==='full'">目&nbsp;录</div>
+                <ul class="rv-toc-list">
+                  <li v-for="s in reportParsed.sections" :key="s.id" @click="scrollToReportSection(s.id)" :class="{'is-unnum': !s.hasExplicitNum}">
+                    <span class="rv-toc-num">{{s.num || '·'}}</span>
+                    <span class="rv-toc-txt" v-if="tocMode==='full'">{{s.title}}</span>
+                    <span class="rv-toc-txt rv-toc-txt--abbr" v-else-if="tocMode==='slim'">{{s.title.slice(0,2)}}</span>
+                  </li>
+                </ul>
+              </aside>
+              <div class="rv-main">
+                <div v-if="reportParsed.prefaceHtml" class="rv-preface rendered-md" v-html="reportParsed.prefaceHtml"></div>
+                <section v-for="s in reportParsed.sections" :key="s.id" :id="s.id" class="rv-section" :class="{'is-unnum': !s.hasExplicitNum}">
+                  <div class="rv-sec-head">
+                    <div class="rv-sec-num" v-if="s.hasExplicitNum">{{s.num}}</div>
+                    <div class="rv-sec-num rv-sec-num-dot" v-else>◆</div>
+                    <div class="rv-sec-title-wrap">
+                      <div class="rv-sec-title">{{s.title}}</div>
+                      <div class="rv-sec-rule"></div>
+                    </div>
+                  </div>
+                  <div class="rv-sec-body rv-sec-chunked" v-if="s.chunks && s.chunks.length">
+                    <template v-for="(c, ci) in s.chunks" :key="ci">
+                      <div v-if="c.kind === 'headline-card'" class="rv-chunk rv-chunk-headline" :data-accent="c.accent">
+                        <div class="rv-chunk-headline-bar"></div>
+                        <div class="rv-chunk-headline-body">
+                          <h3 class="rv-chunk-headline-title">{{c.title}}</h3>
+                          <div class="rv-chunk-headline-text rendered-md" v-html="c.bodyHtml"></div>
+                        </div>
+                      </div>
+                      <div v-else-if="c.kind === 'long-prose'" class="rv-chunk rv-chunk-prose rendered-md" v-html="c.html"></div>
+                      <h3 v-else-if="c.kind === 'h-sub' && c.level === 3" class="rv-chunk rv-chunk-h3">{{c.title}}</h3>
+                      <h4 v-else-if="c.kind === 'h-sub' && c.level === 4" class="rv-chunk rv-chunk-h4">{{c.title}}</h4>
+                      <h5 v-else-if="c.kind === 'h-sub'" class="rv-chunk rv-chunk-h5">{{c.title}}</h5>
+                      <div v-else-if="c.kind === 'list-card'" class="rv-chunk rv-chunk-list rendered-md" v-html="c.html"></div>
+                      <div v-else-if="c.kind === 'table-card'" class="rv-chunk rv-chunk-table rendered-md" v-html="c.html"></div>
+                      <div v-else-if="c.kind === 'quote-card'" class="rv-chunk rv-chunk-quote rendered-md" v-html="c.html"></div>
+                      <div v-else-if="c.kind === 'code-card'" class="rv-chunk rv-chunk-code rendered-md" v-html="c.html"></div>
+                      <div v-else-if="c.kind === 'prose'" class="rv-chunk rv-chunk-prose rendered-md" v-html="c.html"></div>
+                      <hr v-else-if="c.kind === 'hr'" class="rv-chunk-hr"/>
+                    </template>
+                  </div>
+                  <div class="rv-sec-body rendered-md" v-else v-html="s.html"></div>
+                </section>
+              </div>
+            </div>
+          </div>
+
+          <!-- ═══ Branch B: Cockpit home + block bloom · in-page stage ═══ -->
+          <template v-else>
+            <!-- Compact hero: title + subtitle + inline progression row -->
+            <div class="cockpit-cover v3">
+              <div class="cc-bg"></div>
+              <div class="cc-tools">
+                <button class="cc-tool" @click="openCockpitExport" title="打开分享页"><span>📄</span><em>分享页</em></button>
+                <button class="cc-tool" @click="downloadCockpitHtml" title="下载静态 HTML"><span>⬇</span><em>下载</em></button>
+                <button class="cc-tool" @click="openCockpitEditor" title="直接编辑 cockpit.md"><span>✎</span><em>编辑</em></button>
+                <button class="cc-tool" @click="loadCockpit" title="重新加载数据源"><span>↻</span><em>刷新</em></button>
+              </div>
+              <div class="cc-body">
+                <div class="cc-eyebrow">
+                  <span class="cce-dot"></span>
+                  {{cockpitData.meta?.eyebrow || 'LONGFOR·QIANDING STRATEGY COCKPIT'}}
+                  <span class="cce-version" v-if="cockpitData.meta?.version">{{cockpitData.meta.version}}</span>
+                </div>
+                <h1 class="cc-title">{{cockpitData.meta?.title}}</h1>
+                <div class="cc-subtitle">{{cockpitData.meta?.subtitle}}</div>
+
+                <div v-if="oneLinerParts.length" class="cc-prog-mini">
+                  <template v-for="(part, pi) in oneLinerParts" :key="pi">
+                    <span class="cc-prog-mini-stage" :class="'cc-prog-mini-s'+(pi+1)">
+                      <span class="cc-prog-mini-num">T{{pi+1}}</span>
+                      <span class="cc-prog-mini-txt">{{part}}</span>
+                    </span>
+                    <span v-if="pi < oneLinerParts.length - 1" class="cc-prog-mini-sep">▸</span>
+                  </template>
+                </div>
+
+                <div class="cc-meta">
+                  <span class="cc-meta-author">{{cockpitData.meta?.author}}</span>
+                  <span class="cc-dot">·</span>
+                  <span>更新 {{cockpitData.meta?.updated}}</span>
+                  <span class="cc-dot">·</span>
+                  <span>数据源 <code>{{cockpitData.path}}</code></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Primary pillars: 内部诊断 · 外部研究 · 战略三叉戟 -->
+            <div class="rv-pillars cp-pillars" v-if="cockpitPrimaryBlocks.length">
+              <div v-for="blk in cockpitPrimaryBlocks" :key="blk.key"
+                   class="rv-pillar"
+                   :class="['sec-'+blk.key, {'is-active': cockpitActiveBlockKey===blk.key}]"
+                   @click="cockpitSelectBlock(blk.key)">
+                <div class="rv-pillar-icon">{{blk.icon}}</div>
+                <div class="rv-pillar-body">
+                  <div class="rv-pillar-label">{{blk.label}}</div>
+                  <div class="rv-pillar-sub">{{blk.subtitle}}</div>
+                  <div class="rv-pillar-meta">
+                    <span class="rv-pillar-count">{{blk.count}} 份</span>
+                    <span v-if="blk.tagline" class="rv-pillar-tagline">{{blk.tagline}}</span>
+                  </div>
+                  <!-- Trident Track direction mini-cards -->
+                  <div v-if="blk.finale && blk.finale.directions" class="rv-pillar-tracks">
+                    <div v-for="dir in blk.finale.directions" :key="dir.key"
+                         class="rv-pillar-track-chip" :data-accent="dir.accent">
+                      <span class="rv-ptc-icon">{{dir.icon}}</span>
+                      <span class="rv-ptc-label">{{dir.label}}</span>
+                      <span class="rv-ptc-badge" v-if="dir.tracks">{{dir.tracks.map(t=>t.code).join('·')}}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Secondary tiles: A4S · LongScale · 北极星 -->
+            <div class="rv-sec-tiles cp-tiles" v-if="cockpitSecondaryBlocks.length">
+              <div v-for="blk in cockpitSecondaryBlocks" :key="blk.key"
+                   class="rv-sec-tile"
+                   :class="['sec-'+blk.key, {'is-active': cockpitActiveBlockKey===blk.key}]"
+                   @click="cockpitSelectBlock(blk.key)">
+                <span class="rv-sec-tile-icon">{{blk.icon}}</span>
+                <div class="rv-sec-tile-text">
+                  <div class="rv-sec-tile-label">{{blk.label}}<span class="rv-sec-tile-count">{{blk.count}}</span></div>
+                  <div class="rv-sec-tile-sub">{{blk.subtitle}}</div>
+                </div>
+                <div class="rv-sec-tile-accent-bar"></div>
+              </div>
+            </div>
+
+            <!-- Flagship: 战略三叉戟 -->
+            <div class="rv-pillars cp-pillars cp-flagship" v-if="cockpitFlagshipBlocks.length">
+              <div v-for="blk in cockpitFlagshipBlocks" :key="blk.key"
+                   class="rv-pillar"
+                   :class="['sec-'+blk.key, {'is-active': cockpitActiveBlockKey===blk.key}]"
+                   @click="cockpitSelectBlock(blk.key)">
+                <div class="rv-pillar-icon">{{blk.icon}}</div>
+                <div class="rv-pillar-body">
+                  <div class="rv-pillar-label">{{blk.label}}</div>
+                  <div class="rv-pillar-sub">{{blk.subtitle}}</div>
+                  <div class="rv-pillar-meta">
+                    <span class="rv-pillar-count">{{blk.count}} 份</span>
+                    <span v-if="blk.tagline" class="rv-pillar-tagline">{{blk.tagline}}</span>
+                  </div>
+                  <div v-if="blk.finale && blk.finale.directions" class="rv-pillar-tracks">
+                    <div v-for="dir in blk.finale.directions" :key="dir.key"
+                         class="rv-pillar-track-chip" :data-accent="dir.accent">
+                      <span class="rv-ptc-icon">{{dir.icon}}</span>
+                      <span class="rv-ptc-label">{{dir.label}}</span>
+                      <span class="rv-ptc-badge" v-if="dir.tracks">{{dir.tracks.map(t=>t.code).join('·')}}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tertiary: 私密 · 个人 -->
+            <div class="rv-sec-minis cp-minis" v-if="cockpitTertiaryBlocks.length">
+              <div v-for="blk in cockpitTertiaryBlocks" :key="blk.key"
+                   class="rv-sec-mini"
+                   :class="['sec-'+blk.key, {'is-active': cockpitActiveBlockKey===blk.key, 'is-personal': blk.isPersonal}]"
+                   @click="cockpitSelectBlock(blk.key)">
+                <span class="rv-sec-mini-icon">{{blk.icon}}</span>
+                <span class="rv-sec-mini-label">{{blk.label}}</span>
+                <span class="rv-sec-mini-count">{{blk.count}}</span>
+              </div>
+            </div>
+
+            <!-- ── L2: Person drill-down · in-page ── -->
+            <div v-if="cockpitDrillPerson && cockpitCurrentDrill" class="rv-person-view cp-drill">
+              <nav class="rv-crumbs">
+                <a class="rv-crumb" @click="cockpitGoHome()">🧭 驾舱</a>
+                <span class="rv-crumb-sep">›</span>
+                <a class="rv-crumb" @click="cockpitClearDrill()">{{cockpitActiveBlockData?.label}}</a>
+                <span class="rv-crumb-sep">›</span>
+                <span class="rv-crumb is-current">{{cockpitCurrentDrill.entity.label}} · {{cockpitCurrentDrill.person.label}}</span>
+              </nav>
+              <div class="rv-actionbar" style="padding:0 0 12px 0">
+                <button class="btn-ghost rv-back" @click="cockpitClearDrill()">← 返回 {{cockpitActiveBlockData?.label}}</button>
+              </div>
+              <div class="rv-person-hero">
+                <div class="rv-person-hero-icon">{{cockpitCurrentDrill.entity.icon || '👤'}}</div>
+                <div class="rv-person-hero-body">
+                  <div class="rv-person-hero-eyebrow">{{cockpitActiveBlockData?.label}} · {{cockpitCurrentDrill.entity.label}}</div>
+                  <h2 class="rv-person-hero-title">{{cockpitCurrentDrill.person.label}}</h2>
+                  <div class="rv-person-hero-count">共 {{cockpitCurrentDrill.person.items.length}} 份支撑文档</div>
+                </div>
+              </div>
+              <div class="rv-gallery">
+                <div v-for="r in cockpitCurrentDrill.person.items" :key="r.path"
+                     class="rv-gcard" :class="{'is-p0': r.priority==='P0','is-p1': r.priority==='P1'}"
+                     @click="cockpitOpenDoc(r)">
+                  <div class="rv-gcard-top">
+                    <span class="rv-gcard-num">{{r.eyebrow || cockpitCurrentDrill.entity.label}}</span>
+                    <span v-if="r.priority" class="rv-gcard-prio" :class="'prio-'+r.priority">{{r.priority}}</span>
+                  </div>
+                  <div class="rv-gcard-title">{{r.title}}</div>
+                  <div class="rv-gcard-sub" v-if="r.subtitle">{{r.subtitle}}</div>
+                  <div class="rv-gcard-tags" v-if="r.tags && r.tags.length">
+                    <span v-for="(t, ti) in r.tags.slice(0,4)" :key="ti" class="rv-gcard-tag">{{t}}</span>
+                  </div>
+                  <div class="rv-gcard-foot">
+                    <span class="rv-gcard-size">{{r.date || ''}}</span>
+                    <span class="rv-gcard-open">打开 →</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── L1: Active block content bloom ── -->
+            <div v-else-if="cockpitActiveBlockData" class="rv-sec-content cp-bloom" :class="'sec-'+cockpitActiveBlockData.key">
+
+              <!-- Trident compact pillar bar + proposals -->
+              <div v-if="cockpitActiveBlockData.finale && cockpitActiveBlockData.finale.pillars && cockpitActiveBlockData.finale.pillars.length" class="cp-tf-pillar-bar">
+                <div v-for="(p, pi) in cockpitActiveBlockData.finale.pillars" :key="pi" class="cp-tf-pill">
+                  <span class="cp-tf-pill-icon">{{p.icon}}</span>
+                  <div class="cp-tf-pill-body">
+                    <div class="cp-tf-pill-label">{{p.label}}</div>
+                    <div class="cp-tf-pill-val">{{p.val}}</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Wave 5: Narrative arc timeline — goal → action → diagnosis → prescription → culmination -->
+              <div v-if="(cockpitActiveBlockData.narrative||[]).length" class="cp-arc-timeline">
+                <div class="cp-arc-head">
+                  <div class="cp-arc-head-main">
+                    <span class="cp-arc-head-icon">{{cockpitActiveBlockData.icon}}</span>
+                    <div class="cp-arc-head-text">
+                      <div class="cp-arc-head-label">{{cockpitActiveBlockData.label}} · 叙事纲要</div>
+                      <div class="cp-arc-head-sub">{{cockpitActiveBlockData.tagline}}</div>
+                    </div>
+                  </div>
+                  <div class="cp-arc-head-hint">按顺序看：{{cockpitActiveBlockData.narrative.map(s=>s.stage).join(' → ')}}</div>
+                </div>
+                <div class="cp-arc-rail">
+                  <div v-for="(stg, si) in cockpitActiveBlockData.narrative" :key="si"
+                       class="cp-arc-stage" :class="['cp-arc-stage-'+(stg.color%6), (cockpitActiveBlockData.bloom || (cockpitActiveBlockData.tier === 'flagship' && si === cockpitActiveBlockData.narrative.length - 1)) ? 'is-clickable' : '']"
+                       @click="cockpitActiveBlockData.bloom ? scrollCockpitToStage(si) : (cockpitActiveBlockData.tier === 'flagship' && si === cockpitActiveBlockData.narrative.length - 1 && (cockpitActiveBlockData.masters||[]).length) ? cockpitOpenDoc(cockpitActiveBlockData.masters[0]) : null">
+                    <div class="cp-arc-stage-num">{{si+1}}</div>
+                    <div class="cp-arc-stage-body">
+                      <div class="cp-arc-stage-tag">{{stg.stage}}</div>
+                      <div class="cp-arc-stage-label">{{stg.label}}</div>
+                      <div class="cp-arc-stage-desc">{{stg.desc}}</div>
+                    </div>
+                    <div v-if="si < cockpitActiveBlockData.narrative.length-1" class="cp-arc-stage-arrow">→</div>
+                  </div>
+                </div>
+                <!-- Flagship: full-width architecture image below narrative arc -->
+                <div v-if="cockpitActiveBlockData.tier === 'flagship'" class="cp-arc-arch-img">
+                  <img src="/reports-static/04-trident/projects/images/1-top-arch-2.jpg" />
+                </div>
+              </div>
+
+              <!-- Bloom mode: parse master doc into sub-block chapter tiles (A4S · 北极星) -->
+              <div v-if="cockpitActiveBlockData.bloom" class="cp-bloom-wrap">
+                <div class="cp-bloom-head">
+                  <span class="cp-bloom-icon">{{cockpitActiveBlockData.icon}}</span>
+                  <div class="cp-bloom-main">
+                    <div class="cp-bloom-label">{{cockpitActiveBlockData.label}} · {{cockpitActiveBlockData.subtitle}}</div>
+                    <div class="cp-bloom-sub">{{cockpitActiveBlockData.tagline}}</div>
+                  </div>
+                  <button v-if="cockpitBloomMaster" class="cp-bloom-openall btn-ghost" @click="cockpitOpenDoc(cockpitBloomMaster)">
+                    📖 展开完整文档 →
+                  </button>
+                </div>
+                <div v-if="cockpitBloomLoading" class="cp-bloom-loading">
+                  <span class="cp-bloom-spin"></span> 正在解析 {{cockpitActiveBlockData.label}} 总报告…
+                </div>
+                <div v-else-if="!cockpitBloomMaster" class="cp-bloom-empty">
+                  暂无母文档
+                </div>
+                <!-- W5.3: 关键观点墙 (extracted from master doc) — sits at top of bloom -->
+                <div v-if="cockpitBloomKeyInsights.length" class="cp-bloom-insights">
+                  <div class="cp-bloom-insights-head">
+                    <span class="cp-bloom-insights-icon">💡</span>
+                    <div class="cp-bloom-insights-main">
+                      <div class="cp-bloom-insights-tag">关键观点 · Key Insights</div>
+                      <div class="cp-bloom-insights-sub">从母文档中提取的 {{cockpitBloomKeyInsights.length}} 条核心判断</div>
+                    </div>
+                  </div>
+                  <div class="cp-bloom-insights-grid">
+                    <div v-for="(ins, ii) in cockpitBloomKeyInsights" :key="ii"
+                         class="cp-bloom-insight-card"
+                         :class="'cp-bloom-insight-c-'+(ins.color==null?99:ins.color)">
+                      <div class="cp-bloom-insight-text">{{ins.text}}</div>
+                      <div v-if="ins.source" class="cp-bloom-insight-source">— {{ins.source}}</div>
+                    </div>
+                  </div>
+                </div>
+                <!-- W5.4: narrative-arc grouped bloom (preferred when narrative+stageMatcher exist) -->
+                <div v-if="cockpitBloomStageGroups.length" class="cp-bloom-stages">
+                  <div v-for="(grp, gi) in cockpitBloomStageGroups" :key="gi"
+                       class="cp-bloom-stage-group"
+                       :class="'cp-bloom-stage-c-'+(grp.color==null?99:grp.color)"
+                       :data-stage-idx="grp.stageIdx">
+                    <div class="cp-bloom-stage-head">
+                      <span class="cp-bloom-stage-num">{{ grp.stageIdx >= 0 ? (grp.stageIdx+1).toString().padStart(2,'0') : '附' }}</span>
+                      <div class="cp-bloom-stage-main">
+                        <div class="cp-bloom-stage-tag">{{grp.stage}}</div>
+                        <div class="cp-bloom-stage-label">{{grp.label}}</div>
+                        <div v-if="grp.desc" class="cp-bloom-stage-desc">{{grp.desc}}</div>
+                      </div>
+                      <span class="cp-bloom-stage-count">{{grp.chapters.length}} 章</span>
+                    </div>
+                    <div class="cp-bloom-stage-row">
+                      <div v-for="(ch, ci) in grp.chapters" :key="ci"
+                           class="cp-bloom-card"
+                           :class="'cp-bloom-card-c-'+(grp.color==null?99:grp.color)"
+                           @click="cockpitOpenChapter(ch)">
+                        <div class="cp-bloom-card-head">
+                          <span class="cp-bloom-card-num">{{ch.num || '◆'}}</span>
+                          <span class="cp-bloom-card-words" v-if="ch.words">{{ch.words}} 字</span>
+                        </div>
+                        <div class="cp-bloom-card-title">{{ch.title}}</div>
+                        <div v-if="ch.preview" class="cp-bloom-card-preview">{{ch.preview}}</div>
+                        <div class="cp-bloom-card-foot">
+                          <span class="cp-bloom-card-open">展开章节 →</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- Fallback: flat chapter grid when no narrative arc is defined -->
+                <div v-else-if="cockpitBloomChapters.length" class="cp-bloom-grid">
+                  <div v-for="(ch, ci) in cockpitBloomChapters" :key="ci"
+                       class="cp-bloom-card"
+                       :class="'cp-bloom-card-'+(ci%6)"
+                       @click="cockpitOpenChapter(ch)">
+                    <div class="cp-bloom-card-head">
+                      <span class="cp-bloom-card-num">{{ch.num || '◆'}}</span>
+                      <span class="cp-bloom-card-words" v-if="ch.words">{{ch.words}} 字</span>
+                    </div>
+                    <div class="cp-bloom-card-title">{{ch.title}}</div>
+                    <div v-if="ch.preview" class="cp-bloom-card-preview">{{ch.preview}}</div>
+                    <div class="cp-bloom-card-foot">
+                      <span class="cp-bloom-card-open">展开章节 →</span>
+                    </div>
+                  </div>
+                </div>
+                <!-- Still show subGroups/flat below chapter tiles if present -->
+                <div v-if="(cockpitActiveBlockData.subGroups||[]).length || (cockpitActiveBlockData.flat||[]).length" class="cp-bloom-rest">
+                  <div class="cp-bloom-rest-sep">· · · 关联文档 · · ·</div>
+                  <div v-for="sg in cockpitActiveBlockData.subGroups" :key="sg.key" class="rv-entity-group">
+                    <div class="rv-entity-head">
+                      <span class="rv-entity-icon">{{sg.icon}}</span>
+                      <div class="rv-entity-text">
+                        <div class="rv-entity-label">{{sg.label}}</div>
+                        <div class="rv-entity-desc">{{sg.desc}}</div>
+                      </div>
+                      <span class="rv-entity-count">{{sg.items.length}}</span>
+                    </div>
+                    <div class="rv-gallery">
+                      <div v-for="r in sg.items" :key="r.path" class="rv-gcard" @click="cockpitOpenDoc(r)">
+                        <div class="rv-gcard-top">
+                          <span class="rv-gcard-num">{{r.eyebrow || sg.label}}</span>
+                          <span v-if="r.priority" class="rv-gcard-prio" :class="'prio-'+r.priority">{{r.priority}}</span>
+                        </div>
+                        <div class="rv-gcard-title">{{r.title}}</div>
+                        <div class="rv-gcard-sub" v-if="r.subtitle">{{r.subtitle}}</div>
+                        <div class="rv-gcard-foot">
+                          <span class="rv-gcard-size">{{r.date || ''}}</span>
+                          <span class="rv-gcard-open">打开 →</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="(cockpitActiveBlockData.flat||[]).length" class="rv-gallery">
+                    <div v-for="r in cockpitActiveBlockData.flat" :key="r.path" class="rv-gcard" @click="cockpitOpenDoc(r)">
+                      <div class="rv-gcard-top">
+                        <span class="rv-gcard-num">{{r.eyebrow || cockpitActiveBlockData.label}}</span>
+                        <span v-if="r.priority" class="rv-gcard-prio" :class="'prio-'+r.priority">{{r.priority}}</span>
+                      </div>
+                      <div class="rv-gcard-title">{{r.title}}</div>
+                      <div class="rv-gcard-sub" v-if="r.subtitle">{{r.subtitle}}</div>
+                      <div class="rv-gcard-foot">
+                        <span class="rv-gcard-size">{{r.date || ''}}</span>
+                        <span class="rv-gcard-open">打开 →</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Standard mode (non-bloom, non-flagship): masters card ("核心纲要") — flagship puts it inside narrative arc -->
+              <div v-if="!cockpitActiveBlockData.bloom && cockpitActiveBlockData.tier !== 'flagship' && (cockpitActiveBlockData.masters||[]).length" class="rv-master-row">
+                <div class="rv-master-head">
+                  <span class="rv-master-star">★</span>
+                  <span class="rv-master-label">核心纲要</span>
+                  <span class="rv-master-hint">展开全文</span>
+                </div>
+                <div class="rv-master-cards">
+                  <div v-for="r in cockpitActiveBlockData.masters" :key="r.path"
+                       class="rv-master-card" @click="cockpitOpenDoc(r)">
+                    <div class="rv-master-card-top">
+                      <span class="rv-master-card-eyebrow">{{r.eyebrow || cockpitActiveBlockData.label}}</span>
+                      <span v-if="r.priority" class="rv-master-card-prio" :class="'prio-'+r.priority">{{r.priority}}</span>
+                    </div>
+                    <div class="rv-master-card-title">{{r.title}}</div>
+                    <div v-if="r.subtitle" class="rv-master-card-sub">{{r.subtitle}}</div>
+                    <div class="rv-master-card-foot">
+                      <span class="rv-master-card-tag" v-for="(t, ti) in (r.tags||[]).slice(0,4)" :key="ti">{{t}}</span>
+                      <span class="rv-master-card-open">展开 →</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Entity groups + flat + forecast — skip for bloom (bloom has its own .cp-bloom-rest) -->
+                <div v-for="sg in (cockpitActiveBlockData.bloom ? [] : (cockpitActiveBlockData.subGroups||[]))" :key="sg.key" class="rv-entity-group"
+                     :class="{'rv-entity-flat': cockpitActiveBlockData.tier === 'flagship'}">
+                  <div class="rv-entity-head" v-if="cockpitActiveBlockData.tier !== 'flagship' || sg.key !== 'projects'">
+                    <span class="rv-entity-icon">{{sg.icon}}</span>
+                    <div class="rv-entity-text">
+                      <div class="rv-entity-label">{{sg.label}}</div>
+                      <div class="rv-entity-desc">{{sg.desc}}</div>
+                    </div>
+                    <span class="rv-entity-count">{{sg.items.length}}</span>
+                  </div>
+                  <div class="rv-flagship-header" v-if="cockpitActiveBlockData.tier === 'flagship' && sg.key === 'projects'">
+                    <div class="rv-flagship-header-rule"></div>
+                    <div class="rv-flagship-header-title">旗舰项目战略提案</div>
+                    <div class="rv-flagship-header-sub">龙湖千丁空间智能引擎 <span class="rv-flagship-tag">ToB</span> · 珑珠世界 LongWorld <span class="rv-flagship-tag">ToC 线下</span> · 里乐珑 Lilalo <span class="rv-flagship-tag">ToC 线上</span></div>
+                  </div>
+                  <div class="rv-person-grid" v-if="sg.persons && sg.persons.length > 1 && cockpitActiveBlockData.tier !== 'flagship'">
+                    <div v-for="p in sg.persons" :key="p.key"
+                         class="rv-person-card"
+                         :class="{'is-p0': p.items.some(it=>it.priority==='P0')}"
+                         @click="cockpitDrillTo(sg, p)">
+                      <div class="rv-person-card-top">
+                        <span class="rv-person-card-name">{{p.label}}</span>
+                        <span class="rv-person-card-count">{{p.items.length}}</span>
+                      </div>
+                      <div class="rv-person-card-docs">
+                        <div v-for="(d, di) in p.items.slice(0,3)" :key="di" class="rv-person-card-doc">
+                          <span v-if="d.priority" class="rv-person-card-prio" :class="'prio-'+d.priority">{{d.priority}}</span>
+                          <span class="rv-person-card-doc-title">{{d.title}}</span>
+                          <span v-if="d.date" class="rv-person-card-doc-date">{{d.date}}</span>
+                        </div>
+                        <div v-if="p.items.length > 3" class="rv-person-card-more">… 共 {{p.items.length}} 份</div>
+                      </div>
+                      <div class="rv-person-card-foot">
+                        <span class="rv-person-card-open">展开全部 →</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="rv-gallery">
+                    <div v-for="r in sg.items" :key="r.path"
+                         class="rv-gcard" :class="{'is-p0': r.priority==='P0','is-p1': r.priority==='P1'}"
+                         @click="cockpitOpenDoc(r)">
+                      <div class="rv-gcard-top">
+                        <span class="rv-gcard-num">{{r.eyebrow || sg.label}}</span>
+                        <span v-if="r.priority" class="rv-gcard-prio" :class="'prio-'+r.priority">{{r.priority}}</span>
+                      </div>
+                      <div class="rv-gcard-title" v-if="cockpitActiveBlockData.tier === 'flagship' && r.title && r.title.includes('· 项目提案')">
+                        {{r.title.replace(/\s*·\s*项目提案$/, '')}}
+                        <span class="rv-gcard-title-badge">项目提案</span>
+                      </div>
+                      <div class="rv-gcard-title" v-else>{{r.title}}</div>
+                      <div class="rv-gcard-sub" v-if="r.subtitle">{{r.subtitle}}</div>
+                      <div class="rv-gcard-tags" v-if="r.tags && r.tags.length">
+                        <span v-for="(t, ti) in r.tags.slice(0,4)" :key="ti" class="rv-gcard-tag">{{t}}</span>
+                      </div>
+                      <div class="rv-gcard-foot">
+                        <span class="rv-gcard-size">{{r.date || ''}}</span>
+                        <span class="rv-gcard-open">打开 →</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="!cockpitActiveBlockData.bloom && (cockpitActiveBlockData.flat||[]).length" class="rv-gallery">
+                  <div v-for="r in cockpitActiveBlockData.flat" :key="r.path"
+                       class="rv-gcard" :class="{'is-p0': r.priority==='P0','is-p1': r.priority==='P1'}"
+                       @click="cockpitOpenDoc(r)">
+                    <div class="rv-gcard-top">
+                      <span class="rv-gcard-num">{{r.eyebrow || cockpitActiveBlockData.label}}</span>
+                      <span v-if="r.priority" class="rv-gcard-prio" :class="'prio-'+r.priority">{{r.priority}}</span>
+                    </div>
+                    <div class="rv-gcard-title">{{r.title}}</div>
+                    <div class="rv-gcard-sub" v-if="r.subtitle">{{r.subtitle}}</div>
+                    <div class="rv-gcard-tags" v-if="r.tags && r.tags.length">
+                      <span v-for="(t, ti) in r.tags.slice(0,4)" :key="ti" class="rv-gcard-tag">{{t}}</span>
+                    </div>
+                    <div class="rv-gcard-foot">
+                      <span class="rv-gcard-size">{{r.date || ''}}</span>
+                      <span class="rv-gcard-open">打开 →</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 五年收入预测可视化 — 仅旗舰版块 -->
+                <div v-if="cockpitActiveBlockData.finale && cockpitActiveBlockData.finale.forecast" class="cp-forecast">
+                  <div class="cp-forecast-head">
+                    <div class="cp-forecast-rule"></div>
+                    <div class="cp-forecast-title">{{cockpitActiveBlockData.finale.forecast.title}}</div>
+                    <div class="cp-forecast-sub">{{cockpitActiveBlockData.finale.forecast.subtitle}}</div>
+                  </div>
+
+                  <!-- 堆叠柱状图 -->
+                  <div class="cp-forecast-chart">
+                    <div v-for="(yr, yi) in cockpitActiveBlockData.finale.forecast.years" :key="yi" class="cp-forecast-col">
+                      <div class="cp-forecast-bar-wrap">
+                        <div v-for="tk in cockpitActiveBlockData.finale.forecast.tracks" :key="tk.key"
+                             class="cp-forecast-bar-seg"
+                             :class="{'is-active': forecastSelectedTrack === tk.key, 'is-dimmed': forecastSelectedTrack && forecastSelectedTrack !== tk.key}"
+                             :style="{
+                               height: (tk.values[yi] / cockpitActiveBlockData.finale.forecast.tracks.reduce((s,t) => s + t.values[cockpitActiveBlockData.finale.forecast.tracks[0].values.length - 1], 0) * 280) + 'px',
+                               background: tk.color
+                             }"
+                             @click="toggleForecastTrack(tk.key)"
+                             :title="tk.label + ' ' + yr + ': ¥' + tk.values[yi] + '亿'">
+                          <span v-if="forecastSelectedTrack === tk.key" class="cp-forecast-bar-pct">
+                            {{(tk.values[yi] / cockpitActiveBlockData.finale.forecast.tracks.reduce((s,t) => s + t.values[yi], 0) * 100).toFixed(0)}}%
+                          </span>
+                        </div>
+                      </div>
+                      <div class="cp-forecast-bar-total">¥{{cockpitActiveBlockData.finale.forecast.tracks.reduce((s,t) => s + t.values[yi], 0).toFixed(1)}}亿</div>
+                      <div class="cp-forecast-bar-year">{{yr}}</div>
+                    </div>
+                  </div>
+
+                  <!-- 选中Track详情面板 -->
+                  <div v-if="forecastSelectedTrack" class="cp-forecast-detail">
+                    <div v-for="tk in cockpitActiveBlockData.finale.forecast.tracks.filter(t => t.key === forecastSelectedTrack)" :key="tk.key" class="cp-forecast-detail-inner">
+                      <div class="cp-forecast-detail-head">
+                        <span class="cp-forecast-detail-dot" :style="{background: tk.color}"></span>
+                        <span class="cp-forecast-detail-label">{{tk.label}}</span>
+                        <span class="cp-forecast-detail-close" @click="forecastSelectedTrack = null">✕</span>
+                      </div>
+                      <div class="cp-forecast-detail-row">
+                        <div v-for="(yr, yi) in cockpitActiveBlockData.finale.forecast.years" :key="yi" class="cp-forecast-detail-cell">
+                          <div class="cp-forecast-detail-year">{{yr}}</div>
+                          <div class="cp-forecast-detail-val" :style="{color: tk.color}">¥{{tk.values[yi]}}亿</div>
+                          <div class="cp-forecast-detail-pct">{{(tk.values[yi] / cockpitActiveBlockData.finale.forecast.tracks.reduce((s,t) => s + t.values[yi], 0) * 100).toFixed(1)}}%</div>
+                          <div class="cp-forecast-detail-bar">
+                            <div class="cp-forecast-detail-bar-fill" :style="{width: (tk.values[yi] / cockpitActiveBlockData.finale.forecast.tracks.reduce((s,t) => s + t.values[yi], 0) * 100) + '%', background: tk.color}"></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Track 图例 -->
+                  <div class="cp-forecast-legend">
+                    <div v-for="tk in cockpitActiveBlockData.finale.forecast.tracks" :key="tk.key"
+                         class="cp-forecast-legend-item"
+                         :class="{'is-active': forecastSelectedTrack === tk.key, 'is-dimmed': forecastSelectedTrack && forecastSelectedTrack !== tk.key}"
+                         @click="toggleForecastTrack(tk.key)">
+                      <span class="cp-forecast-legend-dot" :style="{background: tk.color}"></span>
+                      <span class="cp-forecast-legend-label">{{tk.label}}</span>
+                    </div>
+                  </div>
+
+                  <!-- 七条曲线明细 -->
+                  <div class="cp-forecast-curves">
+                    <div class="cp-forecast-curves-title">七条增长曲线 · Y5 明细</div>
+                    <div class="cp-forecast-curves-grid">
+                      <div v-for="c in cockpitActiveBlockData.finale.forecast.curves" :key="c.code" class="cp-forecast-curve-card">
+                        <div class="cp-forecast-curve-code">{{c.code}}</div>
+                        <div class="cp-forecast-curve-name">{{c.name}}</div>
+                        <div class="cp-forecast-curve-nums">
+                          <div class="cp-forecast-curve-rev">¥{{c.y5}}亿 <span class="cp-forecast-curve-ps">{{c.ps}} P/S</span></div>
+                          <div class="cp-forecast-curve-ev">EV ¥{{c.ev}}亿</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- EV 汇总 -->
+                  <div class="cp-forecast-ev">
+                    <div class="cp-forecast-ev-row">
+                      <div class="cp-forecast-ev-item">
+                        <div class="cp-forecast-ev-label">保守 25%</div>
+                        <div class="cp-forecast-ev-val">¥{{cockpitActiveBlockData.finale.forecast.ev.conservative}}亿</div>
+                      </div>
+                      <div class="cp-forecast-ev-item is-primary">
+                        <div class="cp-forecast-ev-label">中性 50%</div>
+                        <div class="cp-forecast-ev-val">¥{{cockpitActiveBlockData.finale.forecast.ev.neutral}}亿</div>
+                      </div>
+                      <div class="cp-forecast-ev-item">
+                        <div class="cp-forecast-ev-label">乐观 25%</div>
+                        <div class="cp-forecast-ev-val">¥{{cockpitActiveBlockData.finale.forecast.ev.optimistic}}亿</div>
+                      </div>
+                      <div class="cp-forecast-ev-item is-highlight">
+                        <div class="cp-forecast-ev-label">概率加权 EV</div>
+                        <div class="cp-forecast-ev-val">¥{{cockpitActiveBlockData.finale.forecast.ev.weighted}}亿</div>
+                        <div class="cp-forecast-ev-usd">≈ ${{Math.round(cockpitActiveBlockData.finale.forecast.ev.weighted / 7)}}亿 USD</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              <div v-if="!cockpitActiveBlockData.bloom && !(cockpitActiveBlockData.masters||[]).length && !(cockpitActiveBlockData.subGroups||[]).length && !(cockpitActiveBlockData.flat||[]).length"
+                   class="cp-empty">暂无文档</div>
+
+              <!-- Conclusions block for diagnosis / research -->
+              <div v-if="cockpitActiveBlockData.conclusions" class="cp-conclusions">
+                <div class="cp-concl-head">
+                  <div class="cp-concl-rule"></div>
+                  <div class="cp-concl-title">{{cockpitActiveBlockData.conclusions.title}}</div>
+                  <div class="cp-concl-subtitle">{{cockpitActiveBlockData.conclusions.subtitle}}</div>
+                </div>
+                <div class="cp-concl-grid">
+                  <div v-for="(p, pi) in cockpitActiveBlockData.conclusions.points" :key="pi"
+                       class="cp-concl-card" :style="{'--card-accent': p.accent}">
+                    <div class="cp-concl-card-top">
+                      <span class="cp-concl-tag">{{p.tag}}</span>
+                      <span class="cp-concl-num">{{String(pi+1).padStart(2,'0')}}</span>
+                    </div>
+                    <div class="cp-concl-card-label">{{p.label}}</div>
+                    <div class="cp-concl-card-evidence">{{p.evidence}}</div>
+                    <div class="cp-concl-card-source">{{p.source}}</div>
+                    <div class="cp-concl-card-arrow">
+                      <span class="cp-concl-arrow-icon">▸</span>
+                      <span class="cp-concl-arrow-text">{{p.arrow}}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Home: no block selected → soft guide -->
+            <div v-else class="cp-home-guide">
+              <div class="cp-home-arrow">↑</div>
+              <div class="cp-home-text">选择上方版块查看详情</div>
+            </div>
+          </template>
         </template>
+
+        <!-- Markdown editor modal -->
+        <div v-if="showCockpitEditor" class="cockpit-editor-mask" @click.self="closeCockpitEditor">
+          <div class="cockpit-editor">
+            <div class="ce-head">
+              <div class="ce-head-left">
+                <div class="ce-title">✎ cockpit.md · 数据源编辑</div>
+                <div class="ce-path">{{cockpitData?.path || 'Vault/Longfor/cockpit.md'}}</div>
+              </div>
+              <div class="ce-head-right">
+                <span v-if="mdEditorDirty" class="ce-dirty">● 未保存</span>
+                <button class="btn-ce-ghost" @click="reloadCockpitRaw" :disabled="mdEditorSaving">↻ 重新读取</button>
+                <button class="btn-ce-primary" @click="saveCockpitRaw" :disabled="mdEditorSaving || !mdEditorDirty">
+                  {{mdEditorSaving ? '保存中…' : '保存并刷新 ⌘S'}}
+                </button>
+                <button class="btn-ce-ghost" @click="closeCockpitEditor">关闭 Esc</button>
+              </div>
+            </div>
+            <textarea v-model="mdEditorContent"
+                      class="ce-textarea"
+                      spellcheck="false"
+                      @keydown.meta.s.prevent="saveCockpitRaw"
+                      @keydown.ctrl.s.prevent="saveCockpitRaw"
+                      @keydown.esc="closeCockpitEditor"
+                      @input="mdEditorDirty = true"></textarea>
+            <div class="ce-foot">
+              <span>{{mdEditorContent.length}} 字符 · 保存会自动备份到 <code>.cockpit.backup.md</code></span>
+              <span>保存后 UI 自动重新加载并回到当前位置</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- ══ NOTES ══ -->
@@ -906,7 +2031,10 @@
             <div v-for="(c,ci) in group.items" :key="c.time+c.text+ci" class="capture-row">
               <span class="capture-time">{{c.time}}</span>
               <span v-if="c.category" class="cat-tag" :style="{background:getCatColor(c.category)+'20',color:getCatColor(c.category)}">{{getCatName(c.category)}}</span>
-              <span class="capture-text" v-html="renderNoteText(c.text)"></span>
+              <div class="capture-text-wrap" :class="{'is-expanded': isNoteExpanded(group.date, ci)}" v-note-clamp @click="toggleNoteExpand($event, group.date, ci)">
+                <span class="capture-text" v-html="renderNoteText(c.text)"></span>
+                <span class="capture-expand-hint" aria-hidden="true"></span>
+              </div>
               <button class="note-del-btn" @click.stop="confirmDeleteNote(group.date, ci, c.text)" title="删除">✕</button>
             </div>
           </div>
@@ -958,7 +2086,7 @@
               <span class="tier-badge" :class="'tier-'+selectedContact.tier">{{tierLabel(selectedContact.tier)}}</span>
               <button class="btn-ghost btn-xs" @click="startEditContact" v-if="!editingContact">✏️ 编辑</button>
               <button class="btn-ghost btn-xs" v-if="!editingContact" @click="showMergeSelect=!showMergeSelect" title="合并联系人">🔗 合并</button>
-              <button class="btn-ghost" @click="selectedContact=null;editingContact=false;showMergeSelect=false">← 返回</button>
+              <button class="btn-ghost" @click="navBack()">← 返回</button>
             </div>
           </div>
 
@@ -1051,12 +2179,84 @@
         <!-- Contact List View -->
         <template v-else>
           <div class="tab-bar">
-            <button class="tab-btn" :class="{active:contactView==='list'}" @click="contactView='list'">📋 列表</button>
+            <button class="tab-btn" :class="{active:contactView==='org'}" @click="contactView='org'">🏢 组织架构</button>
+            <button class="tab-btn" :class="{active:contactView==='list'}" @click="contactView='list'">📋 联系人</button>
             <button class="tab-btn" :class="{active:contactView==='graph'}" @click="contactView='graph'">🕸 关系图</button>
             <button class="tab-btn" :class="{active:contactView==='cold'}" @click="contactView='cold'">
               🔥 需跟进
               <span v-if="coldContacts.length" class="tab-badge-red">{{coldContacts.length}}</span>
             </button>
+          </div>
+
+          <!-- Org Tree -->
+          <div v-if="contactView==='org'" class="org-tree-wrap">
+            <template v-for="node in orgTree[0].children" :key="node.key">
+              <div class="org-branch" :style="{'--branch-accent': node.accent}">
+                <div class="org-branch-head" @click="toggleOrgNode(node.key)">
+                  <span class="org-branch-expand" :class="{open: orgExpandedNodes.has(node.key)}">▸</span>
+                  <span class="org-branch-icon">{{node.icon}}</span>
+                  <span class="org-branch-label">{{node.label}}</span>
+                  <span class="org-branch-desc" v-if="node.desc">{{node.desc}}</span>
+                  <span class="org-branch-count" v-if="node.children">{{node.children.length}}</span>
+                </div>
+                <transition name="org-slide">
+                  <div v-if="orgExpandedNodes.has(node.key) && node.children" class="org-branch-children">
+                    <template v-for="child in node.children" :key="child.key">
+                      <div class="org-node" :style="{'--node-accent': child.accent || node.accent}">
+                        <div class="org-node-head" @click="child.children ? toggleOrgNode(child.key) : toggleOrgPersons(child.key)" :class="{expandable: !!child.children || !!child.persons}">
+                          <span class="org-tree-line"></span>
+                          <span class="org-node-icon">{{child.icon}}</span>
+                          <div class="org-node-info">
+                            <div class="org-node-label">{{child.label}}</div>
+                            <div v-if="child.tag" class="org-node-tag">{{child.tag}}</div>
+                          </div>
+                          <!-- Person count badge (clickable) -->
+                          <span v-if="child.persons && child.persons.length" class="org-person-badge" @click.stop="toggleOrgPersons(child.key)" :class="{open: orgPersonExpanded.has(child.key)}">
+                            {{child.persons.length}}人
+                          </span>
+                          <span v-if="child.children" class="org-node-expand" :class="{open: orgExpandedNodes.has(child.key)}">▸</span>
+                          <span v-if="child.ref" class="org-node-ref" @click.stop="toggleOrgNode(child.ref)">→ 展开</span>
+                        </div>
+                        <!-- Person cards (expandable) -->
+                        <transition name="org-slide">
+                          <div v-if="child.persons && orgPersonExpanded.has(child.key)" class="org-person-cards">
+                            <div v-for="(p, pi) in child.persons" :key="pi" class="org-person-card">
+                              <span class="org-person-card-name">{{p.name}}</span>
+                              <span class="org-person-card-title">{{p.title}}</span>
+                            </div>
+                          </div>
+                        </transition>
+                        <!-- Nested children (航道/BU) -->
+                        <transition name="org-slide">
+                          <div v-if="child.children && orgExpandedNodes.has(child.key)" class="org-node-children">
+                            <div v-for="bu in child.children" :key="bu.key" class="org-bu" :style="{'--bu-accent': bu.accent || child.accent}" @click="toggleOrgPersons(bu.key)">
+                              <span class="org-tree-line is-leaf"></span>
+                              <span class="org-bu-icon">{{bu.icon}}</span>
+                              <div class="org-bu-info">
+                                <div class="org-bu-label">{{bu.label}}</div>
+                                <div v-if="bu.tag" class="org-bu-tag">{{bu.tag}}</div>
+                              </div>
+                              <span v-if="bu.persons && bu.persons.length" class="org-person-badge is-small" :class="{open: orgPersonExpanded.has(bu.key)}">
+                                {{bu.persons.length}}人
+                              </span>
+                              <!-- BU person cards -->
+                              <transition name="org-slide">
+                                <div v-if="bu.persons && orgPersonExpanded.has(bu.key)" class="org-person-cards is-inline" @click.stop>
+                                  <div v-for="(p, pi) in bu.persons" :key="pi" class="org-person-card is-small">
+                                    <span class="org-person-card-name">{{p.name}}</span>
+                                    <span class="org-person-card-title">{{p.title}}</span>
+                                  </div>
+                                </div>
+                              </transition>
+                            </div>
+                          </div>
+                        </transition>
+                      </div>
+                    </template>
+                  </div>
+                </transition>
+              </div>
+            </template>
           </div>
 
           <!-- Cold contacts -->
@@ -1495,7 +2695,7 @@
       <!-- ══ FILES ══ -->
       <div v-if="view==='files'" class="view view-wide" key="files">
         <div v-if="currentFile" class="card">
-          <div class="card-top"><span class="card-label">{{currentFilePath}}</span><button class="btn-ghost" @click="currentFile=null">← 返回</button></div>
+          <div class="card-top"><span class="card-label">{{currentFilePath}}</span><button class="btn-ghost" @click="navBack()">← 返回</button></div>
           <div class="rendered-md file-content" v-html="currentFileHtml"></div>
         </div>
         <template v-else>
@@ -1542,6 +2742,742 @@
         </template>
       </div>
 
+      <!-- ══ INTERVIEWS 访谈 ══ -->
+      <div v-if="view==='interviews'" class="view view-wide" key="interviews">
+        <!-- Detail view (精排: Meta → 缺口 → 处方 → 总结 → 转录) -->
+        <div v-if="selectedInterview" class="iv-detail">
+          <nav class="rv-crumbs">
+            <a class="rv-crumb" @click="selectedInterview=null">访谈库</a>
+            <span class="rv-crumb-sep">›</span>
+            <span class="rv-crumb is-current">{{ selectedInterview.title || selectedInterview.name }}</span>
+          </nav>
+          <div class="iv-actionbar">
+            <button class="btn-ghost rv-back" @click="selectedInterview=null">← 返回</button>
+            <a v-if="interviewMeta.url" :href="interviewMeta.url" target="_blank" class="btn-ghost">🔗 TicNote</a>
+          </div>
+
+          <!-- Hero -->
+          <div class="iv-hero">
+            <div class="iv-hero-icon">🎙️</div>
+            <div class="iv-hero-body">
+              <div class="iv-hero-eyebrow">访谈纪要</div>
+              <h2 class="iv-hero-title">{{ selectedInterview.title || selectedInterview.name }}</h2>
+              <div class="iv-hero-pills">
+                <span v-if="interviewMeta.date" class="iv-pill"><span class="iv-pill-k">日期</span><span class="iv-pill-v">{{ interviewMeta.date }}</span></span>
+                <span v-if="interviewMeta.duration" class="iv-pill"><span class="iv-pill-k">时长</span><span class="iv-pill-v">{{ interviewMeta.duration }}</span></span>
+                <span v-for="t in interviewTags" :key="t" class="iv-pill is-tag"><span class="iv-pill-v">{{ t }}</span></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 三 Tab 切换 -->
+          <div class="iv-tabs">
+            <button class="iv-tab" :class="{active: interviewTab==='summary'}" @click="interviewTab='summary'">
+              <span class="iv-tab-icon">📋</span> 总结
+            </button>
+            <button class="iv-tab" :class="{active: interviewTab==='transcript'}" @click="interviewTab='transcript'">
+              <span class="iv-tab-icon">🎤</span> 转录
+              <span class="iv-tab-count" v-if="interviewTranscriptBlocks.length">{{interviewTranscriptBlocks.length}}</span>
+            </button>
+            <button class="iv-tab" :class="{active: interviewTab==='insights'}" @click="interviewTab='insights'">
+              <span class="iv-tab-icon">💡</span> 洞察
+            </button>
+          </div>
+
+          <!-- Tab 1: 总结 -->
+          <div v-if="interviewTab==='summary'" class="iv-tab-content">
+            <div v-for="(sec, si) in interviewSummarySections" :key="si" class="iv-sum-card">
+              <div class="iv-sum-card-head">
+                <span class="iv-sum-card-num">{{ String(si+1).padStart(2,'0') }}</span>
+                <span class="iv-sum-card-icon">{{ sec.icon }}</span>
+                <span class="iv-sum-card-title">{{ sec.title }}</span>
+              </div>
+              <div class="iv-sum-card-body rendered-md" v-html="renderMd(sec.body)"></div>
+            </div>
+            <!-- Fallback if no sections parsed -->
+            <div v-if="!interviewSummarySections.length && interviewSummary" class="iv-sum-card">
+              <div class="iv-sum-card-body rendered-md" v-html="renderMd(interviewSummary)"></div>
+            </div>
+          </div>
+
+          <!-- Tab 2: 转录 -->
+          <div v-if="interviewTab==='transcript'" class="iv-tab-content">
+            <!-- Editable speaker mapping -->
+            <div class="iv-speaker-map" v-if="Object.keys(interviewSpeakerMap).length">
+              <div class="iv-speaker-map-title">说话人识别 <span class="iv-speaker-map-hint">（点击名称可修改）</span></div>
+              <div class="iv-speaker-map-grid">
+                <div v-for="(name, rawKey) in interviewSpeakerMap" :key="rawKey" class="iv-speaker-map-row"
+                     :style="{'--sc': SPEAKER_COLORS[parseInt(rawKey.replace(/\D/g,''))||0] || '#60a5fa'}">
+                  <span class="iv-speaker-map-dot" :style="{background: 'var(--sc)'}"></span>
+                  <span class="iv-speaker-map-key">{{ rawKey }}</span>
+                  <span class="iv-speaker-map-arrow">→</span>
+                  <input class="iv-speaker-map-input" :value="name"
+                         @change="updateSpeakerName(rawKey, $event.target.value)"
+                         @keyup.enter="$event.target.blur()"
+                         :style="{color: 'var(--sc)', borderColor: 'var(--sc)'}">
+                </div>
+              </div>
+            </div>
+            <!-- Speaker legend -->
+            <div class="iv-trans-legend" v-if="interviewInsights.speakerStats && interviewInsights.speakerStats.length">
+              <span v-for="s in interviewInsights.speakerStats" :key="s.speakerRaw||s.speaker" class="iv-trans-speaker-chip" :style="{borderColor: s.color}">
+                <span class="iv-trans-speaker-dot" :style="{background: s.color}"></span>
+                {{ s.speaker }} <span class="iv-trans-speaker-pct">{{ s.pct }}%</span>
+              </span>
+            </div>
+            <!-- Transcript blocks -->
+            <div class="iv-trans-blocks">
+              <div v-for="(b, bi) in interviewTranscriptBlocks" :key="bi" class="iv-trans-block"
+                   :style="{'--speaker-color': SPEAKER_COLORS[parseInt((b.speakerRaw||b.speaker).replace(/\D/g,''))||0] || '#60a5fa'}">
+                <div class="iv-trans-gutter">
+                  <div class="iv-trans-avatar" :style="{background: 'var(--speaker-color)'}">
+                    {{ b.speaker.substring(0,1) }}
+                  </div>
+                  <div class="iv-trans-line"></div>
+                </div>
+                <div class="iv-trans-content">
+                  <div class="iv-trans-meta">
+                    <span class="iv-trans-name" :style="{color: 'var(--speaker-color)'}">{{ b.speaker }}</span>
+                    <span class="iv-trans-time">{{ b.time }}</span>
+                  </div>
+                  <div class="iv-trans-text">{{ b.text }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 3: 洞察 -->
+          <div v-if="interviewTab==='insights'" class="iv-tab-content">
+            <!-- Overview -->
+            <div class="iv-insight-card iv-insight-overview">
+              <div class="iv-insight-card-icon">📊</div>
+              <div class="iv-insight-card-body">
+                <div class="iv-insight-card-title">会议概览</div>
+                <div class="iv-insight-card-text">{{ interviewInsights.overview }}</div>
+              </div>
+            </div>
+
+            <!-- Speaker distribution -->
+            <div class="iv-insight-card" v-if="interviewInsights.speakerStats && interviewInsights.speakerStats.length">
+              <div class="iv-insight-card-icon">🎙️</div>
+              <div class="iv-insight-card-body">
+                <div class="iv-insight-card-title">发言占比</div>
+                <div class="iv-insight-bars">
+                  <div v-for="s in interviewInsights.speakerStats" :key="s.speakerRaw||s.speaker" class="iv-insight-bar-row">
+                    <span class="iv-insight-bar-label">{{ s.speaker }}</span>
+                    <div class="iv-insight-bar-track">
+                      <div class="iv-insight-bar-fill" :style="{width: s.pct+'%', background: s.color}"></div>
+                    </div>
+                    <span class="iv-insight-bar-pct">{{ s.pct }}%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Key signals -->
+            <div class="iv-insight-card" v-if="interviewInsights.keySignals && interviewInsights.keySignals.length">
+              <div class="iv-insight-card-icon">🔑</div>
+              <div class="iv-insight-card-body">
+                <div class="iv-insight-card-title">关键信号</div>
+                <div v-for="(sig, si) in interviewInsights.keySignals" :key="si" class="iv-insight-signal">
+                  <span class="iv-insight-signal-icon">{{ sig.icon }}</span>
+                  <div>
+                    <div class="iv-insight-signal-title">{{ sig.title }}</div>
+                    <div class="iv-insight-signal-text">{{ sig.text }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Consensus -->
+            <div class="iv-insight-card" v-for="(c, ci) in interviewInsights.consensus" :key="'c'+ci">
+              <div class="iv-insight-card-icon">🤝</div>
+              <div class="iv-insight-card-body">
+                <div class="iv-insight-card-title">达成共识</div>
+                <div class="iv-insight-card-text rendered-md" v-html="renderMd(c.text)"></div>
+              </div>
+            </div>
+
+            <!-- Risks -->
+            <div class="iv-insight-card iv-insight-risk" v-for="(r, ri) in interviewInsights.risks" :key="'r'+ri">
+              <div class="iv-insight-card-icon">⚠️</div>
+              <div class="iv-insight-card-body">
+                <div class="iv-insight-card-title">未解决 / 风险</div>
+                <div class="iv-insight-card-text rendered-md" v-html="renderMd(r.text)"></div>
+              </div>
+            </div>
+
+            <!-- Action items -->
+            <div class="iv-insight-card" v-if="interviewInsights.actionItems && interviewInsights.actionItems.length">
+              <div class="iv-insight-card-icon">📌</div>
+              <div class="iv-insight-card-body">
+                <div class="iv-insight-card-title">行动项</div>
+                <div v-for="(a, ai) in interviewInsights.actionItems" :key="ai" class="iv-insight-action">
+                  <span class="iv-insight-action-bullet">→</span>
+                  <span>{{ a }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══ Candidate Detail (面试 5-tab) ══ -->
+        <div v-else-if="selectedCandidate && candidateData" class="hi-detail">
+          <nav class="rv-crumbs">
+            <a class="rv-crumb" @click="selectedCandidate=null;candidateData=null">访谈库</a>
+            <span class="rv-crumb-sep">›</span>
+            <span class="rv-crumb is-current">面试 · {{ candidateData.name }}</span>
+          </nav>
+          <div class="iv-actionbar">
+            <button class="btn-ghost rv-back" @click="selectedCandidate=null;candidateData=null">← 返回</button>
+          </div>
+
+          <!-- Hero -->
+          <div class="hi-hero">
+            <div class="hi-hero-avatar">{{ candidateData.name.substring(0,1) }}</div>
+            <div class="hi-hero-body">
+              <div class="hi-hero-eyebrow">面试候选人</div>
+              <h2 class="hi-hero-name">{{ candidateData.name }}</h2>
+              <div class="hi-hero-position">{{ candidateData.position?.title }}</div>
+              <div class="hi-hero-pills">
+                <span class="hi-pill hi-pill-status" :class="'hi-s-'+candidateData.status">{{ candidateData.status }}</span>
+                <span class="hi-pill">{{ candidateData.position?.source }}</span>
+                <span class="hi-pill" v-if="candidateData.resume?.match_score">匹配度 {{ candidateData.resume.match_score }}/{{ candidateData.resume.match_max }}</span>
+                <span class="hi-pill" v-if="candidateData.date">{{ candidateData.date }}</span>
+              </div>
+            </div>
+            <!-- Score ring -->
+            <div class="hi-hero-score" v-if="candidateData.resume?.match_score">
+              <svg viewBox="0 0 40 40" class="hi-score-ring">
+                <circle cx="20" cy="20" r="16" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="3"/>
+                <circle cx="20" cy="20" r="16" fill="none" stroke="#06b6d4" stroke-width="3"
+                  stroke-dasharray="100.5" :stroke-dashoffset="100.5 - (candidateData.resume.match_score / candidateData.resume.match_max) * 100.5"
+                  stroke-linecap="round" transform="rotate(-90 20 20)"/>
+              </svg>
+              <div class="hi-score-num">{{ candidateData.resume.match_score }}<span>/{{ candidateData.resume.match_max }}</span></div>
+            </div>
+          </div>
+
+          <!-- 5 Tabs -->
+          <div class="hi-tabs">
+            <button class="hi-tab" :class="{active: candidateTab==='resume'}" @click="candidateTab='resume'">
+              <span class="hi-tab-icon">📄</span> 简历
+            </button>
+            <button class="hi-tab" :class="{active: candidateTab==='position'}" @click="candidateTab='position'">
+              <span class="hi-tab-icon">💼</span> 岗位
+            </button>
+            <button class="hi-tab" :class="{active: candidateTab==='interview'}" @click="candidateTab='interview'; candidateRoundSubTab='focus'">
+              <span class="hi-tab-icon">🎤</span> 面试
+              <span class="hi-tab-badge" v-if="candidateData.interview?.rounds?.length">{{ candidateData.interview.rounds.length }}</span>
+            </button>
+            <button class="hi-tab" :class="{active: candidateTab==='conclusion'}" @click="candidateTab='conclusion'">
+              <span class="hi-tab-icon" v-if="candidateData.conclusion?.decision && /录用|通过/.test(candidateData.conclusion.decision) && !/不/.test(candidateData.conclusion.decision)">✅</span>
+              <span class="hi-tab-icon" v-else-if="candidateData.conclusion?.decision && /不|拒|淘汰|fail/i.test(candidateData.conclusion.decision)">❌</span>
+              <span class="hi-tab-icon" v-else>📋</span> 结论
+            </button>
+          </div>
+
+          <!-- Tab: 简历 -->
+          <div v-if="candidateTab==='resume'" class="hi-tab-content">
+            <!-- Basic info -->
+            <div class="hi-card">
+              <div class="hi-card-head"><span class="hi-card-icon">👤</span> 基本信息</div>
+              <div class="hi-card-body">
+                <div class="hi-kv-grid">
+                  <div class="hi-kv" v-if="candidateData.resume?.basic?.age"><span class="hi-kv-k">年龄</span><span class="hi-kv-v">{{ candidateData.resume.basic.age }}岁</span></div>
+                  <div class="hi-kv" v-if="candidateData.resume?.basic?.experience_years"><span class="hi-kv-k">工作年限</span><span class="hi-kv-v">{{ candidateData.resume.basic.experience_years }}年</span></div>
+                  <div class="hi-kv" v-if="candidateData.resume?.basic?.education"><span class="hi-kv-k">学历</span><span class="hi-kv-v">{{ candidateData.resume.basic.education }}</span></div>
+                  <div class="hi-kv" v-if="candidateData.resume?.basic?.location"><span class="hi-kv-k">所在地</span><span class="hi-kv-v">{{ candidateData.resume.basic.location }}</span></div>
+                  <div class="hi-kv" v-if="candidateData.resume?.basic?.status"><span class="hi-kv-k">状态</span><span class="hi-kv-v">{{ candidateData.resume.basic.status }}</span></div>
+                  <div class="hi-kv" v-if="candidateData.resume?.basic?.salary_expect"><span class="hi-kv-k">薪资期望</span><span class="hi-kv-v">{{ candidateData.resume.basic.salary_expect }}</span></div>
+                  <div class="hi-kv" v-if="candidateData.resume?.basic?.gender"><span class="hi-kv-k">性别</span><span class="hi-kv-v">{{ candidateData.resume.basic.gender }}</span></div>
+                  <div class="hi-kv" v-if="candidateData.resume?.basic?.contact?.phone"><span class="hi-kv-k">电话</span><span class="hi-kv-v">{{ candidateData.resume.basic.contact.phone }}</span></div>
+                  <div class="hi-kv" v-if="candidateData.resume?.basic?.contact?.email"><span class="hi-kv-k">邮箱</span><span class="hi-kv-v">{{ candidateData.resume.basic.contact.email }}</span></div>
+                </div>
+              </div>
+            </div>
+            <!-- Work history -->
+            <div class="hi-card" v-if="candidateData.resume?.work_history?.length">
+              <div class="hi-card-head"><span class="hi-card-icon">🏢</span> 工作经历</div>
+              <div class="hi-card-body">
+                <div v-for="(w,wi) in candidateData.resume.work_history" :key="wi" class="hi-work-item">
+                  <div class="hi-work-period">{{ w.period }}</div>
+                  <div class="hi-work-main">
+                    <div class="hi-work-company">{{ w.company }} <span class="hi-work-role">{{ w.role }}</span></div>
+                    <div class="hi-work-highlights">{{ w.highlights }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Key projects -->
+            <div class="hi-card" v-if="candidateData.resume?.key_projects?.length">
+              <div class="hi-card-head"><span class="hi-card-icon">🚀</span> 核心项目</div>
+              <div class="hi-card-body">
+                <div v-for="(p,pi) in candidateData.resume.key_projects" :key="pi" class="hi-project-item">
+                  <div class="hi-project-head">
+                    <span class="hi-project-name">{{ p.name }}</span>
+                    <span class="hi-project-role">{{ p.role }}</span>
+                    <span class="hi-project-period">{{ p.period }}</span>
+                  </div>
+                  <div class="hi-project-desc">{{ p.desc }}</div>
+                </div>
+              </div>
+            </div>
+            <!-- Tech stack -->
+            <div class="hi-card" v-if="candidateData.resume?.tech_stack">
+              <div class="hi-card-head"><span class="hi-card-icon">🛠️</span> 技术栈</div>
+              <div class="hi-card-body">
+                <div class="hi-kv-grid hi-kv-wide">
+                  <div class="hi-kv" v-for="(v,k) in candidateData.resume.tech_stack" :key="k">
+                    <span class="hi-kv-k">{{ k }}</span><span class="hi-kv-v">{{ v }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- AI Analysis -->
+            <div class="hi-card hi-card-ai" v-if="candidateData.resume?.ai_analysis">
+              <div class="hi-card-head"><span class="hi-card-icon">🤖</span> AI 简历分析</div>
+              <div class="hi-card-body">
+                <div class="hi-ai-section">
+                  <div class="hi-ai-label hi-ai-good">亮点</div>
+                  <div v-for="(s,si) in candidateData.resume.ai_analysis.strengths" :key="'s'+si" class="hi-ai-item hi-ai-item-good">
+                    <span class="hi-ai-bullet">+</span> {{ s }}
+                  </div>
+                </div>
+                <div class="hi-ai-section">
+                  <div class="hi-ai-label hi-ai-warn">风险/关注</div>
+                  <div v-for="(r,ri) in candidateData.resume.ai_analysis.risks" :key="'r'+ri" class="hi-ai-item hi-ai-item-warn">
+                    <span class="hi-ai-bullet">!</span> {{ r }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: 岗位 -->
+          <div v-if="candidateTab==='position'" class="hi-tab-content">
+            <div class="hi-card">
+              <div class="hi-card-head"><span class="hi-card-icon">💼</span> 岗位信息</div>
+              <div class="hi-card-body">
+                <div class="hi-kv-grid">
+                  <div class="hi-kv"><span class="hi-kv-k">岗位名称</span><span class="hi-kv-v">{{ candidateData.position?.title }}</span></div>
+                  <div class="hi-kv"><span class="hi-kv-k">来源</span><span class="hi-kv-v">{{ candidateData.position?.source }}</span></div>
+                  <div class="hi-kv"><span class="hi-kv-k">类型</span><span class="hi-kv-v">{{ candidateData.position?.type }}</span></div>
+                  <div class="hi-kv"><span class="hi-kv-k">战略对齐</span><span class="hi-kv-v">{{ candidateData.position?.strategic_fit }}</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="hi-card">
+              <div class="hi-card-head"><span class="hi-card-icon">📋</span> 为什么招这个人</div>
+              <div class="hi-card-body">
+                <div class="hi-text-block">{{ candidateData.position?.why }}</div>
+              </div>
+            </div>
+            <div class="hi-card" v-if="candidateData.position?.responsibilities?.length">
+              <div class="hi-card-head"><span class="hi-card-icon">🎯</span> 核心职责</div>
+              <div class="hi-card-body">
+                <div v-for="(r,ri) in candidateData.position.responsibilities" :key="ri" class="hi-resp-item">
+                  <span class="hi-resp-num">{{ String(ri+1).padStart(2,'0') }}</span>
+                  <span class="hi-resp-text">{{ r }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: 面试 -->
+          <div v-if="candidateTab==='interview'" class="hi-tab-content">
+            <div class="hi-card" v-if="candidateData.interview?.status === '未安排'">
+              <div class="hi-card-body" style="text-align:center;padding:3rem;">
+                <div style="font-size:2rem;margin-bottom:0.5rem;">📅</div>
+                <div style="color:var(--text-2);">面试尚未安排</div>
+              </div>
+            </div>
+            <!-- Interview rounds with sub-tabs -->
+            <div v-for="(round,ri) in (candidateData.interview?.rounds||[])" :key="ri" class="hi-card hi-round-card">
+              <div class="hi-card-head">
+                <span class="hi-card-icon">🎤</span>
+                {{ round.round || ('第'+(ri+1)+'轮') }}
+                <template v-if="round.interviewers"> · {{ round.interviewers.join(', ') }}</template>
+                <template v-else-if="round.interviewer"> · {{ round.interviewer }}</template>
+                <template v-if="round.date"> · {{ round.date }}</template>
+                <template v-if="round.duration"><span class="hi-round-duration">{{ round.duration }}</span></template>
+                <span v-if="round.verdict" class="hi-round-verdict" :class="{'hi-verdict-pass': round.verdict==='通过', 'hi-verdict-fail': round.verdict!=='通过'}">{{ round.verdict }}</span>
+              </div>
+              <!-- Assessment one-liner -->
+              <div v-if="round.assessment" class="hi-round-assessment">{{ round.assessment }}</div>
+              <!-- Sub-tabs: 考察点→转录→总结→洞察→要点 -->
+              <div class="hi-round-subtabs">
+                <button class="hi-round-subtab" :class="{active: candidateRoundSubTab==='focus'}" @click="candidateRoundSubTab='focus'" v-if="candidateData.interview?.focus_areas?.length">考察点</button>
+                <button class="hi-round-subtab" :class="{active: candidateRoundSubTab==='transcript'}" @click="candidateRoundSubTab='transcript'; loadRoundTranscript(round)" v-if="round.transcript_source">转录 <span class="hi-round-subtab-count" v-if="candidateTransBlocks.length">{{ candidateTransBlocks.length }}</span></button>
+                <button class="hi-round-subtab" :class="{active: candidateRoundSubTab==='summary'}" @click="candidateRoundSubTab='summary'; if(!candidateSumSections.length && round.transcript_source) loadRoundTranscript(round); else loadRoundSummary(round)" v-if="round.summary || round.transcript_source">总结</button>
+                <button class="hi-round-subtab" :class="{active: candidateRoundSubTab==='insights'}" @click="candidateRoundSubTab='insights'" v-if="round.insights?.length">洞察 <span class="hi-round-subtab-count">{{ round.insights.length }}</span></button>
+                <button class="hi-round-subtab" :class="{active: candidateRoundSubTab==='observations'}" @click="candidateRoundSubTab='observations'" v-if="round.key_observations?.length">要点</button>
+              </div>
+              <div class="hi-card-body">
+                <!-- Sub-tab: 考察点 -->
+                <div v-if="candidateRoundSubTab==='focus' && candidateData.interview?.focus_areas?.length" class="hi-round-panel">
+                  <div v-for="(a,ai) in candidateData.interview.focus_areas" :key="ai" class="hi-focus-item">
+                    <span class="hi-focus-num">{{ ai+1 }}</span>
+                    <span class="hi-focus-text">{{ a }}</span>
+                  </div>
+                </div>
+                <!-- Sub-tab: 转录 (高质量 speaker blocks) -->
+                <div v-if="candidateRoundSubTab==='transcript'" class="hi-round-panel hi-transcript-panel">
+                  <!-- Speaker map -->
+                  <div class="iv-speaker-map" v-if="Object.keys(candidateSpeakerMap).length">
+                    <div class="iv-speaker-map-title">说话人识别</div>
+                    <div class="iv-speaker-map-grid">
+                      <div v-for="(name, rawKey) in candidateSpeakerMap" :key="rawKey" class="iv-speaker-map-row"
+                           :style="{'--sc': SPEAKER_COLORS[parseInt(rawKey.replace(/\D/g,''))||0] || '#60a5fa'}">
+                        <span class="iv-speaker-map-dot" :style="{background: 'var(--sc)'}"></span>
+                        <span class="iv-speaker-map-key">{{ rawKey }}</span>
+                        <span class="iv-speaker-map-arrow">→</span>
+                        <span class="iv-speaker-map-name" :style="{color: 'var(--sc)'}">{{ name }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- Structured speaker blocks -->
+                  <div v-if="candidateTransBlocks.length" class="iv-trans-blocks">
+                    <div v-for="(b, bi) in candidateTransBlocks" :key="bi" class="iv-trans-block"
+                         :style="{'--speaker-color': SPEAKER_COLORS[parseInt((b.speakerRaw||b.speaker).replace(/\D/g,''))||0] || '#60a5fa'}">
+                      <div class="iv-trans-gutter">
+                        <div class="iv-trans-avatar" :style="{background: 'var(--speaker-color)'}">
+                          {{ b.speaker.substring(0,1) }}
+                        </div>
+                        <div class="iv-trans-line"></div>
+                      </div>
+                      <div class="iv-trans-content">
+                        <div class="iv-trans-meta">
+                          <span class="iv-trans-name" :style="{color: 'var(--speaker-color)'}">{{ b.speaker }}</span>
+                          <span class="iv-trans-time">{{ b.time }}</span>
+                        </div>
+                        <div class="iv-trans-text">{{ b.text }}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- Fallback: raw markdown -->
+                  <div v-else class="hi-transcript-content rendered-md" v-html="renderMd(candidateTranscript)"></div>
+                </div>
+                <!-- Sub-tab: 总结 (高质量 sectioned cards) -->
+                <div v-if="candidateRoundSubTab==='summary'" class="hi-round-panel">
+                  <!-- Structured summary sections (from TicNote) -->
+                  <div v-if="candidateSumSections.length">
+                    <div v-for="(sec, si) in candidateSumSections" :key="si" class="iv-sum-card">
+                      <div class="iv-sum-card-head">
+                        <span class="iv-sum-card-num">{{ String(si+1).padStart(2,'0') }}</span>
+                        <span class="iv-sum-card-icon">{{ sec.icon }}</span>
+                        <span class="iv-sum-card-title">{{ sec.title }}</span>
+                      </div>
+                      <div class="iv-sum-card-body rendered-md" v-html="renderMd(sec.body)"></div>
+                    </div>
+                  </div>
+                  <!-- Fallback: round.summary as markdown -->
+                  <div v-else-if="round.summary" class="rendered-md" v-html="renderMd(round.summary)"></div>
+                  <div v-else style="text-align:center;padding:2rem;color:var(--text-2);">请先点击"转录"加载数据</div>
+                </div>
+                <!-- Sub-tab: 洞察 -->
+                <div v-if="candidateRoundSubTab==='insights' && round.insights?.length" class="hi-round-panel">
+                  <div v-for="(ins,ii) in round.insights" :key="ii" class="hi-insight-card">
+                    <div class="hi-insight-icon">{{ ins.icon || '💡' }}</div>
+                    <div class="hi-insight-body">
+                      <div class="hi-insight-title">{{ ins.title }}</div>
+                      <div class="hi-insight-text">{{ ins.text }}</div>
+                    </div>
+                  </div>
+                </div>
+                <!-- Sub-tab: 要点 -->
+                <div v-if="candidateRoundSubTab==='observations' && round.key_observations?.length" class="hi-round-panel">
+                  <div v-for="(obs,oi) in round.key_observations" :key="oi" class="hi-observation-item">
+                    <span class="hi-observation-bullet">{{ oi+1 }}</span>
+                    <span>{{ obs }}</span>
+                  </div>
+                </div>
+                <!-- Fallback: old format (transcript/ai_analysis fields) -->
+                <div v-if="!candidateData.interview?.focus_areas?.length && !round.summary && !round.insights?.length && !round.transcript_source && !round.key_observations?.length">
+                  <div v-if="round.transcript" class="hi-text-block" v-html="renderMd(round.transcript)"></div>
+                  <div v-if="round.ai_analysis" class="hi-text-block" v-html="renderMd(round.ai_analysis)"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: 结论 -->
+          <div v-if="candidateTab==='conclusion'" class="hi-tab-content">
+            <div class="hi-card hi-card-verdict" :class="{'hi-verdict-yes': candidateData.conclusion?.ai_recommendation && !candidateData.conclusion.ai_recommendation.includes('不'), 'hi-verdict-no': candidateData.conclusion?.ai_recommendation?.includes('不')}">
+              <div class="hi-card-head"><span class="hi-card-icon">🤖</span> AI 建议</div>
+              <div class="hi-card-body">
+                <div class="hi-verdict-badge">{{ candidateData.conclusion?.ai_recommendation }}</div>
+                <div class="hi-text-block">{{ candidateData.conclusion?.ai_reasoning }}</div>
+              </div>
+            </div>
+            <div class="hi-card" :class="{'hi-verdict-yes': candidateData.conclusion?.decision && /录用|通过/.test(candidateData.conclusion.decision) && !/不/.test(candidateData.conclusion.decision), 'hi-verdict-no': candidateData.conclusion?.decision && /不|拒|淘汰|fail/i.test(candidateData.conclusion.decision)}">
+              <div class="hi-card-head">
+                <span class="hi-card-icon" v-if="candidateData.conclusion?.decision && /录用|通过/.test(candidateData.conclusion.decision) && !/不/.test(candidateData.conclusion.decision)">✅</span>
+                <span class="hi-card-icon" v-else-if="candidateData.conclusion?.decision && /不|拒|淘汰|fail/i.test(candidateData.conclusion.decision)">❌</span>
+                <span class="hi-card-icon" v-else>⏳</span>
+                最终决策
+              </div>
+              <div class="hi-card-body">
+                <template v-if="candidateData.conclusion?.decision">
+                  <div class="hi-kv-grid">
+                    <div class="hi-kv"><span class="hi-kv-k">决策</span><span class="hi-kv-v">{{ candidateData.conclusion.decision }}</span></div>
+                    <div class="hi-kv"><span class="hi-kv-k">决策人</span><span class="hi-kv-v">{{ candidateData.conclusion.decision_by }}</span></div>
+                    <div class="hi-kv"><span class="hi-kv-k">日期</span><span class="hi-kv-v">{{ candidateData.conclusion.decision_date }}</span></div>
+                  </div>
+                  <div class="hi-text-block" v-if="candidateData.conclusion.notes">{{ candidateData.conclusion.notes }}</div>
+                </template>
+                <div v-else style="text-align:center;padding:2rem;color:var(--text-2);">
+                  待面试后填写
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══ List view ══ -->
+        <template v-else>
+          <div class="iv-list-head">
+            <div class="iv-list-eyebrow">INTERVIEWS · 访谈库</div>
+            <div class="iv-list-hint">按日期分组 · 正式诊断/处方请移步 <a class="iv-link" @click="setView('reports')">战略驾舱 · 内部诊断</a></div>
+          </div>
+
+          <!-- Stats panel: 4 metric tiles with subtle entrance animation -->
+          <div class="iv-stats">
+            <div class="iv-stat" style="animation-delay:.00s">
+              <div class="iv-stat-row">
+                <span class="iv-stat-n">{{ interviewStats.files }}</span>
+                <span class="iv-stat-u">份</span>
+              </div>
+              <div class="iv-stat-l">访谈采集</div>
+            </div>
+            <div class="iv-stat" style="animation-delay:.06s">
+              <div class="iv-stat-row">
+                <span class="iv-stat-n">{{ interviewStats.mins }}</span>
+                <span class="iv-stat-u">min</span>
+              </div>
+              <div class="iv-stat-l">语音时长</div>
+            </div>
+            <div class="iv-stat" style="animation-delay:.12s">
+              <div class="iv-stat-row">
+                <span class="iv-stat-n">{{ interviewStats.wan }}</span>
+                <span class="iv-stat-u">万字</span>
+              </div>
+              <div class="iv-stat-l">访谈稿累计</div>
+            </div>
+            <div class="iv-stat iv-stat--accent" style="animation-delay:.18s">
+              <div class="iv-stat-row">
+                <span class="iv-stat-n">{{ interviewStats.diagN }}</span>
+                <span class="iv-stat-u">份</span>
+              </div>
+              <div class="iv-stat-l">生成诊断</div>
+            </div>
+          </div>
+
+          <!-- Category filter chips -->
+          <div class="iv-cat-chips">
+            <button v-for="c in interviewCats" :key="c" class="iv-cat-chip" :class="{active: interviewCatFilter===c}" @click="interviewCatFilter=c">
+              {{ c === '全部' ? '全部' : c }}
+              <span class="iv-cat-chip-count" v-if="c==='面试'">{{ hiringList.length }}</span>
+              <span class="iv-cat-chip-count" v-else-if="interviewStats.byCat[c]">{{ interviewStats.byCat[c].files }}</span>
+            </button>
+          </div>
+
+          <!-- Hiring candidates section (shown when 全部 or 面试) -->
+          <div v-if="hiringList.length && (interviewCatFilter==='全部' || interviewCatFilter==='面试')" class="hi-list-section">
+            <div class="hi-list-head">
+              <span class="hi-list-icon">👤</span>
+              <span class="hi-list-title">面试候选人</span>
+              <span class="hi-list-count">{{ hiringList.length }}</span>
+            </div>
+            <div class="hi-list-grid">
+              <div v-for="c in hiringList" :key="c.id" @click="openCandidate(c)" class="hi-list-card">
+                <div class="hi-list-card-avatar">{{ c.name.substring(0,1) }}</div>
+                <div class="hi-list-card-body">
+                  <div class="hi-list-card-name">{{ c.name }}</div>
+                  <div class="hi-list-card-pos">{{ c.position }}</div>
+                  <div class="hi-list-card-meta">
+                    <span class="hi-list-card-status" :class="'hi-s-'+c.status">{{ c.status }}</span>
+                    <span v-if="c.source" class="hi-list-card-source">{{ c.source }}</span>
+                    <span v-if="c.match_score" class="hi-list-card-score">{{ c.match_score }}/5</span>
+                  </div>
+                </div>
+                <span class="hi-list-card-arrow">→</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Interview groups (hidden when 面试 filter is active) -->
+          <template v-if="interviewCatFilter!=='面试'">
+            <div v-for="g in filteredInterviewGroups" :key="g.date" class="iv-group">
+              <div class="iv-group-head" @click="g._open=!g._open">
+                <span class="iv-group-icon">📅</span>
+                <span class="iv-group-date">{{g.date}}</span>
+                <span class="iv-group-count">{{filteredFiles(g).length}}</span>
+                <span class="iv-group-chevron">{{ g._open ? '▾' : '▸' }}</span>
+              </div>
+              <div v-if="g._open" class="iv-group-body">
+                <div v-for="f in filteredFiles(g)" :key="f.path" @click="openInterview(f)" class="iv-file">
+                  <div class="iv-file-icon" :class="{
+                    'iv-icon-ext': f.org.includes('外部'),
+                    'iv-icon-c': f.org.includes('C1')||f.org.includes('C2')||f.org.includes('C3')||f.org.includes('C4')||f.org.includes('C5'),
+                    'iv-icon-hr': f.org.includes('HR')||f.org.includes('集团'),
+                    'iv-icon-bu': !f.org.includes('外部') && !f.org.includes('C') && !f.org.includes('HR') && !f.org.includes('集团')
+                  }">
+                    {{f.org.includes('外部')?'🌐':f.org.includes('C')?'🏢':f.org.includes('HR')||f.org.includes('集团')?'👤':'🎙️'}}
+                  </div>
+                  <div class="iv-file-body">
+                    <div class="iv-file-title">{{f.title || f.name}}</div>
+                    <div class="iv-file-meta">
+                      <span v-if="f.cat" class="iv-file-cat">{{f.cat}}</span>
+                      <span v-if="f.org" class="iv-file-org">{{f.org}}</span>
+                      <span v-if="f.time">{{f.time}}</span>
+                      <span v-if="f.duration">⏱ {{f.duration}}</span>
+                      <span>{{f.size > 1024 ? Math.round(f.size/1024)+'KB' : f.size+'B'}}</span>
+                    </div>
+                  </div>
+                  <span class="iv-file-open">→</span>
+                </div>
+              </div>
+            </div>
+          </template>
+          <div v-if="!interviewGroups.length && !hiringList.length" class="card"><div class="empty-lg">暂无访谈记录</div></div>
+        </template>
+      </div>
+
+      <!-- ══ REPORTS 汇报 ══ -->
+      <div v-if="view==='reports'" class="view view-wide" key="reports">
+        <!-- ─── Detail view: cockpit-grade layout ─── -->
+        <div v-if="selectedReport && reportParsed && !reportEditing" class="rv-wrap" ref="rvWrap">
+          <div class="rv-aurora" aria-hidden="true"></div>
+          <div class="rv-progress" aria-hidden="true"><div class="rv-progress-bar" ref="rvProgressBar"></div></div>
+          <!-- Breadcrumb -->
+          <nav class="rv-crumbs" v-if="currentDocBreadcrumb.length">
+            <template v-for="(c, ci) in currentDocBreadcrumb" :key="ci">
+              <span v-if="ci>0" class="rv-crumb-sep">›</span>
+              <span v-if="c.isCurrent" class="rv-crumb is-current">{{ c.label }}</span>
+              <a v-else class="rv-crumb" @click="selectedReport=null; navigateToBreadcrumb(c)">{{ c.label }}</a>
+            </template>
+          </nav>
+          <div class="rv-actionbar">
+            <button class="btn-ghost rv-back" @click="selectedReport=null">← 返回</button>
+            <button class="btn-ghost" @click="startEditReport">✏️ 编辑</button>
+          </div>
+          <section class="rv-hero">
+            <div class="rv-hero-eyebrow" v-if="reportParsed.eyebrow">{{ reportParsed.eyebrow }}</div>
+            <h1 class="rv-hero-title">{{ reportParsed.title }}</h1>
+            <div class="rv-hero-pills" v-if="reportParsed.metaPills.length">
+              <div v-for="(p, pi) in reportParsed.metaPills" :key="pi" class="rv-pill">
+                <span class="rv-pill-k">{{ p.key }}</span>
+                <span class="rv-pill-v">{{ p.val }}</span>
+              </div>
+            </div>
+            <div class="rv-hero-line"></div>
+          </section>
+          <div class="rv-body">
+            <aside class="rv-toc" v-if="reportParsed.sections.length > 1" :class="'rv-toc--' + tocMode">
+              <button class="rv-toc-toggle" @click="cycleTocMode" :title="tocMode==='full'?'收起目录':tocMode==='slim'?'隐藏目录':'展开目录'">
+                <span class="rv-toc-toggle-icon" :class="'is-' + tocMode">{{ tocMode==='hidden'?'☰':tocMode==='slim'?'◀':'✕' }}</span>
+              </button>
+              <div class="rv-toc-label" v-if="tocMode==='full'">目&nbsp;录</div>
+              <ul class="rv-toc-list">
+                <li v-for="s in reportParsed.sections" :key="s.id" @click="scrollToReportSection(s.id)" :class="{'is-unnum': !s.hasExplicitNum}">
+                  <span class="rv-toc-num">{{ s.num || '·' }}</span>
+                  <span class="rv-toc-txt" v-if="tocMode==='full'">{{ s.title }}</span>
+                </li>
+              </ul>
+            </aside>
+            <div class="rv-main">
+              <div v-if="reportParsed.prefaceHtml" class="rv-preface rendered-md" v-html="reportParsed.prefaceHtml"></div>
+              <section v-for="s in reportParsed.sections" :key="s.id" :id="s.id" class="rv-section" :class="{'is-unnum': !s.hasExplicitNum}">
+                <div class="rv-sec-head">
+                  <div class="rv-sec-num" v-if="s.hasExplicitNum">{{ s.num }}</div>
+                  <div class="rv-sec-num rv-sec-num-dot" v-else>◆</div>
+                  <div class="rv-sec-title-wrap">
+                    <div class="rv-sec-title">{{ s.title }}</div>
+                    <div class="rv-sec-rule"></div>
+                  </div>
+                </div>
+                <div class="rv-sec-body rendered-md" v-html="s.html"></div>
+              </section>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── Edit mode ─── -->
+        <div v-else-if="selectedReport && reportEditing" style="display:flex;flex-direction:column;gap:12px">
+          <div class="card" style="padding-bottom:12px">
+            <div class="card-top">
+              <span class="card-label" style="font-size:15px">{{selectedReport.title || selectedReport.name}}</span>
+              <div style="display:flex;gap:8px;align-items:center">
+                <button class="btn-primary" @click="saveReport">💾 保存</button>
+                <button class="btn-ghost" @click="reportEditing=false">取消</button>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <textarea v-model="reportEditText" class="input" style="min-height:500px;font-family:monospace;font-size:13px;line-height:1.6;white-space:pre-wrap"></textarea>
+          </div>
+        </div>
+
+        <!-- ─── Document browser: search + grouped cards ─── -->
+        <template v-else>
+          <!-- Header bar -->
+          <div class="rb-header">
+            <div class="rb-header-left">
+              <div class="rb-title">文档库</div>
+              <div class="rb-count">共 {{ reportsFlatAll.length }} 份</div>
+            </div>
+            <div class="rb-header-right">
+              <div class="rb-search-wrap">
+                <span class="rb-search-icon">🔍</span>
+                <input class="rb-search" v-model="reportsSearch" placeholder="搜索标题、标签…" />
+              </div>
+              <div class="rb-groupby">
+                <button class="rb-groupby-btn" :class="{'is-active': reportsGroupBy==='section'}" @click="reportsGroupBy='section'">版块</button>
+                <button class="rb-groupby-btn" :class="{'is-active': reportsGroupBy==='type'}" @click="reportsGroupBy='type'">类型</button>
+                <button class="rb-groupby-btn" :class="{'is-active': reportsGroupBy==='date'}" @click="reportsGroupBy='date'">日期</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Grouped collapsible cards -->
+          <div v-if="reportsGrouped.length" class="rb-groups">
+            <div v-for="grp in reportsGrouped" :key="grp.key" class="rb-group" :class="{'is-collapsed': !reportsExpandedGroups.has(grp.key)}">
+              <div class="rb-group-head" @click="toggleReportsGroup(grp.key)">
+                <span class="rb-group-chevron">{{ reportsExpandedGroups.has(grp.key) ? '▾' : '▸' }}</span>
+                <span class="rb-group-icon">{{ grp.icon }}</span>
+                <span class="rb-group-label">{{ grp.label }}</span>
+                <span class="rb-group-count">{{ grp.items.length }}</span>
+              </div>
+              <transition name="rb-slide">
+                <div v-if="reportsExpandedGroups.has(grp.key)" class="rb-group-body">
+                  <div v-for="r in grp.items" :key="r.path"
+                       class="rb-doc-card" :class="{'is-master': r._type==='master', 'is-p0': r.priority==='P0'}"
+                       @click="openReport(r)">
+                    <div class="rb-doc-top">
+                      <span class="rb-doc-sec-badge">{{ r._secIcon }} {{ r._secLabel }}</span>
+                      <span v-if="r._entityLabel" class="rb-doc-entity-badge">{{ r._entityLabel }}</span>
+                      <span v-if="r.priority" class="rb-doc-prio" :class="'prio-'+r.priority">{{ r.priority }}</span>
+                    </div>
+                    <div class="rb-doc-title">{{ r.title }}</div>
+                    <div v-if="r.subtitle" class="rb-doc-sub">{{ r.subtitle }}</div>
+                    <div class="rb-doc-foot">
+                      <span v-if="r.date" class="rb-doc-date">{{ r.date }}</span>
+                      <div class="rb-doc-tags" v-if="r.tags && r.tags.length">
+                        <span v-for="(t, ti) in r.tags.slice(0,3)" :key="ti" class="rb-doc-tag">{{ t }}</span>
+                      </div>
+                      <span class="rb-doc-open">打开 →</span>
+                    </div>
+                  </div>
+                </div>
+              </transition>
+            </div>
+          </div>
+          <div v-else-if="reportsSearch" class="rb-empty">没有匹配 "{{ reportsSearch }}" 的文档</div>
+          <div v-else class="rb-empty">暂无文档</div>
+        </template>
+      </div>
+
       <!-- ══ SETTINGS ══ -->
       <div v-if="view==='settings'" class="view" key="settings">
         <div class="card">
@@ -1551,6 +3487,24 @@
             <div class="form-group"><label class="form-label">起始日期</label><input v-model="settings.start_date" class="input" type="date"></div>
           </div>
           <div class="form-group"><label class="form-label">主目标</label><input v-model="settings.main_goal" class="input" placeholder="365天个人执行计划"><p class="settings-hint">显示在总览页面顶部</p></div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <span class="card-label">外观主题</span>
+            <span class="theme-current-label">{{ theme==='longfor' ? '龙湖蓝白' : '船长暗金' }}</span>
+          </div>
+          <div class="theme-toggle" :data-active="theme">
+            <div class="theme-toggle-indicator"></div>
+            <button class="theme-toggle-opt" :class="{active: theme==='dark'}" @click="setTheme('dark')">
+              <svg class="theme-opt-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+              <span>船长暗金</span>
+            </button>
+            <button class="theme-toggle-opt" :class="{active: theme==='longfor'}" @click="setTheme('longfor')">
+              <svg class="theme-opt-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+              <span>龙湖蓝白</span>
+            </button>
+          </div>
         </div>
 
         <div class="card">
@@ -1652,14 +3606,18 @@
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
   </button>
 
-  <!-- Note delete confirmation -->
-  <transition name="toast-fade">
-    <div v-if="noteDeleteConfirm" class="confirm-toast" key="del-toast">
-      <span class="confirm-toast-icon">⚠️</span>
-      <span class="confirm-toast-text">删除「{{ noteDeleteConfirm.preview }}」？</span>
-      <div class="confirm-toast-actions">
-        <button class="btn-confirm-del" @click="executeDeleteNote">删除</button>
-        <button class="btn-confirm-cancel" @click="noteDeleteConfirm=null">取消</button>
+  <!-- Note delete confirmation (modal, centered) -->
+  <transition name="fade">
+    <div v-if="noteDeleteConfirm" class="confirm-modal-overlay" @click.self="noteDeleteConfirm=null" key="del-modal">
+      <div class="confirm-modal">
+        <div class="cm-icon">🗑</div>
+        <div class="cm-title">确认删除这条速记？</div>
+        <div class="cm-preview">"{{ noteDeleteConfirm.preview }}"</div>
+        <div class="cm-hint">此操作不可撤销。</div>
+        <div class="cm-actions">
+          <button class="btn-cm-cancel" @click="noteDeleteConfirm=null">取消</button>
+          <button class="btn-cm-del" @click="executeDeleteNote">确认删除</button>
+        </div>
       </div>
     </div>
   </transition>
@@ -1696,7 +3654,212 @@
 
 <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<script src="https://unpkg.com/force-graph"></script>
-<script src="/app.js"></script>
+<script>/*force-graph lazy load — only needed on contacts graph view*/</script>
+<script src="/app.js?v=20260411c"></script>
+<script>
+/* ══════════════════════════════════════════════════════════════════════════
+   驾舱之上 · Cinematic Layer · rv-cine
+   vanilla JS，负责：滚动揭示、阅读进度、TOC 高亮、3D 倾斜、视差
+   通过 MutationObserver 监听 rv-wrap / rv-gallery 的出现与消失
+   ══════════════════════════════════════════════════════════════════════════ */
+(function() {
+  const rafThrottle = (fn) => {
+    let ticking = false;
+    return (...args) => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => { fn(...args); ticking = false; });
+    };
+  };
+
+  // --- rv-wrap (detail view) enhancements
+  let currentWrap = null;
+  let scrollRoot = null;
+  let sectionObs = null;
+  let tocItems = [];
+  let sectionEls = [];
+  let onScroll = null;
+  let activeIdx = -1;
+
+  // The app uses a .content element with overflow-y:auto as the scroll container.
+  function findScrollRoot(el) {
+    let p = el;
+    while (p && p !== document.body) {
+      const cs = getComputedStyle(p);
+      if ((cs.overflowY === 'auto' || cs.overflowY === 'scroll') &&
+          p.scrollHeight > p.clientHeight + 2) {
+        return p;
+      }
+      p = p.parentElement;
+    }
+    return window;
+  }
+
+  function detachWrap() {
+    if (sectionObs) { sectionObs.disconnect(); sectionObs = null; }
+    if (onScroll && scrollRoot) {
+      (scrollRoot === window ? window : scrollRoot).removeEventListener('scroll', onScroll);
+      onScroll = null;
+    }
+    tocItems = []; sectionEls = [];
+    currentWrap = null;
+    scrollRoot = null;
+    activeIdx = -1;
+  }
+
+  function attachWrap(wrap) {
+    if (currentWrap === wrap) return;
+    detachWrap();
+    currentWrap = wrap;
+
+    // Give Vue one tick to render sections
+    requestAnimationFrame(() => {
+      sectionEls = Array.from(wrap.querySelectorAll('.rv-section'));
+      tocItems = Array.from(wrap.querySelectorAll('.rv-toc-list li'));
+      if (!sectionEls.length) return;
+
+      scrollRoot = findScrollRoot(wrap);
+      const isWin = scrollRoot === window;
+      const rootEl = isWin ? null : scrollRoot;
+
+      // IntersectionObserver: section reveal (root = real scroll container)
+      sectionObs = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+          if (e.isIntersecting) {
+            e.target.classList.add('is-in');
+          }
+        });
+      }, { root: rootEl, rootMargin: '0px 0px -8% 0px', threshold: 0 });
+      sectionEls.forEach(s => sectionObs.observe(s));
+
+      // Reading progress + TOC active + hero parallax
+      const progressBar = wrap.querySelector('.rv-progress-bar');
+      const hero = wrap.querySelector('.rv-hero');
+      const viewHOf = () => isWin
+        ? (window.innerHeight || 800)
+        : scrollRoot.clientHeight;
+
+      onScroll = rafThrottle(() => {
+        const viewH = viewHOf();
+        // Reading progress — wrap vs scroll container geometry
+        let pct = 0;
+        if (isWin) {
+          const rect = wrap.getBoundingClientRect();
+          const total = rect.height - viewH;
+          const scrolled = Math.max(0, -rect.top);
+          pct = total > 0 ? Math.min(1, scrolled / total) : 0;
+        } else {
+          const wr = wrap.getBoundingClientRect();
+          const sr = scrollRoot.getBoundingClientRect();
+          const wrapTopInScroller = wr.top - sr.top + scrollRoot.scrollTop;
+          const scrolled = Math.max(0, scrollRoot.scrollTop - wrapTopInScroller);
+          const total = wrap.scrollHeight - viewH;
+          pct = total > 0 ? Math.min(1, scrolled / total) : 0;
+        }
+        if (progressBar) progressBar.style.width = (pct * 100).toFixed(2) + '%';
+
+        // Hero parallax — relative to viewport top inside scroll container
+        if (hero) {
+          const hr = hero.getBoundingClientRect();
+          const scrollerTop = isWin ? 0 : scrollRoot.getBoundingClientRect().top;
+          const relTop = hr.top - scrollerTop;
+          const py = Math.max(-60, Math.min(0, relTop * 0.25));
+          hero.style.setProperty('--rv-parallax', py + 'px');
+        }
+
+        // Active TOC: section whose top is closest to ~22% of viewport
+        const scrollerTop = isWin ? 0 : scrollRoot.getBoundingClientRect().top;
+        const anchor = scrollerTop + viewH * 0.22;
+        let best = -1; let bestDist = Infinity;
+        for (let i = 0; i < sectionEls.length; i++) {
+          const r = sectionEls[i].getBoundingClientRect();
+          const d = Math.abs(r.top - anchor);
+          if (r.top <= anchor + 80 && d < bestDist) {
+            best = i; bestDist = d;
+          }
+        }
+        if (best === -1 && sectionEls.length) best = 0;
+        if (best !== activeIdx) {
+          activeIdx = best;
+          tocItems.forEach((li, i) => li.classList.toggle('is-active', i === best));
+        }
+      });
+      (isWin ? window : scrollRoot).addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    });
+  }
+
+  // --- Gallery card 3D tilt
+  let galleryEl = null;
+  let galleryMoveHandler = null;
+  let galleryLeaveHandler = null;
+  function detachGallery() {
+    if (galleryEl && galleryMoveHandler) {
+      galleryEl.removeEventListener('mousemove', galleryMoveHandler, true);
+      galleryEl.removeEventListener('mouseleave', galleryLeaveHandler, true);
+    }
+    galleryEl = null; galleryMoveHandler = null; galleryLeaveHandler = null;
+  }
+  function attachGallery(gal) {
+    if (galleryEl === gal) return;
+    detachGallery();
+    galleryEl = gal;
+
+    const handler = rafThrottle((ev) => {
+      const card = ev.target && ev.target.closest ? ev.target.closest('.rv-gcard') : null;
+      if (!card) return;
+      const r = card.getBoundingClientRect();
+      const mx = ev.clientX - r.left;
+      const my = ev.clientY - r.top;
+      const cx = r.width / 2;
+      const cy = r.height / 2;
+      const dx = (mx - cx) / cx;   // -1..1
+      const dy = (my - cy) / cy;   // -1..1
+      const maxTilt = 7;           // degrees
+      const ry = dx * maxTilt;
+      const rx = -dy * maxTilt;
+      card.style.setProperty('--rx', rx.toFixed(2) + 'deg');
+      card.style.setProperty('--ry', ry.toFixed(2) + 'deg');
+      card.style.setProperty('--mx', (mx / r.width * 100).toFixed(1) + '%');
+      card.style.setProperty('--my', (my / r.height * 100).toFixed(1) + '%');
+    });
+    const leave = (ev) => {
+      const card = ev.target && ev.target.closest ? ev.target.closest('.rv-gcard') : null;
+      if (!card) return;
+      card.style.setProperty('--rx', '0deg');
+      card.style.setProperty('--ry', '0deg');
+    };
+    gal.addEventListener('mousemove', handler, true);
+    gal.addEventListener('mouseleave', leave, true);
+    galleryMoveHandler = handler;
+    galleryLeaveHandler = leave;
+  }
+
+  // --- DOM watch
+  const mo = new MutationObserver(() => {
+    const wrap = document.querySelector('.rv-wrap');
+    if (wrap) {
+      if (wrap !== currentWrap) attachWrap(wrap);
+    } else if (currentWrap) {
+      detachWrap();
+    }
+    const gal = document.querySelector('.rv-gallery');
+    if (gal) {
+      if (gal !== galleryEl) attachGallery(gal);
+    } else if (galleryEl) {
+      detachGallery();
+    }
+  });
+  mo.observe(document.body, { childList: true, subtree: true });
+
+  // Initial scan
+  requestAnimationFrame(() => {
+    const wrap = document.querySelector('.rv-wrap');
+    if (wrap) attachWrap(wrap);
+    const gal = document.querySelector('.rv-gallery');
+    if (gal) attachGallery(gal);
+  });
+})();
+</script>
 </body>
 </html>

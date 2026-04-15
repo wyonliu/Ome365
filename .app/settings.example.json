@@ -1,0 +1,16 @@
+{
+  "user_name": "YourName",
+  "main_goal": "365天执行计划",
+  "start_date": "2026-04-08",
+  "plan_days": 365,
+  "ai_mode": "api",
+  "api_base_url": "https://openrouter.ai/api/v1",
+  "api_key": "sk-or-v1-REPLACE_WITH_YOUR_OPENROUTER_KEY",
+  "api_model": "qwen/qwen3.6-plus",
+  "ollama_url": "http://localhost:11434",
+  "ollama_model": "llama3.1",
+  "use_proxy": false,
+  "notification_enabled": true,
+  "notification_sound": "chime",
+  "proactive_enabled": true
+}

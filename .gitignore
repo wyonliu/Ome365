@@ -1,5 +1,9 @@
-# ── Personal vault data (excluded from repo) ──
-# Only exclude root-level vault dirs, not sample-vault/
+# ═══════════════════════════════════════════════════════════════
+# Ome365 — .gitignore（敏感数据防线 · 严格版）
+# 原则：所有"个人/公司/访谈/录音"数据一律排除；只推工程代码 + sample
+# ═══════════════════════════════════════════════════════════════
+
+# ── Personal vault data（用户私有，绝不推）──
 /Journal/
 /Notes/
 /Decisions/
@@ -7,22 +11,67 @@
 /Projects/
 /AI-Logs/
 /Templates/
+/Memory/
 /000-365-PLAN.md
 /000-DASHBOARD.md
 
-# ── App runtime ──
+# ── Sensitive work data（公司/访谈/候选人，绝不推）──
+/Longfor/
+/Hiring/
+/Life/
+/Insights/
+/TicNote/
+/ai-tmp/
+/面试*.md
+/interview-*.md
+
+# ── Sensitive root files ──
+/agent-plan.md
+/agent-mem-evo-need.png
+/arch.png
+/screen-shot-*.png
+/screenshot-*.png
+/ome-api-requirements.md
+/Untitled*.canvas
+
+# ── App runtime data（每用户独立）──
 .app/settings.json
 .app/categories.json
 .app/contact_categories.json
 .app/special_days.json
 .app/task_repeats.json
 .app/claude_session.json
+.app/growth.json
+.app/reminders.json
 .app/media/
+.app/cache/
+
+# ── TicNote export archived versions（保留最新 ticnote_export.py/ticnote_clean.py/ticnote_rename.py）──
+.app/ticnote_export_0414.py
+.app/ticnote_export_0415.py
+.app/ticnote_export_new.py
+.app/ticnote_download_0410.py
+.app/UPGRADE_V8.md
+.app/UPGRADE_V8_FULL.md
+.app/screen-shot-v8-updates.png
+
+# ── Secrets ──
+.env
+.env.local
+*.key
+*.pem
 
 # ── Python ──
 __pycache__/
 *.pyc
-.env
+*.pyo
+*.egg-info/
+.pytest_cache/
+venv/
+.venv/
+
+# ── Node ──
+node_modules/
 
 # ── OS ──
 .DS_Store
@@ -32,3 +81,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+.cursor/
+.claude/
+.obsidian/
