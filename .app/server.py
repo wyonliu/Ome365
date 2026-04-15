@@ -1015,14 +1015,66 @@ async def toggle_dec_status(body:dict):
 
 
 # ── API: Notes (Speed Notes / 速记) ──────────────────
+NOTE_ENTRY_RE = re.compile(r'^- \[(\d{2}:\d{2})\]\s*(?:#(\S+)\s+)?(.*)')
+
+def _parse_notes_file(fp) -> list:
+    """Parse a notes .md file into entries.
+    Rule: a new entry starts on any `- [HH:MM] ...` line; every subsequent line
+    (including blank lines and unindented continuations) belongs to that entry
+    until the next `- [HH:MM]` or EOF. Indented continuations (2-space prefix)
+    are unindented on read. Trailing blank lines are trimmed per entry.
+    """
+    items = []
+    cur = None  # dict being built
+    cur_lines = []  # continuation lines
+    for raw in fp.read_text("utf-8").split('\n'):
+        m = NOTE_ENTRY_RE.match(raw)
+        if m:
+            if cur is not None:
+                while cur_lines and cur_lines[-1] == '':
+                    cur_lines.pop()
+                if cur_lines:
+                    cur["text"] = (cur["text"] + '\n' + '\n'.join(cur_lines)).rstrip()
+                items.append(cur)
+            cur = {"time": m.group(1), "category": m.group(2) or "", "text": m.group(3)}
+            cur_lines = []
+        else:
+            # Skip file header line
+            if cur is None:
+                continue
+            # Strip one level of 2-space indent if present
+            if raw.startswith('  '):
+                cur_lines.append(raw[2:])
+            else:
+                cur_lines.append(raw)
+    if cur is not None:
+        while cur_lines and cur_lines[-1] == '':
+            cur_lines.pop()
+        if cur_lines:
+            cur["text"] = (cur["text"] + '\n' + '\n'.join(cur_lines)).rstrip()
+        items.append(cur)
+    return items
+
+
+def _format_note_entry(time_s: str, category: str, text: str) -> str:
+    """Format a note entry for the .md file, indenting continuation lines."""
+    tag = f" #{category}" if category and category != "uncategorized" else ""
+    lines = text.split('\n')
+    first = lines[0] if lines else ''
+    out = f"- [{time_s}]{tag} {first}\n"
+    for cont in lines[1:]:
+        # Indent continuation lines (blank lines stay blank for readability)
+        out += (f"  {cont}\n" if cont else "\n")
+    return out
+
+
 @app.post("/api/notes")
 async def create_note(body:dict):
     d = VAULT/"Notes"; d.mkdir(exist_ok=True)
     fp = d/f"{today_s()}.md"
     now = datetime.now().strftime("%H:%M")
     cat = body.get("category","")
-    tag = f" #{cat}" if cat and cat != "uncategorized" else ""
-    entry = f"- [{now}]{tag} {body['text']}\n"
+    entry = _format_note_entry(now, cat, body['text'])
     if fp.exists():
         fp.write_text(fp.read_text("utf-8")+entry,"utf-8")
     else:
@@ -1036,14 +1088,9 @@ async def get_notes(category:str=None):
     if not d.exists(): return []
     results = []
     for fp in sorted(d.glob("*.md"), reverse=True):
-        items = []
-        for line in fp.read_text("utf-8").split('\n'):
-            m = re.match(r'^- \[(\d{2}:\d{2})\]\s*(?:#(\S+)\s+)?(.*)', line)
-            if m:
-                item_cat = m.group(2) or ""
-                if category and category != "all" and item_cat != category:
-                    continue
-                items.append({"time":m.group(1),"category":item_cat,"text":m.group(3)})
+        items = _parse_notes_file(fp)
+        if category and category != "all":
+            items = [it for it in items if it["category"] == category]
         if items: results.append({"date":fp.stem,"items":items,"path":str(fp.relative_to(VAULT))})
     return results
 
@@ -1055,22 +1102,24 @@ async def get_note_file(date_str:str):
 
 @app.delete("/api/notes/{date_str}/{idx}")
 async def delete_note_item(date_str:str, idx:int):
-    """Delete a single note entry by date and line index."""
+    """Delete a note entry (including its continuation lines) by date+index."""
     fp = VAULT/"Notes"/f"{date_str}.md"
     if not fp.exists(): raise HTTPException(404)
     lines = fp.read_text("utf-8").split('\n')
-    # Find all note-entry lines (- [HH:MM] ...)
-    entry_lines = [(i, l) for i, l in enumerate(lines) if re.match(r'^- \[\d{2}:\d{2}\]', l)]
-    if idx < 0 or idx >= len(entry_lines):
+    entry_starts = [i for i, l in enumerate(lines) if NOTE_ENTRY_RE.match(l)]
+    if idx < 0 or idx >= len(entry_starts):
         raise HTTPException(400, "Index out of range")
-    line_num = entry_lines[idx][0]
-    lines.pop(line_num)
-    # If only header remains, delete the file
-    remaining_entries = [l for l in lines if re.match(r'^- \[\d{2}:\d{2}\]', l)]
-    if not remaining_entries:
+    start = entry_starts[idx]
+    end = entry_starts[idx+1] if idx+1 < len(entry_starts) else len(lines)
+    del lines[start:end]
+    # Trim trailing blank lines
+    while lines and lines[-1] == '':
+        lines.pop()
+    remaining = [l for l in lines if NOTE_ENTRY_RE.match(l)]
+    if not remaining:
         fp.unlink()
     else:
-        fp.write_text('\n'.join(lines), "utf-8")
+        fp.write_text('\n'.join(lines) + '\n', "utf-8")
     return {"ok": True}
 
 
@@ -1197,9 +1246,11 @@ async def ai_smart_input(body: dict):
 "summary":"一句话总结"}}
 
 规则：
+- **带时间的事件（如"9:30 开会"、"下午3点见客户"）必须提取为todos**，time填HH:MM格式，text填事件内容
+- 日程、会议、约见、电话等时间相关的都算todos，不要放进notes
 - notes的每条要聚焦单一主题，category用简短中文标签（如 业务数据/产品与技术/团队与挑战/战略方向/人物洞察）
 - 联系人只提取有明确姓名的，不要把泛指的人算进去
-- todos只提取明确需要执行的事项，不要把已完成的当待办
+- todos只排除已完成的事项，未来要做的（含日程会议）都要提取
 - interactions按人分条，同一个人多次互动可以合并
 - 只输出JSON
 
@@ -2047,6 +2098,331 @@ async def file_tree():
     return sorted(groups.values(), key=sort_key)
 
 
+# ── API: Interviews (TicNote) ────────────────────────
+TICNOTE_DIR = VAULT / "TicNote"
+
+@app.get("/api/interviews")
+async def get_interviews():
+    """List all interview date folders and their files."""
+    import re as _re
+    if not TICNOTE_DIR.exists():
+        return []
+    results = []
+    for d in sorted(TICNOTE_DIR.iterdir(), reverse=True):
+        if not d.is_dir() or d.name.startswith("_"):
+            continue
+        files = []
+        for fp in sorted(d.glob("*.md")):
+            size = fp.stat().st_size
+            raw = fp.read_text("utf-8")
+            # Skip YAML frontmatter (--- ... ---) to find real first heading
+            _lines = raw.split("\n")
+            _start = 0
+            if _lines and _lines[0].strip() == '---':
+                for _li in range(1, len(_lines)):
+                    if _lines[_li].strip() == '---':
+                        _start = _li + 1
+                        break
+            first_line = ""
+            for _li in range(_start, min(_start + 10, len(_lines))):
+                _cl = _lines[_li].lstrip("# ").strip()
+                if _cl:
+                    first_line = _cl
+                    break
+            stem = fp.stem
+            # Parse org/person from filename
+            # New format: "千丁BU-智慧建造-—·主题·2026-04-08"
+            # Legacy:     "千丁数科-—-主题-04月08日"
+            # Split on · first to get prefix, then split prefix on -
+            seg0 = stem.split("·")[0]  # "千丁BU-智慧建造-—" or "C1供应链-—"
+            dash_parts = seg0.split("-")
+            org = dash_parts[0] if len(dash_parts) >= 2 else ""
+            person = dash_parts[-1] if len(dash_parts) >= 2 else ""
+            # Parse time: ISO "2026-04-08" or Chinese "04月08日"
+            time_m = _re.search(r'(\d{4})-(\d{2})-(\d{2})', stem)
+            if not time_m:
+                time_m = _re.search(r'(\d{2})月(\d{2})日', stem)
+            sort_key = ""
+            time_str = ""
+            if time_m:
+                groups = time_m.groups()
+                if len(groups) == 3 and len(groups[0]) == 4:
+                    # ISO: 2026-04-08
+                    sort_key = f"{groups[0]}-{groups[1]}-{groups[2]}T00:00"
+                    time_str = f"{groups[1]}-{groups[2]}"
+                else:
+                    # Chinese: 04月08日
+                    mm, dd = groups[0], groups[1]
+                    sort_key = f"2026-{mm}-{dd}T00:00"
+                    time_str = f"{mm}-{dd}"
+            # Parse duration from content: "2026-04-08 11:07:02|26m 46s|CaptainWyon"
+            duration = ""
+            dur_m = _re.search(r'\d{4}-\d{2}-\d{2}\s[\d:]+\|(.+?)\|', raw[:500])
+            if dur_m:
+                duration = dur_m.group(1).strip()
+            if not duration:
+                fm_dur = _re.search(r'^duration:\s*(.+)$', raw[:800], _re.MULTILINE)
+                if fm_dur:
+                    duration = fm_dur.group(1).strip()
+            # Parse duration → seconds (supports "1h 16m 31s", "25m 16s", "48m28s")
+            dur_sec = 0
+            if duration:
+                h_m = _re.search(r'(\d+)\s*h', duration)
+                m_m = _re.search(r'(\d+)\s*m(?!s)', duration)
+                s_m = _re.search(r'(\d+)\s*s', duration)
+                if h_m: dur_sec += int(h_m.group(1)) * 3600
+                if m_m: dur_sec += int(m_m.group(1)) * 60
+                if s_m: dur_sec += int(s_m.group(1))
+            # Transcript character count (CJK + non-space chars, skip frontmatter)
+            body = raw[(len("\n".join(_lines[:_start]))):] if _start else raw
+            chars = len(_re.sub(r'\s+', '', body))
+            # Auto-classify by filename prefix
+            cat = "未分类"
+            low = seg0.lower()
+            if low.startswith("集团") or low.startswith("千丁ceo") or low.startswith("千丁hrd"):
+                cat = "管理层"
+            elif _re.match(r'^C\d', seg0) or _re.match(r'^N\d', seg0):
+                cat = "航道"
+            elif "终面" in seg0 or "面试" in seg0:
+                cat = "面试"
+            elif "千丁BU" in seg0 or "千丁战略" in seg0 or (seg0.startswith("千丁") and any(k in seg0 for k in ["物管", "财务", "签零", "员工", "数科", "建造", "空间", "资管", "城服", "IDC", "营销", "运营", "AI创新"])):
+                cat = "BU"
+            elif seg0.startswith("外部"):
+                cat = "外部"
+            elif "AI赋能" in stem or "ASR" in stem:
+                cat = "内部"
+            files.append({
+                "name": stem,
+                "title": first_line or stem,
+                "path": str(fp.relative_to(VAULT)),
+                "size": size,
+                "org": org,
+                "person": person,
+                "time": time_str,
+                "duration": duration,
+                "duration_sec": dur_sec,
+                "chars": chars,
+                "sort_key": sort_key,
+                "cat": cat,
+            })
+        # Sort files by sort_key descending (newest first)
+        files.sort(key=lambda f: f["sort_key"], reverse=True)
+        if files:
+            results.append({"date": d.name, "files": files, "count": len(files)})
+    return results
+
+
+# ── API: Hiring (面试候选人) ──────────────────────────
+HIRING_DIR = VAULT / "Hiring"
+
+@app.get("/api/hiring")
+async def get_hiring():
+    """List all hiring candidates."""
+    import json as _json
+    if not HIRING_DIR.exists():
+        return []
+    results = []
+    for fp in sorted(HIRING_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            data = _json.loads(fp.read_text("utf-8"))
+            results.append({
+                "id": fp.stem,
+                "name": data.get("name", fp.stem),
+                "position": data.get("position", {}).get("title", ""),
+                "status": data.get("status", "待评估"),
+                "source": data.get("position", {}).get("source", ""),
+                "date": data.get("date", ""),
+                "match_score": data.get("resume", {}).get("match_score", 0),
+                "tags": data.get("tags", []),
+            })
+        except Exception:
+            pass
+    return results
+
+@app.get("/api/hiring/candidate")
+async def get_hiring_candidate(id: str):
+    """Read a single candidate JSON."""
+    import json as _json
+    fp = HIRING_DIR / f"{id}.json"
+    if not fp.exists():
+        raise HTTPException(404)
+    return _json.loads(fp.read_text("utf-8"))
+
+
+@app.get("/api/interviews/file")
+async def get_interview_file(path: str):
+    """Read a single interview file."""
+    fp = VAULT / path
+    if not fp.exists() or not str(fp).startswith(str(TICNOTE_DIR)):
+        raise HTTPException(404)
+    raw = fp.read_text("utf-8")
+    return {"path": path, "raw": raw, "name": fp.stem}
+
+
+# ── API: Reports ─────────────────────────────────────
+REPORTS_DIR = VAULT / "Projects" / "LongFor" / "reports"
+
+@app.get("/api/reports")
+async def get_reports():
+    """List all report files."""
+    if not REPORTS_DIR.exists():
+        return []
+    results = []
+    # Recursive so subfolders (00-personal, 01-diagnosis, ...) are discovered
+    all_files = sorted(REPORTS_DIR.rglob("*.md"),
+                       key=lambda p: (str(p.relative_to(REPORTS_DIR))),
+                       reverse=False)
+    for fp in all_files:
+        rel = fp.relative_to(REPORTS_DIR)
+        # top-level subfolder is the section (e.g. "01-diagnosis"); empty for legacy flat files
+        parts = list(rel.parts)
+        section_dir = parts[0] if len(parts) > 1 else ""
+        text = fp.read_text("utf-8")
+        title = ""
+        subtitle = ""
+        eyebrow = ""
+        category = ""
+        priority = ""
+        section = ""
+        entity = ""
+        person = ""
+        doc_date = ""
+        version = ""
+        tags = []
+        # Parse YAML frontmatter if present
+        if text.startswith("---\n") or text.startswith("---\r\n"):
+            end = text.find("\n---", 4)
+            if end != -1:
+                fm_block = text[4:end]
+                for ln in fm_block.splitlines():
+                    if ":" not in ln:
+                        continue
+                    k, _, v = ln.partition(":")
+                    k = k.strip()
+                    v = v.strip().strip('"').strip("'")
+                    if k == "title" and not title:
+                        title = v
+                    elif k == "subtitle" and not subtitle:
+                        subtitle = v
+                    elif k == "eyebrow" and not eyebrow:
+                        eyebrow = v
+                    elif k == "category" and not category:
+                        category = v
+                    elif k == "priority" and not priority:
+                        priority = v
+                    elif k == "section" and not section:
+                        section = v
+                    elif k == "entity" and not entity:
+                        entity = v
+                    elif k == "person" and not person:
+                        person = v
+                    elif k == "date" and not doc_date:
+                        doc_date = v
+                    elif k == "version" and not version:
+                        version = v
+                    elif k == "tags" and not tags:
+                        # Support either "tags: a, b, c" or "tags: [a, b, c]"
+                        tv = v.strip().lstrip("[").rstrip("]")
+                        tags = [t.strip().strip('"').strip("'") for t in tv.split(",") if t.strip()]
+        if not title:
+            # Fall back to first non-empty heading line
+            for ln in text.splitlines():
+                s = ln.strip()
+                if not s or s == "---":
+                    continue
+                title = s.lstrip("# ").strip()
+                break
+        # Prefer explicit frontmatter section; else infer from subfolder name.
+        final_section = section or section_dir
+        # Always derive entity from the 2nd-level folder (folder taxonomy is source of truth),
+        # not from frontmatter — ensures consistent grouping regardless of what agents wrote.
+        folder_entity = parts[1] if len(parts) >= 3 else ""
+        entity = folder_entity  # override any frontmatter entity
+        # Derive sub-entity (third-level folder like 20-航道/处方 → "处方") for further grouping
+        sub_entity = parts[2] if len(parts) >= 4 else ""
+        # Infer date from filename tail like "...·2026-04-11.md" if not in frontmatter
+        if not doc_date:
+            m = re.search(r"(\d{4}-\d{2}-\d{2})", fp.stem)
+            if m:
+                doc_date = m.group(1)
+        # Infer "person" anchor for grouping inside an entity.
+        # Priority: explicit frontmatter → filename prefix before "·" → empty
+        if not person:
+            stem = fp.stem
+            # Patterns like "C1-—·xxx" or "—-CHO·xxx" or "—团队·xxx"
+            # Take text before the first "·" and strip any trailing "-ROLE"
+            anchor = stem.split("·")[0] if "·" in stem else stem
+            # For航道 files: "C1-—" → keep "C1 —"
+            m2 = re.match(r"^([CN]\d)[\-\s](.+)$", anchor)
+            if m2:
+                person = f"{m2.group(1)} {m2.group(2)}"
+            else:
+                # For BU/管理层: "—-CHO" → "—"; "—团队" → "—团队"
+                person = anchor.split("-")[0].strip() if "-" in anchor else anchor.strip()
+        results.append({
+            "name": fp.stem,
+            "title": title or fp.stem,
+            "subtitle": subtitle,
+            "eyebrow": eyebrow,
+            "category": category,
+            "priority": priority,
+            "section": final_section,
+            "entity": entity,
+            "subEntity": sub_entity,
+            "person": person,
+            "date": doc_date,
+            "version": version,
+            "tags": tags,
+            "path": str(fp.relative_to(VAULT)),
+            "size": fp.stat().st_size,
+            "mtime": fp.stat().st_mtime,
+        })
+    # Sort by mtime desc for stable listing
+    results.sort(key=lambda r: r["mtime"], reverse=True)
+    return results
+
+
+@app.get("/api/reports/file")
+async def get_report_file(path: str):
+    """Read a single report file."""
+    fp = VAULT / path
+    if not fp.exists() or not str(fp).startswith(str(REPORTS_DIR)):
+        raise HTTPException(404)
+    raw = fp.read_text("utf-8")
+    return {"path": path, "raw": raw, "name": fp.stem}
+
+
+@app.get("/api/reports/image")
+async def get_report_image(path: str):
+    """Serve an image file from reports directory."""
+    from fastapi.responses import FileResponse
+    fp = REPORTS_DIR / path
+    if not fp.exists() or not str(fp.resolve()).startswith(str(REPORTS_DIR)):
+        raise HTTPException(404)
+    suffix = fp.suffix.lower()
+    media = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+             "webp": "image/webp", "gif": "image/gif", "svg": "image/svg+xml"}
+    return FileResponse(fp, media_type=media.get(suffix.lstrip("."), "application/octet-stream"),
+                        headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.put("/api/reports/file")
+async def save_report_file(body: dict):
+    """Save/update a report file."""
+    path = body.get("path", "")
+    content = body.get("content", "")
+    if path:
+        fp = VAULT / path
+    else:
+        name = body.get("name", f"report-{datetime.now().strftime('%Y%m%d-%H%M')}")
+        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        fp = REPORTS_DIR / f"{name}.md"
+    if not str(fp.resolve()).startswith(str(REPORTS_DIR)):
+        raise HTTPException(403, "Invalid path")
+    fp.write_text(content, "utf-8")
+    return {"ok": True, "path": str(fp.relative_to(VAULT))}
+
+
 # ── API: Task Repeats ────────────────────────────────
 @app.get("/api/task-repeats")
 async def get_task_repeats():
@@ -2582,10 +2958,38 @@ async def ai_reflect(body: dict):
         # Task stats
         context_parts.append(_task_stats(dates))
 
+        # TicNote interviews matching target dates (by filename date, not folder)
+        if TICNOTE_DIR.exists():
+            interview_parts = []
+            # Convert dates to filename patterns: "2026-04-09" → "04月09日"
+            date_patterns = set()
+            for d in dates:
+                parts = d.split("-")
+                if len(parts) == 3:
+                    date_patterns.add(f"{parts[1]}月{parts[2]}日")
+            for td in TICNOTE_DIR.iterdir():
+                if not td.is_dir() or td.name.startswith("_"):
+                    continue
+                for fp in sorted(td.glob("*.md")):
+                    stem = fp.stem
+                    # Check filename contains a matching date
+                    if not any(dp in stem for dp in date_patterns):
+                        continue
+                    raw = fp.read_text("utf-8")
+                    sections = raw.split("## 总结")
+                    if len(sections) > 1:
+                        summary_text = sections[1].split("## 转录")[0].strip()
+                    else:
+                        summary_text = raw[:3000]
+                    interview_parts.append(f"### 访谈: {stem}\n{summary_text[:2000]}")
+            if interview_parts:
+                context_parts.append("\n--- 今日访谈记录（TicNote总结） ---\n" + "\n\n".join(interview_parts))
+
         # Memory (5 most recent, 500 chars each — just for background context)
         context_parts.append(_collect_memory(5, 500))
 
-        prompt = """综合以上日志、速记、联系人、任务等全部数据，输出今日复盘（800-1200字）。
+        prompt = """综合以上日志、速记、联系人、任务、访谈记录等全部数据，输出今日复盘（800-1200字）。
+访谈记录是今天最重要的活动来源，务必重点分析。
 注意：速记和日志可能记录了同一件事的不同角度，合并分析不要重复。
 
 🎯 **今日进展**
@@ -2635,13 +3039,31 @@ async def ai_reflect(body: dict):
         # Task stats
         context_parts.append(_task_stats(dates))
 
+        # TicNote interviews for the week
+        if TICNOTE_DIR.exists():
+            interview_parts = []
+            for d_name in dates:
+                td = TICNOTE_DIR / d_name
+                if not td.exists():
+                    continue
+                for fp in sorted(td.glob("*.md")):
+                    raw = fp.read_text("utf-8")
+                    sections = raw.split("## 总结")
+                    if len(sections) > 1:
+                        summary_text = sections[1].split("## 转录")[0].strip()
+                    else:
+                        summary_text = raw[:2000]
+                    interview_parts.append(f"### 访谈: {fp.stem}\n{summary_text[:1500]}")
+            if interview_parts:
+                context_parts.append("\n--- 本周访谈记录（TicNote总结） ---\n" + "\n\n".join(interview_parts))
+
         # Memory
         context_parts.append(_collect_memory(10, 800))
 
         # Last week's reflection for continuity
         context_parts.append(_last_week_reflection())
 
-        prompt = """综合以上7天的全部数据，输出本周复盘（1000-1500字）。
+        prompt = """综合以上7天的全部数据（特别是访谈记录），输出本周复盘（1000-1500字）。
 
 📊 **本周主线**
 一句话概括这周在做什么，然后列3-5项成果，每项带具体产出物或数字。
@@ -3444,6 +3866,1192 @@ async def get_proactive():
         return {"ok": False, "reason": str(e)[:100]}
 
 
+# ── API: Insights (洞察 · flagship AI synthesis) ──────
+# 基于访谈/反思/速记/记忆/汇报/联系人的综合洞察，是 Ome365 面向
+# 职业/企业应用的最大亮点：AI 从你的日常碎片里提炼出主题、项目点子、
+# 业务诊断和待思考的问题。
+INSIGHTS_DIR = VAULT / "Insights"
+
+def _insights_corpus(days: int = 90) -> dict:
+    """收集最近 N 天的原始语料，用于喂给大模型做综合分析。"""
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    notes, reflections, interviews, reports, memories, contacts_summary = [], [], [], [], [], []
+
+    # Notes
+    nd = VAULT / "Notes"
+    if nd.exists():
+        for fp in sorted(nd.glob("*.md"), reverse=True)[:60]:
+            if fp.stem < cutoff: continue
+            for line in fp.read_text("utf-8").split('\n'):
+                m = re.match(r'^- \[\d{2}:\d{2}\]\s*(?:#(\S+)\s+)?(.*)', line)
+                if m and m.group(2).strip():
+                    notes.append(f"[{fp.stem} #{m.group(1) or ''}] {m.group(2).strip()}")
+
+    # Reflections
+    rd = VAULT / "Reflections"
+    if rd.exists():
+        for fp in sorted(rd.glob("*.md"), reverse=True)[:30]:
+            if fp.stem < cutoff: continue
+            txt = fp.read_text("utf-8")[:2000]
+            reflections.append(f"[{fp.stem}]\n{txt}")
+
+    # Interviews (只取标题和最前面的摘要)
+    ind = VAULT / "Interviews"
+    if ind.exists():
+        for fp in sorted(ind.glob("*.md"), reverse=True)[:20]:
+            if fp.stem[:10] < cutoff: continue
+            txt = fp.read_text("utf-8")[:1500]
+            interviews.append(f"[{fp.stem}]\n{txt}")
+
+    # Reports
+    repd = VAULT / "Reports"
+    if repd.exists():
+        for fp in sorted(repd.glob("*.md"), reverse=True)[:15]:
+            if fp.stem[:10] < cutoff: continue
+            txt = fp.read_text("utf-8")[:1500]
+            reports.append(f"[{fp.stem}]\n{txt}")
+
+    # Memories (from Memory/ folder)
+    md = VAULT / "Memory"
+    if md.exists():
+        for fp in sorted(md.rglob("*.md"), reverse=True)[:30]:
+            try:
+                if fp.stat().st_mtime < datetime.fromisoformat(cutoff).timestamp():
+                    continue
+            except Exception:
+                pass
+            txt = fp.read_text("utf-8")[:800]
+            memories.append(f"[{fp.stem}]\n{txt}")
+
+    # Contacts (most recently interacted)
+    pd = VAULT / "Contacts" / "people"
+    if pd.exists():
+        for fp in sorted(pd.glob("*.md"), key=lambda x: x.stat().st_mtime, reverse=True)[:20]:
+            try:
+                data = parse_md(fp)
+                meta = data.get("meta", {})
+                name = meta.get("name", fp.stem)
+                company = meta.get("company", "")
+                contacts_summary.append(f"{name}（{company}）")
+            except Exception:
+                pass
+
+    return {
+        "notes": notes[:200],
+        "reflections": reflections[:15],
+        "interviews": interviews[:10],
+        "reports": reports[:8],
+        "memories": memories[:15],
+        "contacts": contacts_summary[:20],
+        "stats": {
+            "notes_count": len(notes),
+            "reflections_count": len(reflections),
+            "interviews_count": len(interviews),
+            "reports_count": len(reports),
+            "memories_count": len(memories),
+            "contacts_count": len(contacts_summary),
+            "days": days,
+        }
+    }
+
+
+def _insights_context_text(corpus: dict, max_chars: int = 16000) -> str:
+    """把 corpus 拼成一段文本喂给 LLM。"""
+    parts = []
+    s = corpus["stats"]
+    parts.append(f"=== 过去 {s['days']} 天语料 ===")
+    parts.append(f"速记 {s['notes_count']} 条 / 反思 {s['reflections_count']} 篇 / 访谈 {s['interviews_count']} 场 / 汇报 {s['reports_count']} 份 / 记忆 {s['memories_count']} 条 / 近联系人 {s['contacts_count']}")
+
+    if corpus["notes"]:
+        parts.append("\n--- 速记（带标签）---")
+        parts.append("\n".join(corpus["notes"][:80]))
+    if corpus["reflections"]:
+        parts.append("\n--- 反思节选 ---")
+        parts.append("\n\n".join(corpus["reflections"][:8]))
+    if corpus["interviews"]:
+        parts.append("\n--- 访谈节选 ---")
+        parts.append("\n\n".join(corpus["interviews"][:5]))
+    if corpus["reports"]:
+        parts.append("\n--- 汇报节选 ---")
+        parts.append("\n\n".join(corpus["reports"][:4]))
+    if corpus["memories"]:
+        parts.append("\n--- 长期记忆 ---")
+        parts.append("\n".join(corpus["memories"][:10]))
+    if corpus["contacts"]:
+        parts.append("\n--- 近期联系人 ---")
+        parts.append("、".join(corpus["contacts"]))
+
+    text = "\n".join(parts)
+    if len(text) > max_chars:
+        text = text[:max_chars] + "\n...(已截断)"
+    return text
+
+
+def _ai_call_json(system: str, user: str, max_tokens: int = 3200) -> dict:
+    """调用底层 API 返回 JSON；处理 code fence。"""
+    import requests as req
+    settings = load_settings()
+    mode = settings.get("ai_mode", "none")
+    if mode == "none":
+        return {"ok": False, "error": "请在设置中配置AI服务"}
+    def _sync():
+        try:
+            if mode == "api":
+                base_url = settings.get("api_base_url","").rstrip("/")
+                api_key = settings.get("api_key","")
+                model_name = settings.get("api_model","")
+                if not all([base_url, api_key, model_name]):
+                    return {"ok": False, "error": "API 配置不完整"}
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json",
+                           "HTTP-Referer": "https://ome365.app", "X-Title": "Ome365"}
+                payload = {"model": model_name, "max_tokens": max_tokens, "temperature": 0.4,
+                           "messages": [{"role": "system", "content": system},
+                                        {"role": "user", "content": user}]}
+                resp = req.post(f"{base_url}/chat/completions", headers=headers, json=payload,
+                                timeout=180, **_proxy_kwargs())
+                resp.raise_for_status()
+                txt = resp.json()["choices"][0]["message"]["content"].strip()
+            elif mode == "ollama":
+                ollama_url = settings.get("ollama_url","http://localhost:11434").rstrip("/")
+                payload = {"model": settings.get("ollama_model","llama3.1"), "temperature": 0.4,
+                           "messages": [{"role": "system", "content": system},
+                                        {"role": "user", "content": user}],
+                           "stream": False}
+                resp = req.post(f"{ollama_url}/api/chat", json=payload, timeout=180, **_proxy_kwargs())
+                resp.raise_for_status()
+                txt = resp.json().get("message", {}).get("content", "").strip()
+            else:
+                return {"ok": False, "error": f"未知AI模式: {mode}"}
+            cleaned = re.sub(r'^```(?:json)?\s*', '', txt)
+            cleaned = re.sub(r'\s*```\s*$', '', cleaned).strip()
+            # LLM 偶尔会把 JSON 混在说明里，尝试找第一个 { 到最后一个 }
+            if not cleaned.startswith('{'):
+                i, j = cleaned.find('{'), cleaned.rfind('}')
+                if i != -1 and j > i: cleaned = cleaned[i:j+1]
+            return {"ok": True, "data": json.loads(cleaned), "raw": txt}
+        except json.JSONDecodeError as e:
+            return {"ok": False, "error": f"JSON 解析失败: {e}", "raw": txt[:800] if 'txt' in dir() else ''}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+    return _sync()
+
+
+@app.get("/api/insights/overview")
+async def insights_overview():
+    """洞察页面的 overview：语料统计 + 已保存的洞察卡片。"""
+    INSIGHTS_DIR.mkdir(parents=True, exist_ok=True)
+    corpus = _insights_corpus(90)
+    cards = []
+    for fp in sorted(INSIGHTS_DIR.glob("*.json"), reverse=True):
+        if fp.name.startswith("_"):   # skip _latest.json
+            continue
+        try:
+            cards.append(json.loads(fp.read_text("utf-8")))
+        except Exception:
+            pass
+    latest = None
+    latest_fp = INSIGHTS_DIR / "_latest.json"
+    if latest_fp.exists():
+        try:
+            latest = json.loads(latest_fp.read_text("utf-8"))
+        except Exception:
+            pass
+    return {"stats": corpus["stats"], "cards": cards, "latest": latest}
+
+
+@app.post("/api/insights/synthesize")
+async def insights_synthesize(body: dict):
+    """把所有语料喂给 LLM，输出结构化综合洞察。"""
+    days = int(body.get("days", 90))
+    focus = (body.get("focus") or "").strip()
+    corpus = _insights_corpus(days)
+    context = _insights_context_text(corpus)
+
+    focus_hint = f"\n用户特别关注：{focus}\n" if focus else ""
+
+    system = "你是船长的高级战略顾问。输入是船长最近的工作语料（访谈、反思、速记、汇报、长期记忆、联系人）。输出必须是合法 JSON，不要任何说明文字。"
+    user = f"""{context}
+{focus_hint}
+请基于以上语料，为船长（北大计算机硕士、AI 产品与技术领导者、龙湖千丁 CTO）输出以下 JSON：
+
+{{
+  "headline": "一句话点明本轮洞察的核心发现（25 字内，直接、有穿透力）",
+  "themes": [
+    {{"title": "主题名", "summary": "2 句话说明这是什么", "signals": ["支持这个主题的 2-3 条原始片段"]}}
+  ],
+  "projects": [
+    {{"title": "项目/产品点子", "hypothesis": "核心假设（1 句）", "audience": "目标用户", "value": "用户能获得什么", "next_step": "本周可以推进的第一步", "confidence": "high|medium|low"}}
+  ],
+  "diagnosis": {{
+    "strengths": ["3-5 条能力/资源上的优势"],
+    "risks": ["3-5 条需要警惕的风险或盲区"],
+    "blind_spots": ["2-3 条船长自己可能没注意到的事情"]
+  }},
+  "opportunities": [
+    {{"title": "机会名", "why_now": "为什么此刻成立（结合语料证据）", "action": "一句话行动建议"}}
+  ],
+  "questions": [
+    "3-5 个值得船长下周静下来思考的开放式问题"
+  ]
+}}
+
+要求：
+- themes 4-6 个，projects 3-5 个，opportunities 2-4 个
+- 用具体的名词和动词，不要说废话
+- signals 必须是从语料里真实抽取的原文碎片（可以精简）
+- 所有字段都要填，没有就写 "（语料不足）"
+- 只输出 JSON
+"""
+
+    result = _ai_call_json(system, user, max_tokens=4000)
+    if not result.get("ok"):
+        return result
+    data = result["data"]
+    data["_meta"] = {
+        "generated_at": datetime.now().isoformat(timespec='seconds'),
+        "days": days,
+        "focus": focus,
+        "stats": corpus["stats"],
+    }
+    # 保存 latest
+    INSIGHTS_DIR.mkdir(parents=True, exist_ok=True)
+    (INSIGHTS_DIR / "_latest.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
+    return {"ok": True, "insight": data}
+
+
+@app.post("/api/insights/save")
+async def insights_save(body: dict):
+    """把一次 synthesize 的结果（或手动编辑后的版本）存成卡片。"""
+    INSIGHTS_DIR.mkdir(parents=True, exist_ok=True)
+    insight = body.get("insight") or {}
+    note = body.get("note", "")
+    card_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+    card = {
+        "id": card_id,
+        "saved_at": datetime.now().isoformat(timespec='seconds'),
+        "note": note,
+        "insight": insight,
+    }
+    (INSIGHTS_DIR / f"{card_id}.json").write_text(json.dumps(card, ensure_ascii=False, indent=2), "utf-8")
+    return {"ok": True, "id": card_id}
+
+
+@app.delete("/api/insights/card/{card_id}")
+async def insights_delete(card_id: str):
+    fp = INSIGHTS_DIR / f"{card_id}.json"
+    if fp.exists(): fp.unlink()
+    return {"ok": True}
+
+
+@app.post("/api/insights/ask")
+async def insights_ask(body: dict):
+    """对语料提问，AI 基于船长的真实数据回答。"""
+    q = (body.get("question") or "").strip()
+    if not q:
+        return {"ok": False, "error": "请输入问题"}
+    corpus = _insights_corpus(int(body.get("days", 90)))
+    context = _insights_context_text(corpus, max_chars=12000)
+
+    system = "你是船长的私人战略顾问，只能基于船长自己的语料回答，不许编造。输出必须是合法 JSON。"
+    user = f"""{context}
+
+船长的问题：{q}
+
+请输出 JSON：
+{{
+  "answer": "基于语料的清晰回答（3-8 句，结构化分点或段落皆可，中文）",
+  "evidence": ["2-4 条你引用的语料片段（要是原文出现过的）"],
+  "followups": ["2-3 个顺势值得追问的问题"]
+}}
+
+只输出 JSON。
+"""
+    result = _ai_call_json(system, user, max_tokens=2200)
+    if not result.get("ok"):
+        return result
+    return {"ok": True, "reply": result["data"]}
+
+
+# ── API: Life (生活 · 家庭 / 健康 / 仪式 / 时刻) ──────
+# 面向个人生活品质：女儿周末计划、健康打卡、日常仪式、生活高光时刻。
+# 核心洞察：米莱真实年龄 11.5 岁 → 上大学还有 ~365 个周末，这个数字
+# 必须每天都让船长看到。
+LIFE_DIR = VAULT / "Life"
+LIFE_DATA_FILE = LIFE_DIR / "life.json"
+LIFE_MOMENTS_FILE = LIFE_DIR / "moments.md"
+
+LIFE_DEFAULTS = {
+    "daughter": {
+        "name": "米莱",
+        "birth_date": "2014-09-15",   # 11.5 岁（可在前端编辑）
+        "college_age": 18,
+    },
+    "weekends": [],       # [{id, date, title, theme, activities, notes, done, photos}]
+    "weekend_ideas": [],  # [{id, title, vibe, duration, supplies, created_at}]
+    "health": {
+        "rings": {"sleep": 0, "exercise": 0, "meditate": 0, "diet": 0},  # 今日 0-100
+        "logs": [],        # [{date, sleep, exercise, meditate, diet, note}]
+        "targets": {"sleep": 8, "exercise": 30, "meditate": 10, "diet": 3},
+    },
+    "rituals": {
+        "morning": [],     # [{id, text, done}]
+        "evening": [],
+        "weekly": [],
+        "streaks": {"morning": 0, "evening": 0, "weekly": 0},
+        "last_check": "",
+    },
+    "moments": [],         # [{id, date, category, text}]
+}
+
+def _life_load():
+    LIFE_DIR.mkdir(parents=True, exist_ok=True)
+    data = _safe_json_load(LIFE_DATA_FILE, default=None)
+    if data is None:
+        data = json.loads(json.dumps(LIFE_DEFAULTS))
+        LIFE_DATA_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
+    # Merge missing top-level keys from defaults (forward compat)
+    for k, v in LIFE_DEFAULTS.items():
+        if k not in data:
+            data[k] = json.loads(json.dumps(v))
+    return data
+
+def _life_save(data: dict):
+    LIFE_DIR.mkdir(parents=True, exist_ok=True)
+    LIFE_DATA_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
+
+def _weekends_left(birth_date: str, college_age: int = 18) -> dict:
+    try:
+        bd = datetime.fromisoformat(birth_date).date()
+    except Exception:
+        return {"age": None, "weekends_left": None, "days_to_college": None}
+    today = date.today()
+    age_days = (today - bd).days
+    age_years = round(age_days / 365.25, 1)
+    college_start = bd.replace(year=bd.year + college_age)
+    try:
+        # make sure leap safe
+        college_start = date(bd.year + college_age, bd.month, bd.day if bd.day <= 28 else 28)
+    except Exception:
+        pass
+    days_left = (college_start - today).days
+    weekends_left = max(0, days_left // 7)
+    return {"age": age_years, "weekends_left": weekends_left, "days_to_college": max(0, days_left)}
+
+def _next_weekend_dates():
+    today = date.today()
+    # Saturday
+    sat_offset = (5 - today.weekday()) % 7
+    if sat_offset == 0 and datetime.now().hour >= 20:
+        sat_offset = 7
+    sat = today + timedelta(days=sat_offset)
+    sun = sat + timedelta(days=1)
+    return sat.isoformat(), sun.isoformat()
+
+
+@app.get("/api/life/overview")
+async def life_overview():
+    data = _life_load()
+    d = data["daughter"]
+    weekend_info = _weekends_left(d.get("birth_date",""), int(d.get("college_age", 18)))
+    sat, sun = _next_weekend_dates()
+    # Filter upcoming weekends
+    upcoming = [w for w in data["weekends"] if w.get("date","") >= today_s()][:6]
+    past = [w for w in data["weekends"] if w.get("date","") < today_s()][-8:][::-1]
+    # Last 7 days of health logs
+    logs = sorted(data["health"].get("logs", []), key=lambda x: x.get("date",""))
+    recent_logs = logs[-7:]
+    return {
+        "daughter": d,
+        "weekend_info": weekend_info,
+        "next_weekend": {"saturday": sat, "sunday": sun},
+        "upcoming_weekends": upcoming,
+        "past_weekends": past,
+        "weekend_ideas": data.get("weekend_ideas", [])[-12:],
+        "health": {
+            "rings": data["health"].get("rings", {"sleep":0,"exercise":0,"meditate":0,"diet":0}),
+            "targets": data["health"].get("targets", {}),
+            "recent_logs": recent_logs,
+            "total_logs": len(logs),
+        },
+        "rituals": data["rituals"],
+        "moments": sorted(data["moments"], key=lambda x: x.get("date",""), reverse=True)[:30],
+    }
+
+
+@app.post("/api/life/daughter")
+async def life_daughter_update(body: dict):
+    data = _life_load()
+    for k in ("name", "birth_date", "college_age"):
+        if k in body:
+            data["daughter"][k] = body[k]
+    _life_save(data)
+    return {"ok": True}
+
+
+@app.post("/api/life/weekend")
+async def life_weekend_create(body: dict):
+    data = _life_load()
+    wk = {
+        "id": datetime.now().strftime("%Y%m%d%H%M%S"),
+        "date": body.get("date", ""),
+        "title": body.get("title", "").strip() or "未命名周末",
+        "theme": body.get("theme", ""),
+        "activities": body.get("activities", []),
+        "notes": body.get("notes", ""),
+        "done": False,
+        "photos": [],
+        "created_at": today_s(),
+    }
+    data["weekends"].append(wk)
+    _life_save(data)
+    return {"ok": True, "id": wk["id"]}
+
+
+@app.post("/api/life/weekend/toggle")
+async def life_weekend_toggle(body: dict):
+    data = _life_load()
+    wid = body.get("id", "")
+    for w in data["weekends"]:
+        if w["id"] == wid:
+            w["done"] = not w.get("done", False)
+            break
+    _life_save(data)
+    return {"ok": True}
+
+
+@app.delete("/api/life/weekend/{wid}")
+async def life_weekend_delete(wid: str):
+    data = _life_load()
+    data["weekends"] = [w for w in data["weekends"] if w["id"] != wid]
+    _life_save(data)
+    return {"ok": True}
+
+
+@app.post("/api/life/weekend/ideas")
+async def life_weekend_ideas(body: dict):
+    """AI 生成适合米莱当前年龄的周末活动点子。"""
+    data = _life_load()
+    d = data["daughter"]
+    info = _weekends_left(d.get("birth_date",""))
+    age = info.get("age")
+    vibe = (body.get("vibe") or "").strip()
+    season_hint = body.get("season", "")
+
+    age_text = f"{age} 岁" if age else "11-12 岁"
+    vibe_hint = f"\n特别要求：{vibe}" if vibe else ""
+    season_text = f"\n当前季节：{season_hint}" if season_hint else ""
+
+    system = "你是一个最懂孩子也最懂父亲的生活策划师。只输出合法 JSON，不要任何说明。"
+    user = f"""请为船长（46岁父亲）和女儿米莱（{age_text}，喜欢打击乐/小提琴，养仓鼠和乌龟，梦想做「未来世界设计师」）生成 5 个真正好玩又有意义的周末活动点子。{vibe_hint}{season_text}
+
+要求：
+- 不是泛泛的"去公园"，要具体到做什么事、怎么玩
+- 父女可以真的一起参与，不是船长看着女儿玩
+- 涵盖不同风格：自然/创作/科技/安静相处/探索
+- 每个点子要能激发「未来世界设计师」的好奇心
+- 北京可执行（或室内通用）
+
+输出 JSON：
+{{
+  "ideas": [
+    {{
+      "title": "活动名（8 字内有画面感）",
+      "vibe": "自然|创作|科技|安静|探索",
+      "duration": "半天|全天|2小时",
+      "what": "具体做什么（2-3 句）",
+      "why": "为什么对米莱有意义（1 句）",
+      "supplies": ["需要准备的 2-4 样东西"]
+    }}
+  ]
+}}
+只输出 JSON。
+"""
+    result = _ai_call_json(system, user, max_tokens=2000)
+    if not result.get("ok"):
+        return result
+    ideas = result["data"].get("ideas", [])
+    # 存到 weekend_ideas
+    now = datetime.now().isoformat(timespec='seconds')
+    for i in ideas:
+        i["id"] = datetime.now().strftime("%Y%m%d%H%M%S") + str(hash(i.get("title","")) % 1000)
+        i["created_at"] = now
+    data["weekend_ideas"] = (data.get("weekend_ideas", []) + ideas)[-30:]
+    _life_save(data)
+    return {"ok": True, "ideas": ideas}
+
+
+@app.post("/api/life/health/log")
+async def life_health_log(body: dict):
+    data = _life_load()
+    today = today_s()
+    rings = {
+        "sleep": int(body.get("sleep", data["health"]["rings"].get("sleep", 0))),
+        "exercise": int(body.get("exercise", data["health"]["rings"].get("exercise", 0))),
+        "meditate": int(body.get("meditate", data["health"]["rings"].get("meditate", 0))),
+        "diet": int(body.get("diet", data["health"]["rings"].get("diet", 0))),
+    }
+    # clamp
+    rings = {k: max(0, min(100, v)) for k, v in rings.items()}
+    data["health"]["rings"] = rings
+    # Upsert today's log
+    logs = data["health"].get("logs", [])
+    logs = [l for l in logs if l.get("date") != today]
+    logs.append({"date": today, **rings, "note": body.get("note", "")})
+    data["health"]["logs"] = sorted(logs, key=lambda x: x.get("date",""))[-60:]
+    _life_save(data)
+    return {"ok": True, "rings": rings}
+
+
+@app.post("/api/life/health/targets")
+async def life_health_targets(body: dict):
+    data = _life_load()
+    for k in ("sleep","exercise","meditate","diet"):
+        if k in body:
+            data["health"]["targets"][k] = body[k]
+    _life_save(data)
+    return {"ok": True}
+
+
+@app.post("/api/life/ritual")
+async def life_ritual_create(body: dict):
+    data = _life_load()
+    slot = body.get("slot", "morning")   # morning|evening|weekly
+    text = body.get("text", "").strip()
+    if not text: return {"ok": False, "error": "空的仪式"}
+    if slot not in data["rituals"]: data["rituals"][slot] = []
+    data["rituals"][slot].append({
+        "id": datetime.now().strftime("%Y%m%d%H%M%S"),
+        "text": text,
+        "done": False,
+    })
+    _life_save(data)
+    return {"ok": True}
+
+
+@app.post("/api/life/ritual/toggle")
+async def life_ritual_toggle(body: dict):
+    data = _life_load()
+    slot = body.get("slot", "morning")
+    rid = body.get("id", "")
+    for r in data["rituals"].get(slot, []):
+        if r["id"] == rid:
+            r["done"] = not r.get("done", False)
+            break
+    _life_save(data)
+    return {"ok": True}
+
+
+@app.delete("/api/life/ritual/{slot}/{rid}")
+async def life_ritual_delete(slot: str, rid: str):
+    data = _life_load()
+    data["rituals"][slot] = [r for r in data["rituals"].get(slot, []) if r["id"] != rid]
+    _life_save(data)
+    return {"ok": True}
+
+
+@app.post("/api/life/ritual/reset-day")
+async def life_ritual_reset_day():
+    """每天开始时清空完成状态，计算 streak。"""
+    data = _life_load()
+    today = today_s()
+    if data["rituals"].get("last_check") != today:
+        # 如果昨天所有 morning ritual 完成 → streak +1
+        for slot in ("morning", "evening"):
+            items = data["rituals"].get(slot, [])
+            if items and all(r.get("done") for r in items):
+                data["rituals"]["streaks"][slot] = data["rituals"]["streaks"].get(slot, 0) + 1
+            else:
+                data["rituals"]["streaks"][slot] = 0
+            for r in items:
+                r["done"] = False
+        data["rituals"]["last_check"] = today
+        _life_save(data)
+    return {"ok": True}
+
+
+@app.post("/api/life/moment")
+async def life_moment_create(body: dict):
+    data = _life_load()
+    mom = {
+        "id": datetime.now().strftime("%Y%m%d%H%M%S"),
+        "date": body.get("date", today_s()),
+        "category": body.get("category", "高光"),  # 高光 | 平静 | 挑战 | 成长
+        "text": body.get("text", "").strip(),
+    }
+    if not mom["text"]:
+        return {"ok": False, "error": "空时刻"}
+    data["moments"].append(mom)
+    _life_save(data)
+    # 同步写入 moments.md 作为可读档案
+    try:
+        line = f"- [{mom['date']}] #{mom['category']} {mom['text']}\n"
+        if LIFE_MOMENTS_FILE.exists():
+            LIFE_MOMENTS_FILE.write_text(LIFE_MOMENTS_FILE.read_text("utf-8") + line, "utf-8")
+        else:
+            LIFE_MOMENTS_FILE.write_text(f"# 生活时刻\n\n{line}", "utf-8")
+    except Exception:
+        pass
+    return {"ok": True, "id": mom["id"]}
+
+
+@app.delete("/api/life/moment/{mid}")
+async def life_moment_delete(mid: str):
+    data = _life_load()
+    data["moments"] = [m for m in data["moments"] if m["id"] != mid]
+    _life_save(data)
+    return {"ok": True}
+
+
+# ── LONGFOR COCKPIT · 千丁战略驾舱 ───────────────────
+# Data source: a single markdown file (Vault/Longfor/cockpit.md).
+# Structure: YAML frontmatter (meta) + H2 sections (`## id · title`),
+# each section may contain prose and ONE optional fenced yaml block (structured data).
+# Parsed into {meta, sections:[{id, title, prose_md, data}]} — frontend picks renderer by id.
+
+LONGFOR_DIR = VAULT / "Longfor"
+COCKPIT_FILE = LONGFOR_DIR / "cockpit.md"
+
+def _parse_frontmatter(text: str):
+    import yaml as _yaml
+    if not text.startswith("---"):
+        return {}, text
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return {}, text
+    try:
+        meta = _yaml.safe_load(parts[1]) or {}
+    except Exception:
+        meta = {}
+    return meta, parts[2].lstrip("\n")
+
+def _parse_cockpit_md(md_text: str):
+    """Parse cockpit md into {meta, sections}.
+    Section header format: `## <id> · <title>` where id is ascii short key.
+    """
+    import yaml as _yaml
+    meta, body = _parse_frontmatter(md_text)
+    sections = []
+    lines = body.splitlines()
+    cur = None
+    buf = []
+    def flush():
+        nonlocal cur, buf
+        if cur is None:
+            return
+        raw = "\n".join(buf).strip()
+        # Extract first ```yaml fenced block if any
+        data = None
+        prose_lines = []
+        in_yaml = False
+        yaml_lines = []
+        captured_yaml = False
+        for ln in raw.splitlines():
+            if not captured_yaml and ln.strip().startswith("```yaml"):
+                in_yaml = True
+                continue
+            if in_yaml:
+                if ln.strip().startswith("```"):
+                    in_yaml = False
+                    captured_yaml = True
+                    try:
+                        data = _yaml.safe_load("\n".join(yaml_lines)) or {}
+                    except Exception as e:
+                        data = {"_error": str(e)}
+                    continue
+                yaml_lines.append(ln)
+                continue
+            prose_lines.append(ln)
+        cur["prose_md"] = "\n".join(prose_lines).strip()
+        cur["data"] = data
+        sections.append(cur)
+        cur = None
+        buf = []
+    for ln in lines:
+        if ln.startswith("## "):
+            flush()
+            head = ln[3:].strip()
+            # Split on first " · "
+            if " · " in head:
+                sid, title = head.split(" · ", 1)
+            else:
+                sid, title = head.split(" ", 1) if " " in head else (head, head)
+            cur = {"id": sid.strip(), "title": title.strip()}
+            buf = []
+        else:
+            if cur is not None:
+                buf.append(ln)
+    flush()
+    return {"meta": meta, "sections": sections}
+
+def _md_inline(text: str) -> str:
+    """Very small markdown → HTML for prose: **bold**, `code`, line breaks, lists."""
+    if not text:
+        return ""
+    import html as _html
+    out = []
+    paras = [p for p in re.split(r"\n\s*\n", text.strip()) if p.strip()]
+    for p in paras:
+        lines = p.splitlines()
+        if all(l.strip().startswith(("- ", "* ")) for l in lines if l.strip()):
+            out.append("<ul>" + "".join(
+                f"<li>{_format_inline(_html.escape(l.strip()[2:]))}</li>" for l in lines if l.strip()
+            ) + "</ul>")
+        else:
+            joined = " ".join(l.strip() for l in lines)
+            out.append(f"<p>{_format_inline(_html.escape(joined))}</p>")
+    return "".join(out)
+
+def _format_inline(s: str) -> str:
+    # **bold**
+    s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
+    # `code`
+    s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
+    return s
+
+@app.get("/api/longfor/cockpit")
+async def longfor_cockpit():
+    if not COCKPIT_FILE.exists():
+        return {"ok": False, "error": "cockpit.md not found", "path": str(COCKPIT_FILE)}
+    try:
+        md = COCKPIT_FILE.read_text(encoding="utf-8")
+        parsed = _parse_cockpit_md(md)
+        # Render prose to HTML
+        for sec in parsed["sections"]:
+            sec["prose_html"] = _md_inline(sec.get("prose_md", ""))
+        return {
+            "ok": True,
+            "path": str(COCKPIT_FILE.relative_to(VAULT)),
+            "meta": parsed["meta"],
+            "sections": parsed["sections"],
+            "mtime": COCKPIT_FILE.stat().st_mtime,
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.get("/api/longfor/cockpit/raw")
+async def longfor_cockpit_raw():
+    if not COCKPIT_FILE.exists():
+        raise HTTPException(404, "cockpit.md not found")
+    return {"ok": True, "content": COCKPIT_FILE.read_text(encoding="utf-8"), "mtime": COCKPIT_FILE.stat().st_mtime}
+
+class CockpitSaveBody(BaseModel):
+    content: str
+
+@app.post("/api/longfor/cockpit/save")
+async def longfor_cockpit_save(body: CockpitSaveBody):
+    # Keep a lightweight backup (previous version) before writing
+    if COCKPIT_FILE.exists():
+        backup = LONGFOR_DIR / ".cockpit.backup.md"
+        backup.write_text(COCKPIT_FILE.read_text(encoding="utf-8"), encoding="utf-8")
+    COCKPIT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    COCKPIT_FILE.write_text(body.content, encoding="utf-8")
+    return {"ok": True, "mtime": COCKPIT_FILE.stat().st_mtime, "bytes": len(body.content)}
+
+@app.get("/api/longfor/cockpit/export")
+async def longfor_cockpit_export():
+    """Return a standalone, print-ready HTML with inline CSS for sharing."""
+    if not COCKPIT_FILE.exists():
+        raise HTTPException(404, "cockpit.md not found")
+    try:
+        md = COCKPIT_FILE.read_text(encoding="utf-8")
+        parsed = _parse_cockpit_md(md)
+        for sec in parsed["sections"]:
+            sec["prose_html"] = _md_inline(sec.get("prose_md", ""))
+        html = _render_cockpit_standalone(parsed)
+        return HTMLResponse(html)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+def _render_cockpit_standalone(parsed: dict) -> str:
+    """Render parsed cockpit into a self-contained shareable HTML page."""
+    import html as _html
+    meta = parsed.get("meta", {}) or {}
+    title = _html.escape(meta.get("title", "千丁 · 战略驾舱"))
+    subtitle = _html.escape(meta.get("subtitle", ""))
+    author = _html.escape(meta.get("author", ""))
+    updated = _html.escape(str(meta.get("updated", "")))
+    eyebrow = _html.escape(meta.get("eyebrow", "LONGFOR · QIANDING"))
+    north_star = _html.escape(meta.get("north_star", ""))
+    one_liner = _html.escape(meta.get("one_liner", ""))
+    blocks = []
+    for sec in parsed["sections"]:
+        sid = sec["id"]
+        stitle = _html.escape(sec["title"])
+        prose_html = sec.get("prose_html", "")
+        data = sec.get("data") or {}
+        body = _render_section_html(sid, data)
+        blocks.append(f"""
+<section class="sec sec-{sid}">
+  <div class="sec-head">
+    <div class="sec-id">{sid.upper()}</div>
+    <h2>{stitle}</h2>
+  </div>
+  <div class="sec-prose">{prose_html}</div>
+  {body}
+</section>""")
+    css = """
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Helvetica Neue','Inter','Noto Sans SC',sans-serif;background:#0a0c14;color:#e6e8ee;line-height:1.65;-webkit-font-smoothing:antialiased}
+.page{max-width:1040px;margin:0 auto;padding:64px 48px 96px}
+.cover{text-align:center;padding:80px 0 72px;border-bottom:1px solid rgba(200,169,110,0.18);margin-bottom:64px;position:relative}
+.cover::before{content:"";position:absolute;top:30%;left:50%;transform:translateX(-50%);width:620px;height:620px;background:radial-gradient(circle,rgba(200,169,110,0.10),transparent 60%);pointer-events:none;z-index:0}
+.cover>*{position:relative;z-index:1}
+.eyebrow{letter-spacing:.22em;font-size:11px;color:#c8a96e;text-transform:uppercase;margin-bottom:18px;font-weight:600}
+.cover h1{font-size:44px;font-weight:800;background:linear-gradient(135deg,#fff,#c8a96e);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:14px;letter-spacing:-.5px}
+.subtitle{font-size:17px;color:#a8abb7;max-width:680px;margin:0 auto 28px;line-height:1.6}
+.north{display:inline-block;padding:14px 24px;border:1px solid rgba(200,169,110,0.28);background:rgba(200,169,110,0.05);border-radius:14px;margin-top:12px;font-size:14px;color:#e8d5a8;max-width:720px}
+.meta-row{margin-top:24px;font-size:12px;color:#7a7e8c;letter-spacing:.05em}
+.sec{margin:80px 0;scroll-margin-top:40px}
+.sec-head{margin-bottom:24px;border-left:3px solid #c8a96e;padding-left:18px}
+.sec-id{font-size:10px;letter-spacing:.25em;color:#c8a96e;font-weight:700;margin-bottom:4px}
+.sec h2{font-size:28px;font-weight:700;color:#fff;letter-spacing:-.3px}
+.sec-prose{color:#b8bbc7;font-size:14.5px;margin-bottom:28px;max-width:820px}
+.sec-prose p{margin-bottom:10px}
+.sec-prose strong{color:#fff;font-weight:600}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.kpi-card{background:linear-gradient(180deg,rgba(200,169,110,0.06),rgba(200,169,110,0.02));border:1px solid rgba(200,169,110,0.18);border-radius:16px;padding:22px 20px}
+.kpi-label{font-size:11px;letter-spacing:.12em;color:#c8a96e;text-transform:uppercase;margin-bottom:8px}
+.kpi-now{font-size:13px;color:#7a7e8c;margin-top:4px}
+.kpi-bar{height:6px;background:rgba(255,255,255,0.05);border-radius:3px;margin:10px 0 8px;overflow:hidden}
+.kpi-fill{height:100%;background:linear-gradient(90deg,#c8a96e,#e8d5a8);border-radius:3px}
+.kpi-value{font-size:28px;font-weight:700;color:#fff;font-family:'JetBrains Mono',monospace}
+.kpi-value .unit{font-size:15px;color:#c8a96e;margin-left:2px}
+.kpi-why{font-size:11px;color:#7a7e8c;margin-top:8px;line-height:1.5}
+.ch-group{margin-bottom:28px}
+.ch-group-head{display:flex;align-items:baseline;gap:14px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.08)}
+.ch-group-label{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.22em;color:#60a5fa;font-weight:700}
+.ch-group.inno-group .ch-group-label{color:#a78bfa}
+.ch-group-title{font-size:14px;font-weight:500;color:#e6e8ee}
+.ch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.ch-card{background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px}
+.ch-card.need{background:linear-gradient(180deg,rgba(96,165,250,0.06),rgba(96,165,250,0.01));border-color:rgba(96,165,250,0.2)}
+.ch-card.inno{background:linear-gradient(180deg,rgba(167,139,250,0.06),rgba(167,139,250,0.01));border-color:rgba(167,139,250,0.2)}
+.ch-head{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
+.ch-code{font-family:'JetBrains Mono',monospace;font-size:11px;color:#c8a96e;font-weight:700}
+.ch-name{font-size:15px;font-weight:600;color:#fff}
+.ch-status{font-size:10px;letter-spacing:.08em;padding:2px 8px;border-radius:4px;background:rgba(200,169,110,0.1);color:#c8a96e;margin-left:auto}
+.ch-row{font-size:12px;color:#8a8d98;margin-top:6px;line-height:1.55}
+.ch-row b{color:#d8dae2;font-weight:500;display:inline-block;min-width:48px}
+.bu-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+.bu-card{background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:18px}
+.bu-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.bu-name{font-size:16px;font-weight:600;color:#fff}
+.bu-owner{font-size:12px;color:#c8a96e;font-weight:500}
+.bu-status-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.05)}
+.bu-role{font-size:11px;color:#8a8d98}
+.bu-row-next{margin-top:8px;padding-top:8px;border-top:1px dashed rgba(200,169,110,0.2)}
+.bu-row-next b{color:#c8a96e!important}
+.bu-status{display:inline-block;font-size:10px;padding:2px 8px;border-radius:4px;letter-spacing:.05em}
+.bu-status.healthy{background:rgba(74,222,128,0.14);color:#4ade80}
+.bu-status.pivot{background:rgba(251,191,36,0.14);color:#fbbf24}
+.bu-status.under_pressure{background:rgba(248,113,113,0.14);color:#f87171}
+.bu-status.build{background:rgba(139,139,248,0.14);color:#a5b4fc}
+.bu-row{font-size:12px;color:#8a8d98;margin:4px 0;line-height:1.55}
+.bu-row b{color:#d8dae2;font-weight:500;min-width:42px;display:inline-block}
+.trident-stack{display:flex;flex-direction:column;gap:22px}
+.tri-card{border-radius:20px;padding:28px 30px;position:relative;overflow:hidden}
+.tri-card.amber{background:linear-gradient(180deg,rgba(251,191,36,0.10),rgba(251,191,36,0.02));border:1px solid rgba(251,191,36,0.24)}
+.tri-card.cyan{background:linear-gradient(180deg,rgba(34,211,238,0.10),rgba(34,211,238,0.02));border:1px solid rgba(34,211,238,0.24)}
+.tri-card.violet{background:linear-gradient(180deg,rgba(167,139,250,0.10),rgba(167,139,250,0.02));border:1px solid rgba(167,139,250,0.24)}
+.tri-code{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.2em;opacity:.7;font-weight:700}
+.tri-card.amber .tri-code{color:#fbbf24}
+.tri-card.cyan .tri-code{color:#22d3ee}
+.tri-card.violet .tri-code{color:#a78bfa}
+.tri-name{font-size:22px;font-weight:700;color:#fff;margin:8px 0 4px;line-height:1.3;letter-spacing:-.2px}
+.tri-tag{font-size:13px;color:#b8bbc7;margin-bottom:8px}
+.tri-horizon{font-size:11px;color:#c8a96e;margin-bottom:16px;letter-spacing:.05em}
+.tri-summary{font-size:13.5px;color:#d0d3dc;line-height:1.75;margin-bottom:20px;padding:14px 16px;background:rgba(0,0,0,0.22);border-radius:12px;border-left:2px solid rgba(200,169,110,0.4)}
+.tri-block{margin:18px 0}
+.tri-block-label{font-size:10px;letter-spacing:.16em;color:#c8a96e;text-transform:uppercase;font-weight:700;margin-bottom:10px}
+.seg-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.seg-item{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:12px 14px}
+.seg-bu{font-size:12px;font-weight:600;color:#fff;margin-bottom:3px}
+.seg-focus{font-size:11.5px;color:#a8abb7;line-height:1.55;margin-bottom:5px}
+.seg-step{font-size:11px;color:#8a8d98;line-height:1.5}
+.seg-step b{color:#c8a96e}
+.pillar-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.pillar{background:rgba(255,255,255,0.03);border-left:2px solid rgba(34,211,238,0.4);border-radius:0 10px 10px 0;padding:10px 14px}
+.pillar-name{font-size:12.5px;font-weight:600;color:#fff;margin-bottom:3px}
+.pillar-detail{font-size:11.5px;color:#a8abb7;line-height:1.55}
+.exp-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.exp-item{background:rgba(255,255,255,0.03);border-left:2px solid rgba(167,139,250,0.4);border-radius:0 10px 10px 0;padding:10px 14px}
+.exp-name{font-size:12.5px;font-weight:600;color:#fff;margin-bottom:3px}
+.exp-detail{font-size:11.5px;color:#a8abb7;line-height:1.55}
+.bp-list{font-size:12px;color:#a8abb7;line-height:1.65;list-style:none;padding:0}
+.bp-list li{padding-left:14px;position:relative;margin-bottom:4px}
+.bp-list li::before{content:"+";position:absolute;left:2px;color:#c8a96e;font-weight:700}
+.tri-firststep{margin-top:14px;padding:10px 14px;background:rgba(200,169,110,0.08);border:1px solid rgba(200,169,110,0.24);border-radius:10px;font-size:12px;color:#e8d5a8}
+.tri-firststep b{color:#c8a96e;margin-right:4px}
+.tri-note{margin-top:12px;padding:10px 14px;background:rgba(248,113,113,0.05);border:1px solid rgba(248,113,113,0.18);border-radius:10px;font-size:11.5px;color:#b8bbc7;line-height:1.6}
+.tri-list{font-size:12px;color:#a8abb7;line-height:1.65;list-style:none;padding:0}
+.tri-list li{padding-left:14px;position:relative;margin-bottom:4px}
+.tri-list li::before{content:"›";position:absolute;left:2px;color:#c8a96e;font-weight:700}
+.tri-foot{margin-top:18px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.06);font-size:11px;color:#8a8d98}
+.eff-why{font-size:13px;color:#d0d3dc;background:rgba(200,169,110,0.06);border-left:3px solid #c8a96e;padding:12px 16px;border-radius:0 10px 10px 0;margin-bottom:18px;line-height:1.65}
+.eff-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.eff-svc{background:rgba(200,169,110,0.04);border:1px solid rgba(200,169,110,0.16);border-radius:12px;padding:14px 16px}
+.eff-name{font-size:13px;font-weight:600;color:#e8d5a8;margin-bottom:5px}
+.eff-desc{font-size:11.5px;color:#a8abb7;line-height:1.55}
+.eff-first{margin-top:18px;padding:14px 18px;background:rgba(200,169,110,0.08);border:1px solid rgba(200,169,110,0.24);border-radius:12px;font-size:13px;color:#e8d5a8}
+.eff-first b{color:#c8a96e;margin-right:6px}
+.phases{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:900px){.phases{grid-template-columns:1fr}}
+.phase{background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:20px}
+.phase-label{font-size:13px;font-weight:700;color:#c8a96e;letter-spacing:.04em}
+.phase-dates{font-size:11px;color:#7a7e8c;margin:4px 0 10px;font-family:'JetBrains Mono',monospace}
+.phase-theme{font-size:13px;color:#fff;font-weight:500;margin-bottom:10px}
+.phase-list{font-size:12px;color:#a8abb7;line-height:1.6}
+.phase-list li{list-style:none;padding-left:14px;position:relative;margin-bottom:4px}
+.phase-list li::before{content:"→";position:absolute;left:0;color:#c8a96e}
+.bridge{background:rgba(0,0,0,0.28);border-radius:14px;padding:22px 24px;margin-top:14px;overflow-x:auto;border:1px solid rgba(255,255,255,0.05)}
+.bridge table{width:100%;border-collapse:collapse;font-size:13px;min-width:680px}
+.bridge th,.bridge td{padding:11px 10px;border-bottom:1px solid rgba(255,255,255,0.06)}
+.bridge th{text-align:left;font-size:10px;letter-spacing:.12em;color:#c8a96e;text-transform:uppercase;font-weight:600}
+.bridge th:not(:first-child):not(:last-child){text-align:right}
+.bridge td.num{text-align:right;font-family:'JetBrains Mono',monospace;color:#e6e8ee;font-weight:500}
+.bridge td.num .u{font-size:10px;color:#7a7e8c;margin-left:2px;font-weight:400}
+.bridge td.num.strong{color:#fff;font-weight:700;font-size:14px}
+.bridge td.num.total{color:#c8a96e;font-weight:700;font-size:14px}
+.bridge td.name{color:#fff;font-weight:500;min-width:160px}
+.bridge td.name.total-label{color:#c8a96e;font-weight:700;letter-spacing:.05em}
+.bridge td.note{font-size:11.5px;color:#7a7e8c;padding-left:16px}
+.bridge tfoot tr{border-top:1px solid rgba(200,169,110,0.28)}
+.bridge tfoot td{border-bottom:none;padding-top:14px}
+.risk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.risk-card{background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px}
+.risk-card.high{border-left:3px solid #f87171}
+.risk-card.medium{border-left:3px solid #fbbf24}
+.risk-card.low{border-left:3px solid #4ade80}
+.risk-title{font-size:13px;font-weight:600;color:#fff;margin-bottom:6px;line-height:1.5}
+.risk-mit{font-size:12px;color:#8a8d98;line-height:1.55}
+.risk-mit b{color:#c8a96e;font-weight:500}
+.asks{display:grid;gap:12px}
+.ask-row{display:flex;align-items:center;gap:16px;background:linear-gradient(90deg,rgba(200,169,110,0.08),rgba(200,169,110,0.02));border:1px solid rgba(200,169,110,0.22);border-radius:14px;padding:18px 22px}
+.ask-n{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:#c8a96e;min-width:36px}
+.ask-body{flex:1}
+.ask-title{font-size:15px;font-weight:600;color:#fff;margin-bottom:4px}
+.ask-why{font-size:12px;color:#a8abb7}
+.ask-date{font-family:'JetBrains Mono',monospace;font-size:11px;color:#c8a96e;padding:4px 10px;background:rgba(200,169,110,0.12);border-radius:6px;white-space:nowrap}
+.footer{margin-top:80px;padding:32px;text-align:center;border-top:1px solid rgba(200,169,110,0.18);color:#8a8d98;font-size:13px;line-height:1.8}
+.footer .sign{color:#c8a96e;margin-top:16px;letter-spacing:.08em;font-size:12px}
+@media print{body{background:#fff;color:#111}.page{padding:24px}.cover h1{color:#1e3a8a;background:none;-webkit-text-fill-color:#1e3a8a}.sec h2{color:#1e3a8a}.sec-prose,.bu-row,.ch-row,.tri-list,.phase-list,.risk-mit,.kpi-why,.kpi-now{color:#444}.kpi-value,.ch-name,.bu-name,.tri-name,.phase-theme,.ask-title{color:#111}.footer,.meta-row{color:#666}.tri-hyp{background:#f5f6fa;color:#333}}
+"""
+    html_out = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{title}</title>
+<style>{css}</style>
+</head>
+<body>
+<div class="page">
+  <header class="cover">
+    <div class="eyebrow">{eyebrow}</div>
+    <h1>{title}</h1>
+    <div class="subtitle">{subtitle}</div>
+    {f'<div class="north">★ {north_star}</div>' if north_star else ''}
+    {f'<div class="north" style="margin-top:10px;background:rgba(200,169,110,0.02);">{one_liner}</div>' if one_liner else ''}
+    <div class="meta-row">{author} · 更新于 {updated}</div>
+  </header>
+  {''.join(blocks)}
+  <footer class="footer">
+    Longfor Qianding Strategy Cockpit &nbsp;·&nbsp; {updated}<br>
+    <div class="sign">{author}</div>
+  </footer>
+</div>
+</body>
+</html>"""
+    return html_out
+
+def _render_section_html(sid: str, data: dict) -> str:
+    import html as _html
+    if not data and sid != "notes":
+        return ""
+    data = data or {}
+
+    def esc(x):
+        return _html.escape(str(x)) if x is not None else ""
+
+    if sid == "kpi":
+        kpis = data.get("kpis", [])
+        cards = []
+        for k in kpis:
+            cur = k.get("current", 0) or 0
+            tgt = k.get("target", 0) or 0
+            pct = min(100, int((cur / tgt * 100) if tgt else 0))
+            cards.append(f"""<div class="kpi-card">
+<div class="kpi-label">{esc(k.get('label',''))} <span class="kpi-hz">· {esc(k.get('horizon',''))}</span></div>
+<div class="kpi-value">{tgt}<span class="unit">{esc(k.get('unit',''))}</span></div>
+<div class="kpi-bar"><div class="kpi-fill" style="width:{pct}%"></div></div>
+<div class="kpi-now">当前 {cur}{esc(k.get('unit',''))} → 目标 {tgt}{esc(k.get('unit',''))}</div>
+<div class="kpi-why">{esc(k.get('why',''))}</div>
+</div>""")
+        return f'<div class="kpi-grid">{"".join(cards)}</div>'
+
+    if sid == "channels":
+        def render_group(label_zh, label_en, items, cls):
+            cards = []
+            for c in items:
+                cards.append(f"""<div class="ch-card {cls}">
+<div class="ch-head"><span class="ch-code">{esc(c.get('code',''))}</span><span class="ch-name">{esc(c.get('name',''))}</span><span class="ch-status">{esc(c.get('status',''))}</span></div>
+<div class="ch-row"><b>痛点</b>{esc(c.get('pain',''))}</div>
+<div class="ch-row"><b>AI 落点</b>{esc(c.get('ai_hook',''))}</div>
+<div class="ch-row"><b>千丁位</b>{esc(c.get('qianding_role',''))}</div>
+</div>""")
+            return f"""<div class="ch-group {cls}-group">
+<div class="ch-group-head"><span class="ch-group-label">{label_en}</span><span class="ch-group-title">{label_zh}</span></div>
+<div class="ch-grid">{"".join(cards)}</div>
+</div>"""
+        html_out = ""
+        if data.get("c_channels"):
+            html_out += render_group("C1 - C5 · 需求方航道", "DEMAND TRACKS", data["c_channels"], "need")
+        if data.get("n_channels"):
+            html_out += render_group("N1 - N3 · 创新航道", "INNOVATION TRACKS", data["n_channels"], "inno")
+        return html_out
+
+    if sid == "bu":
+        items = data.get("bu_list", [])
+        cards = []
+        for b in items:
+            status = esc(b.get("status", ""))
+            cards.append(f"""<div class="bu-card">
+<div class="bu-top">
+<div class="bu-name">{esc(b.get('name',''))}</div>
+<div class="bu-owner">{esc(b.get('owner',''))}</div>
+</div>
+<div class="bu-status-row"><span class="bu-status {status}">{status}</span><span class="bu-role">{esc(b.get('role',''))}</span></div>
+<div class="bu-row"><b>痛点</b>{esc(b.get('pain',''))}</div>
+<div class="bu-row"><b>资产</b>{esc(b.get('asset',''))}</div>
+<div class="bu-row"><b>解锁</b>{esc(b.get('unlock',''))}</div>
+<div class="bu-row bu-row-next"><b>12 周</b>{esc(b.get('next_12w',''))}</div>
+</div>""")
+        return f'<div class="bu-grid">{"".join(cards)}</div>'
+
+    if sid == "trident":
+        items = data.get("tridents", [])
+        cards = []
+        for t in items:
+            color = esc(t.get("color", "amber"))
+            detail_blocks = []
+            if t.get("segments"):
+                segs = "".join(
+                    f'<div class="seg-item"><div class="seg-bu">{esc(s.get("bu",""))}</div>'
+                    f'<div class="seg-focus">{esc(s.get("focus",""))}</div>'
+                    f'<div class="seg-step"><b>起步 →</b> {esc(s.get("first_step",""))}</div></div>'
+                    for s in t["segments"]
+                )
+                detail_blocks.append(f'<div class="tri-block"><div class="tri-block-label">九条 BU 的分别切入</div><div class="seg-list">{segs}</div></div>')
+            if t.get("pillars"):
+                items_h = "".join(
+                    f'<div class="pillar"><div class="pillar-name">{esc(p.get("name",""))}</div><div class="pillar-detail">{esc(p.get("detail",""))}</div></div>'
+                    for p in t["pillars"]
+                )
+                detail_blocks.append(f'<div class="tri-block"><div class="tri-block-label">六大支柱</div><div class="pillar-grid">{items_h}</div></div>')
+            if t.get("experiments"):
+                items_h = "".join(
+                    f'<div class="exp-item"><div class="exp-name">{esc(e.get("name",""))}</div><div class="exp-detail">{esc(e.get("detail",""))}</div></div>'
+                    for e in t["experiments"]
+                )
+                detail_blocks.append(f'<div class="tri-block"><div class="tri-block-label">重点试验</div><div class="exp-list">{items_h}</div></div>')
+            if t.get("best_practices"):
+                bps = "".join(f"<li>{esc(x)}</li>" for x in t["best_practices"])
+                detail_blocks.append(f'<div class="tri-block"><div class="tri-block-label">引入的外部最佳实践</div><ul class="bp-list">{bps}</ul></div>')
+            if t.get("first_step"):
+                detail_blocks.append(f'<div class="tri-firststep"><b>第一步 →</b> {esc(t.get("first_step",""))}</div>')
+            if t.get("note"):
+                detail_blocks.append(f'<div class="tri-note">{esc(t.get("note",""))}</div>')
+            if t.get("targets"):
+                ts = "".join(f"<li>{esc(x)}</li>" for x in t["targets"])
+                detail_blocks.append(f'<div class="tri-block"><div class="tri-block-label">目标</div><ul class="tri-list">{ts}</ul></div>')
+            summary = esc(t.get("summary", ""))
+            cards.append(f"""<div class="tri-card {color}">
+<div class="tri-code">{esc(t.get('code',''))}</div>
+<div class="tri-name">{esc(t.get('name',''))}</div>
+<div class="tri-tag">{esc(t.get('tagline',''))}</div>
+<div class="tri-horizon">◦ {esc(t.get('horizon',''))}</div>
+<div class="tri-summary">{summary}</div>
+{"".join(detail_blocks)}
+<div class="tri-foot">负责方 · {esc(t.get('owner',''))}</div>
+</div>""")
+        return f'<div class="trident-stack">{"".join(cards)}</div>'
+
+    if sid == "efficiency":
+        svcs = data.get("services", [])
+        why = esc(data.get("why", ""))
+        first = esc(data.get("first_step", ""))
+        items = []
+        for s in svcs:
+            items.append(f'<div class="eff-svc"><div class="eff-name">{esc(s.get("name",""))}</div><div class="eff-desc">{esc(s.get("detail",""))}</div></div>')
+        return f"""<div class="eff-why">{why}</div>
+<div class="eff-grid">{"".join(items)}</div>
+{f'<div class="eff-first"><b>第一步 →</b> {first}</div>' if first else ''}"""
+
+    if sid == "roadmap":
+        phases = data.get("phases", [])
+        cards = []
+        for p in phases:
+            outs = "".join(f"<li>{esc(o)}</li>" for o in p.get("outcomes", []))
+            cards.append(f"""<div class="phase">
+<div class="phase-label">{esc(p.get('label',''))}</div>
+<div class="phase-dates">{esc(p.get('dates',''))}</div>
+<div class="phase-theme">{esc(p.get('theme',''))}</div>
+<ul class="phase-list">{outs}</ul>
+</div>""")
+        return f'<div class="phases">{"".join(cards)}</div>'
+
+    if sid == "finance":
+        rows = data.get("bridge", [])
+        trs = []
+        for r in rows:
+            unit = esc(r.get("unit", ""))
+            trs.append(
+                f'<tr><td class="name">{esc(r.get("name",""))}</td>'
+                f'<td class="num">{r.get("y1",0)}<span class="u">{unit}</span></td>'
+                f'<td class="num">{r.get("y2",0)}<span class="u">{unit}</span></td>'
+                f'<td class="num">{r.get("y3",0)}<span class="u">{unit}</span></td>'
+                f'<td class="num">{r.get("y4",0)}<span class="u">{unit}</span></td>'
+                f'<td class="num strong">{r.get("y5",0)}<span class="u">{unit}</span></td>'
+                f'<td class="note">{esc(r.get("note",""))}</td></tr>'
+            )
+        # Totals
+        totals = [0,0,0,0,0]
+        for r in rows:
+            for i, k in enumerate(["y1","y2","y3","y4","y5"]):
+                try: totals[i] += float(r.get(k, 0) or 0)
+                except: pass
+        tot_html = "".join(f'<td class="num total">{round(v,1)}<span class="u">亿</span></td>' for v in totals)
+        return f"""<div class="bridge"><table>
+<thead><tr><th>业务线</th><th>Y1</th><th>Y2</th><th>Y3</th><th>Y4</th><th>Y5</th><th>说明</th></tr></thead>
+<tbody>{"".join(trs)}</tbody>
+<tfoot><tr><td class="name total-label">合计</td>{tot_html}<td></td></tr></tfoot>
+</table></div>"""
+
+    if sid == "risks":
+        items = data.get("risks", [])
+        cards = []
+        for r in items:
+            sev = esc(r.get("severity", "medium"))
+            cards.append(f"""<div class="risk-card {sev}">
+<div class="risk-title">{esc(r.get('risk',''))}</div>
+<div class="risk-mit"><b>对冲</b> · {esc(r.get('mitigation',''))}</div>
+</div>""")
+        return f'<div class="risk-grid">{"".join(cards)}</div>'
+
+    if sid == "next":
+        items = data.get("asks", [])
+        rows = []
+        for i, a in enumerate(items, 1):
+            rows.append(f"""<div class="ask-row">
+<div class="ask-n">0{i}</div>
+<div class="ask-body"><div class="ask-title">{esc(a.get('title',''))}</div><div class="ask-why">{esc(a.get('why',''))}</div></div>
+<div class="ask-date">{esc(a.get('deliver_by',''))}</div>
+</div>""")
+        return f'<div class="asks">{"".join(rows)}</div>'
+
+    return ""
+
+
 # ── PWA ───────────────────────────────────────────────
 @app.get("/manifest.json")
 async def manifest():
@@ -3456,6 +5064,7 @@ async def icon():
     return HTMLResponse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#09090f"/><text x="256" y="340" font-size="320" font-family="system-ui" font-weight="900" fill="url(#g)" text-anchor="middle">O</text><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#c8a96e"/><stop offset="100%" stop-color="#8a6d3b"/></linearGradient></defs></svg>', media_type="image/svg+xml")
 
 static_dir = Path(__file__).parent / "static"
+app.mount("/reports-static", StaticFiles(directory=str(REPORTS_DIR)), name="reports-static")
 app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 
 
@@ -3469,7 +5078,7 @@ if __name__ == "__main__":
     # Validate vault
     if not VAULT.exists():
         VAULT.mkdir(parents=True, exist_ok=True)
-    for d in ["Journal/Daily","Journal/Weekly","Journal/Monthly","Journal/Quarterly","Notes","Decisions","Contacts/people","Projects","AI-Logs","Templates","Memory","Memory/insights"]:
+    for d in ["Journal/Daily","Journal/Weekly","Journal/Monthly","Journal/Quarterly","Notes","Decisions","Contacts/people","Projects","AI-Logs","Templates","Memory","Memory/insights","Insights","Life","Longfor"]:
         (VAULT / d).mkdir(parents=True, exist_ok=True)
     MEDIA.mkdir(exist_ok=True)
 
