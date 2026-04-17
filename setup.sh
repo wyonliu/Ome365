@@ -14,7 +14,17 @@ echo "✅ Python: $(python3 --version)"
 
 # Install deps
 echo "📦 安装依赖..."
-pip install fastapi uvicorn python-multipart 2>/dev/null || pip3 install fastapi uvicorn python-multipart
+if [ -f requirements.txt ]; then
+    pip install -r requirements.txt 2>/dev/null || pip3 install -r requirements.txt
+else
+    pip install fastapi uvicorn python-multipart pyyaml 2>/dev/null || pip3 install fastapi uvicorn python-multipart pyyaml
+fi
+
+# Copy .env.example → .env if missing
+if [ ! -f .env ] && [ -f .env.example ]; then
+    cp .env.example .env
+    echo "✅ 已创建 .env（按需编辑填入 AI key）"
+fi
 
 # Init vault if empty
 if [ ! -f "000-365-PLAN.md" ]; then
