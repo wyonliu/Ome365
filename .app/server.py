@@ -669,7 +669,17 @@ async def dashboard():
         notes_count = nfp.read_text("utf-8").count("\n- [")
     ppl_dir = VAULT/"Contacts"/"people"
     contact_count = len(list(ppl_dir.glob("*.md"))) if ppl_dir.exists() else 0
-    memory_count = len(list((VAULT/"Memory").glob("*.md"))) - 1 if (VAULT/"Memory").exists() else 0  # -1 for MEMORY.md
+    # Prefer Ome structured-memory store (fact/episode/skill/…) over legacy Memory/*.md files.
+    # Legacy count kept as fallback for when Ome isn't initialized yet.
+    _ome = get_ome()
+    if _ome:
+        try:
+            with _ome_lock:
+                memory_count = _ome.memory_stats().get("total", 0)
+        except Exception:
+            memory_count = 0
+    else:
+        memory_count = len(list((VAULT/"Memory").glob("*.md"))) - 1 if (VAULT/"Memory").exists() else 0  # -1 for MEMORY.md
 
     # Today's mood/energy/focus
     today_meta = daily["meta"]
@@ -993,6 +1003,7 @@ async def create_decision(body:DecisionCreate):
     meta = {"date":today_s(),"scope":body.scope,"impact":body.impact,"status":"待验证","verify_by":vd}
     content = f"""# 决策：{body.title}\n\n## 背景\n{body.background or '（待补充）'}\n\n## 备选方案\n1. **方案A**：\n2. **方案B**：\n\n## 最终选择\n（待补充）\n\n## 验证记录\n> {vd} 回来填写\n"""
     write_md(fp, meta, content)
+    _auto_growth()
     return {"ok":True,"file":fn}
 
 @app.get("/api/decisions/{filename}")
@@ -1163,6 +1174,7 @@ async def ai_ask(body:dict):
         try:
             with _ome_lock:
                 result = ome.chat_rich(f"{day_ctx}\n{full_prompt}")
+            _auto_growth()
             return {
                 "ok": True,
                 "response": result.get("reply", ""),
@@ -1708,6 +1720,75 @@ def parse_contact(fp: Path) -> dict:
         "content": content,
     }
 
+# ── ENTERPRISE ENTITY GRAPH (EEG) ─────────────────────
+# 统一企业术语/人名/组织/产品的"常识层"。见 docs/EEG.md
+try:
+    from entity_registry import (
+        all_entities as _eeg_all,
+        get_entity as _eeg_get,
+        list_entities as _eeg_list,
+        search as _eeg_search,
+        asr_rules as _eeg_asr_rules,
+        resolve as _eeg_resolve,
+        stats as _eeg_stats,
+    )
+    _EEG_OK = True
+except Exception as _e:
+    _EEG_OK = False
+    _EEG_ERR = str(_e)
+
+
+def _require_eeg():
+    if not _EEG_OK:
+        raise HTTPException(500, f"entity_registry unavailable: {_EEG_ERR}")
+
+
+@app.get("/api/entities")
+async def eeg_list(type: str = None, tenant: str = None, q: str = None):
+    """列表：支持 type / tenant / q 过滤。"""
+    _require_eeg()
+    if q:
+        res = _eeg_search(q, type_filter=type, tenant=tenant)
+    else:
+        res = _eeg_list(type_filter=type, tenant=tenant)
+    return {"entities": res, "count": len(res)}
+
+
+@app.get("/api/entities/stats")
+async def eeg_stats_api():
+    _require_eeg()
+    return _eeg_stats()
+
+
+@app.get("/api/entities/asr")
+async def eeg_asr(tenant: str = "longfor"):
+    """返回 ASR 规则字典（app.js 启动时热加载）。"""
+    _require_eeg()
+    return {"rules": _eeg_asr_rules(tenant=tenant), "tenant": tenant}
+
+
+@app.post("/api/entities/resolve")
+async def eeg_resolve_api(body: dict):
+    """别名 → 规范名；所有送进 LLM / 检索前的文本都应该过一遍。"""
+    _require_eeg()
+    text = body.get("text", "") or ""
+    tenant = body.get("tenant") or "longfor"
+    return _eeg_resolve(text, tenant=tenant)
+
+
+@app.get("/api/entities/{type}/{id}")
+async def eeg_get(type: str, id: str):
+    _require_eeg()
+    e = _eeg_get(id)
+    if not e:
+        raise HTTPException(404, f"entity {id} not found")
+    # Normalize type ("people" vs "person")
+    type_norm = type.rstrip("s")
+    if e["type"] != type_norm and type_norm not in ("*", "any"):
+        raise HTTPException(404, f"entity {id} exists but type={e['type']} not {type_norm}")
+    return e
+
+
 @app.get("/api/contacts")
 async def list_contacts(category:str=None, tier:str=None):
     PEOPLE_DIR.mkdir(parents=True, exist_ok=True)
@@ -2115,20 +2196,25 @@ async def get_interviews():
         for fp in sorted(d.glob("*.md")):
             size = fp.stat().st_size
             raw = fp.read_text("utf-8")
-            # Skip YAML frontmatter (--- ... ---) to find real first heading
+            # Parse YAML frontmatter (--- ... ---) for title, then fall back to first heading
             _lines = raw.split("\n")
             _start = 0
+            fm_title = ""
             if _lines and _lines[0].strip() == '---':
                 for _li in range(1, len(_lines)):
                     if _lines[_li].strip() == '---':
                         _start = _li + 1
                         break
+                    _tm = _re.match(r'^title:\s*(.+)$', _lines[_li])
+                    if _tm:
+                        fm_title = _tm.group(1).strip()
             first_line = ""
-            for _li in range(_start, min(_start + 10, len(_lines))):
-                _cl = _lines[_li].lstrip("# ").strip()
-                if _cl:
-                    first_line = _cl
-                    break
+            if not fm_title:
+                for _li in range(_start, min(_start + 10, len(_lines))):
+                    _cl = _lines[_li].lstrip("# ").strip()
+                    if _cl:
+                        first_line = _cl
+                        break
             stem = fp.stem
             # Parse org/person from filename
             # New format: "千丁BU-智慧建造-—·主题·2026-04-08"
@@ -2181,11 +2267,11 @@ async def get_interviews():
             low = seg0.lower()
             if low.startswith("集团") or low.startswith("千丁ceo") or low.startswith("千丁hrd"):
                 cat = "管理层"
-            elif _re.match(r'^C\d', seg0) or _re.match(r'^N\d', seg0):
+            elif _re.match(r'^C\d', seg0) or _re.match(r'^N\d', seg0) or _re.match(r'^龙湖C\d', seg0) or _re.match(r'^龙湖N\d', seg0):
                 cat = "航道"
             elif "终面" in seg0 or "面试" in seg0:
                 cat = "面试"
-            elif "千丁BU" in seg0 or "千丁战略" in seg0 or (seg0.startswith("千丁") and any(k in seg0 for k in ["物管", "财务", "签零", "员工", "数科", "建造", "空间", "资管", "城服", "IDC", "营销", "运营", "AI创新"])):
+            elif "千丁BU" in seg0 or "千丁战略" in seg0 or (seg0.startswith("千丁") and any(k in seg0 for k in ["物管", "财务", "签零", "员工", "数科", "建造", "建管", "空间", "资管", "城服", "IDC", "营销", "运营", "AI创新"])):
                 cat = "BU"
             elif seg0.startswith("外部"):
                 cat = "外部"
@@ -2193,7 +2279,7 @@ async def get_interviews():
                 cat = "内部"
             files.append({
                 "name": stem,
-                "title": first_line or stem,
+                "title": fm_title or first_line or stem,
                 "path": str(fp.relative_to(VAULT)),
                 "size": size,
                 "org": org,
@@ -2686,6 +2772,7 @@ async def update_today_meta(body: dict):
         new_text = fm + text
 
     fp.write_text(new_text, "utf-8")
+    _auto_growth()
     return {"ok": True}
 
 
@@ -3277,7 +3364,13 @@ def save_growth(data: dict):
     GROWTH_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
 
 def _auto_growth(count=1):
-    """Background growth interaction increment."""
+    """Background growth interaction increment.
+
+    Writes both the legacy local growth.json counter AND Ome's internal bond
+    counter (which drives /api/growth phase + bond progression). Without the
+    Ome side, interactions count stays at 5 regardless of user activity because
+    only ome.chat() bumps the Ome bond internally.
+    """
     try:
         growth = load_growth()
         growth["total_interactions"] = growth.get("total_interactions", 0) + count
@@ -3285,6 +3378,20 @@ def _auto_growth(count=1):
             growth["evolution_pending"] = True
         save_growth(growth)
     except:
+        pass
+    # Bump Ome's internal bond counter so /api/growth progresses too.
+    try:
+        ome = get_ome()
+        if ome and hasattr(ome, "bond"):
+            today_str = today_s()
+            with _ome_lock:
+                for _ in range(max(1, int(count))):
+                    ome.bond.record_interaction(today_str)
+                # Persist bond state (SQLite soul_state) so count survives restart.
+                if hasattr(ome, "_save_life_state"):
+                    try: ome._save_life_state()
+                    except Exception: pass
+    except Exception:
         pass
 
 def _compute_vault_stats() -> dict:
@@ -3460,7 +3567,26 @@ async def get_growth():
 
             ome_bond = dash.get("bond", {})
             total_interactions = ome_bond.get("total_interactions", 0)
-            days_since = ome_bond.get("days", 0)
+            # Always prefer identity.created_at — life_dashboard()'s bond dict
+            # may surface min_days (of next level) under "days", which caused
+            # the sidebar to report "3天" when the real age was 10.
+            days_since = 0
+            try:
+                created = ome.soul.identity.get("created_at", "") if hasattr(ome, "soul") else ""
+                if created:
+                    from datetime import datetime as _dt
+                    days_since = max(0, (date.today() - _dt.strptime(created[:10], "%Y-%m-%d").date()).days)
+            except Exception:
+                pass
+            if not days_since:
+                # Last-resort fallbacks.
+                days_since = ome_bond.get("days_since_creation") or 0
+                if not days_since:
+                    try:
+                        days_since = getattr(ome.bond, "days_since_creation", 0)
+                    except Exception:
+                        days_since = 0
+            days_since = int(days_since or 0)
 
             # Map Ome phase to legacy phase (match by interaction/days thresholds)
             phase = GROWTH_PHASES[0]
@@ -3774,6 +3900,7 @@ async def add_ome_memory(body: dict):
         try:
             with _ome_lock:
                 result = ome.remember(body.get("content", ""), source=body.get("source", "manual"))
+            _auto_growth()
             return {"ok": True, "result": result}
         except Exception as e:
             return {"ok": False, "error": str(e)[:100]}
@@ -4491,6 +4618,7 @@ async def life_moment_create(body: dict):
             LIFE_MOMENTS_FILE.write_text(f"# 生活时刻\n\n{line}", "utf-8")
     except Exception:
         pass
+    _auto_growth()
     return {"ok": True, "id": mom["id"]}
 
 
@@ -5064,6 +5192,184 @@ async def icon():
     return HTMLResponse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#09090f"/><text x="256" y="340" font-size="320" font-family="system-ui" font-weight="900" fill="url(#g)" text-anchor="middle">O</text><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#c8a96e"/><stop offset="100%" stop-color="#8a6d3b"/></linearGradient></defs></svg>', media_type="image/svg+xml")
 
 static_dir = Path(__file__).parent / "static"
+
+# ── Share: read-only document sharing ──
+# URL: /<user>/<code>  (e.g. /wyon/43ce7eaa)
+# Config: SHARE_USERS lists allowed usernames
+# Deploy: set SHARE_BASE_URL=https://ome365.longfor.com
+import hashlib
+
+SHARE_USERS = os.environ.get("SHARE_USERS", "wyon").split(",")
+SHARE_BASE_URL = os.environ.get("SHARE_BASE_URL", f"http://localhost:{PORT}")
+SHARE_SERVER_PORT = int(os.environ.get("SHARE_PORT", "3651"))
+SHARE_SERVER_BASE = os.environ.get("SHARE_SERVER_BASE", f"http://localhost:{SHARE_SERVER_PORT}")
+SHARE_REGISTRY = Path(__file__).parent / "share_registry.json"
+
+def _build_share_map():
+    smap = {}
+    tn = VAULT / "TicNote"
+    if not tn.exists():
+        return smap
+    for md in tn.rglob("*.md"):
+        if md.name.startswith("_"):
+            continue
+        rel = str(md.relative_to(VAULT))
+        code = hashlib.sha256(rel.encode()).hexdigest()[:8]
+        title = md.stem
+        date_str = ""
+        participants = ""
+        try:
+            head = md.read_text("utf-8")[:800]
+            lines = head.split("\n")
+            if lines and lines[0].strip() == "---":
+                for li in lines[1:]:
+                    if li.strip() == "---":
+                        break
+                    tm = re.match(r"^title:\s*(.+)$", li)
+                    if tm:
+                        title = tm.group(1).strip()
+                    dm = re.match(r"^date:\s*(.+)$", li)
+                    if dm:
+                        date_str = dm.group(1).strip()
+                    pm = re.match(r"^participants:\s*(.+)$", li)
+                    if pm:
+                        participants = pm.group(1).strip()
+        except Exception:
+            pass
+        if not date_str:
+            dm2 = re.search(r"(\d{4}-\d{2}-\d{2})", md.stem)
+            if dm2:
+                date_str = dm2.group(1)
+        smap[code] = {"path": rel, "title": title, "name": md.stem, "date": date_str, "participants": participants}
+    return smap
+
+_share_map_cache = None
+
+def _get_share_map():
+    global _share_map_cache
+    if _share_map_cache is None:
+        _share_map_cache = _build_share_map()
+    return _share_map_cache
+
+@app.get("/api/share/list")
+async def share_list():
+    smap = _get_share_map()
+    base = SHARE_BASE_URL.rstrip("/")
+    user = SHARE_USERS[0] if SHARE_USERS else "user"
+    return [{"code": k, "url": f"{base}/{user}/{k}", **v} for k, v in sorted(smap.items(), key=lambda x: x[1].get("date",""), reverse=True)]
+
+@app.get("/api/share/refresh")
+async def share_refresh():
+    global _share_map_cache
+    _share_map_cache = _build_share_map()
+    return {"count": len(_share_map_cache)}
+
+@app.get("/api/share/code")
+async def share_code_for_path(path: str):
+    """Get share code + URL for a document path."""
+    smap = _get_share_map()
+    for code, entry in smap.items():
+        if entry["path"] == path:
+            base = SHARE_BASE_URL.rstrip("/")
+            user = SHARE_USERS[0] if SHARE_USERS else "user"
+            return {"code": code, "url": f"{base}/{user}/{code}", "title": entry["title"]}
+    raise HTTPException(404, "No share code for this path")
+
+def _load_share_registry():
+    if SHARE_REGISTRY.exists():
+        return json.loads(SHARE_REGISTRY.read_text("utf-8"))
+    return {}
+
+def _save_share_registry(data):
+    SHARE_REGISTRY.write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
+
+@app.get("/api/share/by-path")
+async def share_by_path(path: str, user: str = ""):
+    if not user:
+        user = SHARE_USERS[0] if SHARE_USERS else "user"
+    reg = _load_share_registry()
+    ns = reg.get(user, {})
+    for slug, entry in ns.items():
+        if entry["path"] == path:
+            base = SHARE_SERVER_BASE.rstrip("/")
+            return {"found": True, "slug": slug, "title": entry["title"], "url": f"{base}/{user}/{slug}", "created": entry.get("created", "")}
+    return {"found": False}
+
+@app.get("/api/share/check-slug")
+async def share_check_slug(slug: str, user: str = ""):
+    if not user:
+        user = SHARE_USERS[0] if SHARE_USERS else "user"
+    reg = _load_share_registry()
+    ns = reg.get(user, {})
+    taken = slug in ns
+    return {"slug": slug, "available": not taken, "existing": ns[slug] if taken else None}
+
+@app.post("/api/share/register")
+async def share_register(slug: str, path: str, title: str = "", user: str = ""):
+    if not user:
+        user = SHARE_USERS[0] if SHARE_USERS else "user"
+    slug_re = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')
+    if not slug_re.match(slug):
+        raise HTTPException(400, "Slug must be alphanumeric/hyphens/underscores, 1-64 chars")
+    fp = VAULT / path
+    if not fp.exists():
+        raise HTTPException(404, f"File not found: {path}")
+    reg = _load_share_registry()
+    ns = reg.setdefault(user, {})
+    if slug in ns and ns[slug]["path"] != path:
+        raise HTTPException(409, f"'{slug}' already taken by: {ns[slug]['title']}")
+    # Dedup: remove any existing slug pointing to the same path
+    old_slugs = [k for k, v in ns.items() if v["path"] == path and k != slug]
+    for old in old_slugs:
+        del ns[old]
+    if not title:
+        title = _extract_title_from_file(fp)
+    ns[slug] = {"path": path, "title": title, "created": date.today().isoformat()}
+    _save_share_registry(reg)
+    base = SHARE_SERVER_BASE.rstrip("/")
+    return {"url": f"{base}/{user}/{slug}", "slug": slug, "user": user, "title": title}
+
+def _extract_title_from_file(fp):
+    try:
+        head = fp.read_text("utf-8")[:600]
+        lines = head.split("\n")
+        if lines and lines[0].strip() == "---":
+            for li in lines[1:]:
+                if li.strip() == "---":
+                    break
+                m = re.match(r"^title:\s*(.+)$", li)
+                if m:
+                    return m.group(1).strip()
+    except Exception:
+        pass
+    return fp.stem
+
+@app.delete("/api/share/register")
+async def share_unregister(slug: str, user: str = ""):
+    if not user:
+        user = SHARE_USERS[0] if SHARE_USERS else "user"
+    reg = _load_share_registry()
+    ns = reg.get(user, {})
+    if slug not in ns:
+        raise HTTPException(404, "Slug not found")
+    del ns[slug]
+    if not ns:
+        del reg[user]
+    _save_share_registry(reg)
+    return {"ok": True}
+
+@app.get("/api/share/{code}")
+async def share_get(code: str):
+    smap = _get_share_map()
+    entry = smap.get(code)
+    if not entry:
+        raise HTTPException(404, "Document not found")
+    fp = VAULT / entry["path"]
+    if not fp.exists():
+        raise HTTPException(404, "File missing")
+    raw = fp.read_text("utf-8")
+    return {"raw": raw, "name": entry["name"], "title": entry["title"], "path": entry["path"]}
+
 app.mount("/reports-static", StaticFiles(directory=str(REPORTS_DIR)), name="reports-static")
 app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 
