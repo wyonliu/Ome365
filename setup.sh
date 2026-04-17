@@ -26,6 +26,18 @@ if [ ! -f .env ] && [ -f .env.example ]; then
     echo "✅ 已创建 .env（按需编辑填入 AI key）"
 fi
 
+# Install git hooks (pre-commit 守门员，阻止隐私数据被意外 commit)
+if [ -d .git ] && [ -d .githooks ]; then
+    git config core.hooksPath .githooks
+    echo "✅ 已激活 .githooks/pre-commit（隐私守门员）"
+fi
+
+# Seed share_registry.json from sample
+if [ ! -f .app/share_registry.json ] && [ -f .app/share_registry.sample.json ]; then
+    cp .app/share_registry.sample.json .app/share_registry.json
+    echo "✅ 已创建 .app/share_registry.json（可按需编辑分享清单）"
+fi
+
 # Init vault if empty
 if [ ! -f "000-365-PLAN.md" ]; then
     echo "📂 初始化示例数据..."

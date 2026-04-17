@@ -49,6 +49,9 @@
 # ── Cockpit live config（含真实人名/组织/战略，用户私有 · 仅保留 .sample.json）──
 .app/cockpit_config.json
 
+# ── Share registry live（含真实分享文档映射 · 仅保留 .sample.json）──
+.app/share_registry.json
+
 # ── TicNote export archived versions（保留最新 ticnote_export.py/ticnote_clean.py/ticnote_rename.py）──
 .app/ticnote_export_0414.py
 .app/ticnote_export_0415.py
