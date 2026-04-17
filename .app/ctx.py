@@ -245,6 +245,7 @@ class RequestCtx:
     settings_path: Path = field(default_factory=lambda: _app_dir() / "settings.json")
     tenant_config: dict = field(default_factory=dict)
     is_multi_user: bool = False
+    user: Optional[object] = None  # auth.base.User 实例；legacy 模式为 None
 
     def resolve_vault(self, rel: str | Path) -> Path:
         """安全解析 vault 内相对路径，防 path traversal。"""
