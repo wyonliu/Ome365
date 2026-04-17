@@ -82,6 +82,13 @@ async def api_tenant_config():
     return TENANT
 
 
+@app.get("/api/_ctx/healthcheck")
+async def api_ctx_healthcheck():
+    """多租户/多用户脚手架自检。返回当前 ctx、租户列表、兼容模式状态。"""
+    from ctx import healthcheck
+    return healthcheck()
+
+
 # ── Settings ──────────────────────────────────────────
 SETTINGS_FILE = Path(__file__).parent / "settings.json"
 
@@ -5415,6 +5422,24 @@ SHARE_BASE_URL = os.environ.get("SHARE_BASE_URL", f"http://localhost:{PORT}")
 SHARE_SERVER_PORT = int(os.environ.get("SHARE_PORT", "3651"))
 SHARE_SERVER_BASE = os.environ.get("SHARE_SERVER_BASE", f"http://localhost:{SHARE_SERVER_PORT}")
 SHARE_REGISTRY = Path(__file__).parent / "share_registry.json"
+
+# 整合挂载：主站把 share 路由挂到 /s/*（主站+分享站合一形态）
+# share_server.py 仍保留为独立进程启动器，继续用旧 URL 兼容（3651 端口）
+try:
+    from share_routes import build_router as _build_share_router
+    _SHARE_STATIC = Path(__file__).parent / "static"
+    _share_router = _build_share_router(
+        get_vault=lambda: VAULT,
+        get_registry_path=lambda: SHARE_REGISTRY,
+        get_tenant=lambda: TENANT,
+        get_static_dir=lambda: _SHARE_STATIC,
+        get_reports_dir=lambda: (VAULT / (((TENANT.get("reports") or {}).get("dir")) or "reports")),
+        get_base_url=lambda: f"http://localhost:{PORT}",
+        prefix="/s",
+    )
+    app.include_router(_share_router)
+except Exception as _e:
+    print(f"[warn] share routes not mounted: {_e}")
 
 def _build_share_map():
     smap = {}
