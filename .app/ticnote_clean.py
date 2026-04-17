@@ -107,7 +107,60 @@ def clean_section(text, recording_title=""):
     while result and not result[-1].strip():
         result.pop()
 
-    return '\n'.join(result)
+    # 去重：TicNote 会把总结导出两遍（简版 + Cornell详版）
+    # 策略：找到第一个 emoji 前缀的顶层 section header（会议概述/访谈基本信息/会议概要等）
+    # 如果同一行又出现第二次，从第二次开始截断
+    result = dedup_summary(result)
+
+    # 合并连续空行（最多保留 1 个）
+    collapsed = []
+    blank = 0
+    for line in result:
+        if not line.strip():
+            blank += 1
+            if blank <= 1:
+                collapsed.append(line)
+        else:
+            blank = 0
+            collapsed.append(line)
+    # 去尾空行
+    while collapsed and not collapsed[-1].strip():
+        collapsed.pop()
+
+    return '\n'.join(collapsed)
+
+
+# 匹配顶层 section header：emoji 前缀 + 概述/概要/基本信息
+_TOP_SECTION_RE = re.compile(
+    r'^([\U0001F300-\U0001FAFF\u2600-\u27BF])\s*(会议概述|访谈基本信息|会议概要|访谈概述|基本信息|概述)\s*$'
+)
+
+
+def dedup_summary(lines):
+    """去除 TicNote 导出的重复总结块。
+
+    TicNote 会在一份文件里导出两遍同一场会议的总结：
+    前半是简版、后半是详版，两段都以同一个 emoji 前缀的顶层 section
+    开头（如 "📝 会议概述" / "📋会议概述" / "📝访谈基本信息"）。
+
+    这里定位第一个顶层 section header，在它**第二次**出现的位置截断。
+    """
+    first_header = None
+    first_idx = None
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if _TOP_SECTION_RE.match(s):
+            if first_header is None:
+                first_header = s
+                first_idx = i
+            elif s == first_header and i > first_idx:
+                # 截断到第二次出现的前一行
+                trimmed = lines[:i]
+                # 去尾空行
+                while trimmed and not trimmed[-1].strip():
+                    trimmed.pop()
+                return trimmed
+    return lines
 
 
 def clean_transcript(text):
