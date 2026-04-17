@@ -1,13 +1,85 @@
+# Ome365 多场景 docker-compose
+#
+# 启动方式：
+#
+#   # 单人自用（默认，无认证）
+#   docker compose up -d ome365
+#
+#   # 公开 demo（basic 密码登录）
+#   OME365_DEMO_PASSWORD=mySecret docker compose --profile demo up -d
+#
+#   # 家庭（basic 密码 + 多用户）
+#   docker compose --profile family up -d
+#
+# 数据卷：
+#   ./data/vault     → /data          你的 vault（Journal/Notes/…）
+#   ./data/home      → /home/.ome365  auth 元数据（sessions.db / tenants/）
+#
+# 首次启动后：
+#   - Solo:   打开 http://localhost:3650
+#   - Demo:   先 docker compose exec ome365 python3 /app/scripts/make_demo_config.py
+#             然后 http://localhost:3650/auth/login
+
 version: "3.8"
 
+x-common: &common
+  build: .
+  image: ome365:latest
+  restart: unless-stopped
+  volumes:
+    - ./data/vault:/data
+    - ./data/home:/home/.ome365
+  environment:
+    OME365_VAULT: /data
+    OME365_HOME: /home/.ome365
+    OME365_PORT: "3650"
+  healthcheck:
+    test: ["CMD", "python3", "-c", "import urllib.request as u; u.urlopen('http://localhost:3650/api/auth/healthcheck', timeout=3).read()"]
+    interval: 30s
+    timeout: 5s
+    start_period: 10s
+    retries: 3
+
 services:
+
+  # 默认 profile：单人自用（无认证）
   ome365:
-    build: .
+    <<: *common
     container_name: ome365
     ports:
       - "3650:3650"
-    volumes:
-      - ./data:/data    # 你的数据在这里，容器删了数据还在
-    restart: unless-stopped
     environment:
-      - OME365_VAULT=/data
+      OME365_VAULT: /data
+      OME365_HOME: /home/.ome365
+      OME365_PORT: "3650"
+      OME365_COMPAT_LEGACY: "1"
+      OME365_AUTH_PROVIDER: "none"
+
+  # profile=demo：公开 demo，basic 密码登录
+  ome365-demo:
+    <<: *common
+    container_name: ome365-demo
+    profiles: ["demo"]
+    ports:
+      - "3650:3650"
+    environment:
+      OME365_VAULT: /data
+      OME365_HOME: /home/.ome365
+      OME365_PORT: "3650"
+      OME365_COMPAT_LEGACY: "1"
+      OME365_AUTH_PROVIDER: "basic"
+      OME365_DEMO_PASSWORD: ${OME365_DEMO_PASSWORD:-ome365-demo}
+
+  # profile=family：多用户（basic / magic_link，按 tenant_config 决定）
+  ome365-family:
+    <<: *common
+    container_name: ome365-family
+    profiles: ["family"]
+    ports:
+      - "3650:3650"
+    environment:
+      OME365_VAULT: /data
+      OME365_HOME: /home/.ome365
+      OME365_PORT: "3650"
+      # 多用户模式由 $OME365_HOME/tenants/ 存在决定；首次启动后跑迁移脚本
+      OME365_SMTP_PASSWORD: ${OME365_SMTP_PASSWORD:-}
