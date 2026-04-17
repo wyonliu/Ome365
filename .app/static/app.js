@@ -4327,15 +4327,26 @@ const app = createApp({
         if (res?.ok) {
           const r = res.results;
           const parts = [];
-          if (r.contacts_created) parts.push(`新建${r.contacts_created}个联系人`);
-          if (r.contacts_updated) parts.push(`更新${r.contacts_updated}个联系人`);
-          if (r.interactions_added) parts.push(`添加${r.interactions_added}条互动`);
-          if (r.todos_added) parts.push(`添加${r.todos_added}条待办`);
-          if (r.notes_added) parts.push(`添加${r.notes_added}条笔记`);
+          const isRename = smartInputResult.value && smartInputResult.value.type === 'rename';
+          if (isRename) {
+            if (r.files_renamed) parts.push(`改动${r.files_renamed}个文件`);
+            if (r.replacements) parts.push(`替换${r.replacements}处`);
+            if (r.contacts_updated) parts.push(`联系人档案更名`);
+            if (r.entity_created) parts.push(`EEG新建实体`);
+            else if (r.entity_alias_added) parts.push(`EEG登记别名`);
+            // Reload EEG ASR rules so future inputs benefit
+            if (typeof loadASRFromEEG === 'function') { try { await loadASRFromEEG(); } catch(e){} }
+          } else {
+            if (r.contacts_created) parts.push(`新建${r.contacts_created}个联系人`);
+            if (r.contacts_updated) parts.push(`更新${r.contacts_updated}个联系人`);
+            if (r.interactions_added) parts.push(`添加${r.interactions_added}条互动`);
+            if (r.todos_added) parts.push(`添加${r.todos_added}条待办`);
+            if (r.notes_added) parts.push(`添加${r.notes_added}条笔记`);
+          }
           showToast(parts.join('、') || '完成');
           noteText.value = '';
           smartInputResult.value = null;
-          recordInteraction(Object.values(r).reduce((a,b)=>a+b,0) || 1);
+          recordInteraction(Object.values(r).filter(v=>typeof v==='number').reduce((a,b)=>a+b,0) || 1);
           // Refresh relevant data
           if (view.value === 'today') await loadToday();
           if (view.value === 'notes') await loadNotes();

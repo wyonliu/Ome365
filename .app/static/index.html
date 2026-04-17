@@ -1207,6 +1207,35 @@
             </nav>
             <div class="rv-actionbar">
               <button class="btn-ghost rv-back" @click="cockpitCloseReport()">← 返回 {{cockpitActiveBlockData?.label || '驾舱'}}</button>
+              <button class="btn-ghost share-btn-anchor" @click="openShareDialog($event)" title="分享文档">🔗 分享</button>
+              <teleport to="body">
+                <transition name="pop">
+                  <div v-if="shareDialog.show" class="share-pop" :style="shareDialog.pos" @click.stop>
+                    <div class="share-pop-slug-row" v-if="!shareDialog.existing">
+                      <span class="share-pop-prefix">/{{shareDialog.user}}/</span>
+                      <input v-model="shareDialog.slug" @input="checkShareSlug" :placeholder="shareDialog.autoSlug ? '' : '自定义'" class="share-pop-input" :readonly="shareDialog.autoSlug"/>
+                      <button class="share-pop-mode" @click="toggleSlugMode" :title="shareDialog.autoSlug ? '切换手动输入' : '切换自动生成'">{{ shareDialog.autoSlug ? '✎' : '#' }}</button>
+                    </div>
+                    <div class="share-pop-status" v-if="!shareDialog.existing && !shareDialog.url">
+                      <span v-if="shareDialog.conflict" class="share-pop-hint error">已占用：{{shareDialog.conflictTitle}}</span>
+                      <span v-else-if="shareDialog.available" class="share-pop-hint ok">可用</span>
+                      <span v-else-if="shareDialog.slug" class="share-pop-hint dim">…</span>
+                    </div>
+                    <template v-if="shareDialog.existing || shareDialog.url">
+                      <div class="share-pop-result">
+                        <code class="share-pop-url">{{shareDialog.url}}</code>
+                        <button class="share-pop-copy" @click="copyShareUrl">{{shareDialog.copied ? '✓' : '复制'}}</button>
+                      </div>
+                      <div class="share-pop-actions">
+                        <button class="share-pop-update" @click="updateShare" title="用最新文档内容刷新分享站">更新</button>
+                        <button class="share-pop-cancel" @click="unregisterShare">取消分享</button>
+                      </div>
+                      <div v-if="shareDialog.message" class="share-pop-msg" :class="{ error: shareDialog.message.startsWith('✗') }">{{shareDialog.message}}</div>
+                    </template>
+                    <button v-else class="share-pop-go" @click="registerShareSlug" :disabled="!shareDialog.available || !shareDialog.slug">生成链接</button>
+                  </div>
+                </transition>
+              </teleport>
               <button class="btn-ghost" @click="openCockpitEditor" title="编辑数据源">✎ 编辑</button>
             </div>
             <section class="rv-hero">
@@ -1930,8 +1959,18 @@
           </div>
           <!-- Smart input results -->
           <div v-if="smartInputResult" class="si-results-inline">
-            <div class="si-results-header"><span>⚡ AI 提取结果</span><button class="btn-ghost btn-xs" @click="smartInputResult=null">清除</button></div>
+            <div class="si-results-header"><span v-if="smartInputResult.type==='rename'">✏️ 批量改名预览</span><span v-else>⚡ AI 提取结果</span><button class="btn-ghost btn-xs" @click="smartInputResult=null">清除</button></div>
             <div v-if="smartInputResult.summary" class="si-summary">{{ smartInputResult.summary }}</div>
+            <!-- Rename preview -->
+            <div v-if="smartInputResult.type==='rename'" class="si-section">
+              <div class="si-section-title">📄 将改动的文件 <span class="si-section-count">{{ smartInputResult.total_files || 0 }}</span></div>
+              <div v-if="!smartInputResult.hits || !smartInputResult.hits.length" class="si-item"><span class="si-item-text" style="color:var(--text-dim)">未在 vault 中找到「{{ smartInputResult.old }}」，仍可点"确认写入"在 EEG 中登记别名。</span></div>
+              <div v-for="h in (smartInputResult.hits||[])" :key="h.path" class="si-item">
+                <span class="si-item-icon">📄</span>
+                <span class="si-item-text">{{ h.path }}<span class="si-item-meta"> · {{ h.count }} 处</span></span>
+              </div>
+              <div v-if="smartInputResult.total_files > (smartInputResult.hits||[]).length" class="si-item"><span class="si-item-text" style="color:var(--text-dim)">…以及其他 {{ smartInputResult.total_files - (smartInputResult.hits||[]).length }} 个文件</span></div>
+            </div>
             <div v-if="smartInputResult.contacts && smartInputResult.contacts.length" class="si-section">
               <div class="si-section-title">👤 联系人 <span class="si-section-count">{{ smartInputResult.contacts.length }}</span></div>
               <div v-for="c in smartInputResult.contacts" :key="c.name" class="si-item"><span class="si-item-icon">👤</span><span class="si-item-text">{{ c.name }}<span class="si-item-meta" v-if="c.company || c.title"> · {{ c.company }} {{ c.title }}</span></span><span class="si-item-badge" :class="{update:c.action==='update'}">{{ c.action==='update'?'更新':'新建' }}</span></div>
@@ -2754,6 +2793,9 @@
           <div class="iv-actionbar">
             <button class="btn-ghost rv-back" @click="selectedInterview=null">← 返回</button>
             <a v-if="interviewMeta.url" :href="interviewMeta.url" target="_blank" class="btn-ghost">🔗 TicNote</a>
+            <button class="btn-ghost" @click="shareInterview(selectedInterview)" :class="{'btn-ghost--ok': shareToast}">
+              {{ shareToast || '🔗 分享' }}
+            </button>
           </div>
 
           <!-- Hero -->
