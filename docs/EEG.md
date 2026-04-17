@@ -28,10 +28,10 @@ EEG 把这件事做成 Ome365 平台的**公共基础设施**：单一事实源�
 
 | 类型 | 示例 | 典型字段 |
 |------|------|---------|
-| `person` | —、— | name / aliases / company / title / tenant / 关系 |
-| `organization` | acme、C1 供应链、智慧空间 BU | name / aliases / parent / type（航道/BU/部门） |
-| `product` | demo、Dify、Claude Code、实例 | name / aliases / vendor / category |
-| `term` | Flagship、foo、bar、Secondary、Curve 1-7 | name / aliases / definition / scope |
+| `person` | 示例张三、Alice | name / aliases / company / title / tenant / 关系 |
+| `organization` | 示例集团、示例BU | name / aliases / parent / type（航道/BU/部门） |
+| `product` | Dify、Claude Code、Vercel | name / aliases / vendor / category |
+| `term` | AI、KPI、MVP | name / aliases / definition / scope |
 | `abbr` | ARR、NPI、VPS、MAU | name / full_name / domain |
 
 ### 2.2 实体文件（源）

@@ -1,0 +1,108 @@
+{
+  "_comment": "驾舱可视化配置 · sample / demo。生产使用请复制为 cockpit_config.json (gitignored) 并填入真实数据。server.py /api/cockpit/config 优先读 cockpit_config.json，不存在则用此 sample。",
+  "SECTION_TAXONOMY": [
+    {
+      "key": "01-diagnosis",
+      "label": "诊断",
+      "subtitle": "一个示例的诊断板块",
+      "tagline": "示例：N 份访谈 · 三层诊断 · K 条洞察",
+      "icon": "🔬",
+      "tier": "primary",
+      "narrative": [
+        { "stage": "目标", "label": "示例目标", "desc": "说明这个板块想回答什么问题", "color": 0 },
+        { "stage": "动作", "label": "示例动作", "desc": "描述采用什么方法得到结论", "color": 1 },
+        { "stage": "诊断", "label": "示例诊断", "desc": "按维度分解发现的症结", "color": 2 },
+        { "stage": "处方", "label": "示例处方", "desc": "提出关键判断与行动", "color": 3 },
+        { "stage": "收官", "label": "示例收官", "desc": "承接到下一板块", "color": 4 }
+      ],
+      "entities": [
+        { "key": "10-mgmt", "label": "示例·管理层", "desc": "示例组织维度一", "icon": "🏛️" },
+        { "key": "20-line", "label": "示例·业务线", "desc": "示例组织维度二", "icon": "🌊" }
+      ],
+      "conclusions": {
+        "title": "诊断 → 战略图",
+        "subtitle": "四大示例结论",
+        "points": [
+          {
+            "tag": "结论一",
+            "label": "示例结论标题",
+            "evidence": "示例：用一两句话总结该结论背后的证据与量化数字。真实部署时请在 cockpit_config.json 中填入。",
+            "source": "示例来源1 · 示例来源2",
+            "arrow": "→ 下一阶段动作",
+            "accent": "#f59e0b"
+          }
+        ]
+      }
+    },
+    {
+      "key": "02-research",
+      "label": "研究",
+      "subtitle": "一个示例的外部研究板块",
+      "tagline": "六大赛道 · TopN 候选",
+      "icon": "🌐",
+      "tier": "primary",
+      "narrative": [
+        { "stage": "目标", "label": "研究目的", "desc": "示例占位", "color": 0 },
+        { "stage": "动作", "label": "执行方法", "desc": "示例占位", "color": 1 },
+        { "stage": "结论", "label": "外部判据", "desc": "示例占位", "color": 2 },
+        { "stage": "处方", "label": "战略建议", "desc": "示例占位", "color": 3 },
+        { "stage": "收官", "label": "交叉验证", "desc": "示例占位", "color": 4 }
+      ],
+      "entities": [
+        { "key": "topk", "label": "TopK 候选", "desc": "示例", "icon": "🏆" }
+      ],
+      "conclusions": {
+        "title": "研究 → 战略图",
+        "subtitle": "示例示意",
+        "points": []
+      }
+    }
+  ],
+  "PERSON_DISPLAY_MAP": {
+    "示例张三": "张三（—）",
+    "示例李四": "李四（—）"
+  },
+  "orgTree": [
+    {
+      "key": "root",
+      "label": "示例组织",
+      "icon": "🏢",
+      "children": [
+        {
+          "key": "dept-a",
+          "label": "示例部门A",
+          "icon": "🧭",
+          "children": [
+            {
+              "key": "team-a1",
+              "label": "示例团队A1",
+              "icon": "👥",
+              "accent": "#e7b85a",
+              "persons": [{ "name": "—", "title": "负责人" }],
+              "matchKeys": ["团队A1"]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "ASR_FIXES": [
+    { "pattern": "示例错词", "flags": "g", "replacement": "示例正确" }
+  ],
+  "KNOWN_SPEAKER_MAPS": {
+    "示例文件名关键词": {
+      "SPEAKER_00": "示例人A",
+      "SPEAKER_01": "示例人B"
+    }
+  },
+  "KNOWN_INSIGHTS": {
+    "示例洞察key": {
+      "title": "示例洞察标题",
+      "summary": "一两句话说明该洞察的核心判断",
+      "source": "示例来源·日期"
+    }
+  },
+  "SPEAKER_HINTS": [
+    { "pattern": "(?i)示例提示词", "flags": "", "replacement": "示例说话人" }
+  ]
+}
