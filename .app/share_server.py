@@ -36,6 +36,23 @@ def save_registry(data):
 
 # ── API ──
 
+@app.get("/api/cockpit/config")
+async def api_cockpit_config():
+    """Serve ASR/Speaker dictionaries for ticnote-renderer.js (live → sample fallback)."""
+    live = Path(__file__).parent / "cockpit_config.json"
+    sample = Path(__file__).parent / "cockpit_config.sample.json"
+    fp = live if live.exists() else sample
+    if not fp.exists():
+        # 空配置：渲染器降级为原文显示
+        return {"_source": "empty", "ASR_FIXES": [], "KNOWN_SPEAKER_MAPS": {}, "SPEAKER_HINTS": []}
+    try:
+        data = json.loads(fp.read_text("utf-8"))
+        data["_source"] = fp.name
+        return data
+    except Exception as e:
+        return {"_source": "error", "_error": str(e), "ASR_FIXES": [], "KNOWN_SPEAKER_MAPS": {}, "SPEAKER_HINTS": []}
+
+
 @app.get("/api/registry")
 async def api_registry():
     """Full registry dump."""
