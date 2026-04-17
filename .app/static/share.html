@@ -407,7 +407,17 @@ function renderInsights(insights) {
 
 // ══ Init ══
 
+async function loadRendererConfig() {
+  // TicNote 渲染所需的 ASR/Speaker 词典统一走 cockpit_config.json（业务规则与代码分离）
+  if (!R || typeof R.init !== 'function') return;
+  try {
+    const r = await fetch('/api/cockpit/config');
+    if (r.ok) R.init(await r.json());
+  } catch (e) { /* 静默降级：无规则时也能渲染原文 */ }
+}
+
 async function init() {
+  await loadRendererConfig();
   const parts = location.pathname.split('/').filter(Boolean);
   if (parts.length < 2) { showError('无效的分享链接'); return; }
   const [user, slug] = parts;
