@@ -19,7 +19,13 @@ BLOCKED_PATHS=(
   ".env"
 )
 for p in "${BLOCKED_PATHS[@]}"; do
-  if echo "$staged" | grep -q "^$p"; then
+  # 目录结尾 "foo/" → 前缀匹配；普通文件 → 精确匹配（避免 .env 误杀 .env.example）
+  if [[ "$p" == */ ]]; then
+    match_pat="^${p}"
+  else
+    match_pat="^${p}$"
+  fi
+  if echo "$staged" | grep -qE "$match_pat"; then
     printf '✗ pre-commit: 禁止提交 [%s] —— 含隐私或运行时数据\n' "$p"
     echo '  如确需修改，请更新 .gitignore 或 sample 文件'
     exit 1

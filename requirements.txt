@@ -1,0 +1,25 @@
+# ══════════════════════════════════════════════════════
+# Ome365 运行依赖 · 最小可跑集
+# ══════════════════════════════════════════════════════
+# 启动：pip install -r requirements.txt && cd .app && python3 server.py
+#
+# 所有高级功能（ASR 转写 / AI 对话 / OCR / Ome 养成）都是 optional，
+# 不安装也能完整使用记忆/反思/执行/驾舱主功能。
+
+# ── 核心（必装）──
+fastapi>=0.104
+uvicorn[standard]>=0.24
+python-multipart>=0.0.6    # FastAPI UploadFile 需要
+pyyaml>=6.0                # entity_registry frontmatter 解析
+
+# ── Optional: 语音转写（TicNote / 访谈）──
+# faster-whisper>=1.0      # GPU 友好，推荐
+# openai-whisper>=20231117 # 纯 CPU 备选
+
+# ── Optional: OCR（图片转文字）──
+# Pillow>=10.0
+# pytesseract>=0.3.10      # 还需系统安装 tesseract-ocr
+
+# ── Optional: AI 对话与养成（完整体验）──
+# omnity-ome>=0.7          # AI 记忆/养成 SDK
+# requests>=2.31           # HTTP AI API 调用
