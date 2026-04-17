@@ -1731,6 +1731,9 @@ try:
         asr_rules as _eeg_asr_rules,
         resolve as _eeg_resolve,
         stats as _eeg_stats,
+        scan_vault as _eeg_scan,
+        rename_in_vault as _eeg_rename,
+        add_alias_to_entity as _eeg_add_alias,
     )
     _EEG_OK = True
 except Exception as _e:
@@ -1774,6 +1777,52 @@ async def eeg_resolve_api(body: dict):
     text = body.get("text", "") or ""
     tenant = body.get("tenant") or "longfor"
     return _eeg_resolve(text, tenant=tenant)
+
+
+@app.post("/api/entities/scan")
+async def eeg_scan_api(body: dict):
+    """全 vault 搜索一个字符串，返回所有文件 + 行号。
+    用于"—→—"的第 1 步：先看这个名字到底出现在哪些文件里。"""
+    _require_eeg()
+    needle = (body.get("needle") or body.get("text") or "").strip()
+    limit = int(body.get("limit") or 200)
+    if not needle:
+        raise HTTPException(400, "needle required")
+    return _eeg_scan(needle, limit=limit)
+
+
+@app.post("/api/entities/rename")
+async def eeg_rename_api(body: dict):
+    """批量替换 old→new。
+    Body: { old: "—", new: "—", dry_run: true/false, files: ["a.md",...]? , add_alias: bool }
+    - dry_run=True（默认）：只返回将改动的文件 + 命中数
+    - dry_run=False：真正写回磁盘
+    - add_alias=True：同时把 old 加到 EEG 中 new 的 aliases 里（下次 ASR 自动修正）
+    """
+    _require_eeg()
+    old = (body.get("old") or "").strip()
+    new = (body.get("new") or "").strip()
+    dry_run = bool(body.get("dry_run", True))
+    files = body.get("files")
+    add_alias = bool(body.get("add_alias", False))
+    if not old or not new:
+        raise HTTPException(400, "old and new required")
+    result = _eeg_rename(old, new, dry_run=dry_run, file_filter=files)
+    if not dry_run and add_alias:
+        alias_result = _eeg_add_alias(new, old)
+        result["alias_added"] = alias_result
+    return result
+
+
+@app.post("/api/entities/alias")
+async def eeg_add_alias_api(body: dict):
+    """给某个已有实体追加一条别名（落到 frontmatter）。"""
+    _require_eeg()
+    entity = (body.get("entity") or body.get("name") or "").strip()
+    alias = (body.get("alias") or "").strip()
+    if not entity or not alias:
+        raise HTTPException(400, "entity and alias required")
+    return _eeg_add_alias(entity, alias)
 
 
 @app.get("/api/entities/{type}/{id}")
