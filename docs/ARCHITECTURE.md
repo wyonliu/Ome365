@@ -57,6 +57,7 @@
 - 任务/速记/反思/日志 CRUD
 - 联系人 + 关系图 + 冷启动提醒
 - Ome 养成（4 阶段 × 7 级羁绊）
+- **Enterprise Entity Graph (EEG)** — 企业术语/人名/组织/产品常识层，见 `docs/EEG.md` · `Knowledge/entities/`
 
 **Tier 1 · 工作上下文特化**（龙湖千丁驾舱）
 - Interviews 抽屉（TicNote pipeline，36 份访谈，87.4 万字）
@@ -70,7 +71,7 @@
 
 **Tier 3 · 外部依赖脚本**
 - TicNote Playwright 自动导出
-- ASR 修正字典（ASR_FIXES 12+ 条）
+- ASR 修正字典（ASR_FIXES 55+ 条 · 已归口 EEG，硬编码仅兜底）
 - 发布矩阵（CaptainCast 播客：公众号/B 站/视频号/X/小红书）
 
 ---

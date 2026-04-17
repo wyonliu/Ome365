@@ -46,12 +46,12 @@ const app = createApp({
         key: '01-diagnosis',
         label: '内部诊断',
         subtitle: '自下而上的千丁全景判断',
-        tagline: '23 份一线访谈 · 三层诊断 · 10 条横截面洞察',
+        tagline: '31 份一线访谈 · 三层诊断 · 10 条横截面洞察',
         icon: '🔬',
         tier: 'primary',
         narrative: [
           { stage: '目标', label: '诊断目的', desc: '全面摸清千丁组织能力、业务水位与战略空白', color: 0 },
-          { stage: '动作', label: '执行方法', desc: '23 份一线访谈 · 管理层 3 + 航道 6 + BU 9 + 一线员工 2 + 财务 1 + 成都研发 1 + 独立推演 1', color: 1 },
+          { stage: '动作', label: '执行方法', desc: '31 份一线访谈 · 管理层 5 + 航道 8 + BU 13 + 一线员工 2 + 财务 1 + 成都研发 1 + 独立推演 1（含 4/16 董事长汇报首次对齐）', color: 1 },
           { stage: '诊断', label: '分层处方', desc: '管理层 / 航道 / BU 各自症结与处方——每层 1 个关键洞察 + 1 个动作', color: 2 },
           { stage: '处方', label: '核心判断', desc: '人才结构 · 组织瓶颈 · 增长卡点 · 关键决策——汇聚为四大结论', color: 3 },
           { stage: '收官', label: '战略衔接', desc: '组织瓶颈 → A4S 组织变革，增长卡点 → 千丁战略总图', color: 4 },
@@ -64,37 +64,37 @@ const app = createApp({
         ],
         conclusions: {
           title: '诊断 → 千丁战略总图',
-          subtitle: '23 份一线访谈 · 10 条横截面洞察 · 四大结论',
+          subtitle: '31 份一线访谈 · 10 条横截面洞察 · 四大结论',
           points: [
             {
               tag: '结论一',
               label: '组织杀死执行力',
-              evidence: '14/22 份访谈独立指向同一判断——"AI 能力 ≤80 分可用、>80 分不行"；中台缺失导致航道各自建基建，Token 预算 40-60 万/年覆盖 150 人（≈ 4000 元/人/年）。一线证言：签零团队 AI 使用完全"个人自费探索"，组织层零供给———与家人共用 MiniMax 基础账号；战略 BP 直指千丁"半死不活"三叠加：硬编码 × 刻舟求剑 × 产品经理需求承接型。成都研发—印证：AI coding去年10月试点→今年4月才全面推开，一线渴望统一企业AI平台（"像飞书那样的平台"），但组织层无供给',
-              source: '— · — · — · — · — · — · 李崧 · —',
+              evidence: '18/30 份访谈独立指向同一判断——"AI 能力 ≤80 分可用、>80 分不行"；中台缺失导致航道各自建基建，Token 预算 40-60 万/年覆盖 150 人（≈ 4000 元/人/年）。一线证言：签零团队 AI 使用完全"个人自费探索"，组织层零供给———与家人共用 MiniMax 基础账号；战略 BP 直指千丁"半死不活"三叠加：硬编码 × 刻舟求剑 × 产品经理需求承接型。成都研发—印证：AI coding去年10月试点→今年4月才全面推开，一线渴望统一企业AI平台（"像飞书那样的平台"），但组织层无供给。供应链—印证：团队Co-pilot/Claude已"不离手"，但与AI团队协作"没头苍蝇"，遵循"能不用大模型就不用大模型"——一线已有正确直觉，缺平台承接。董事长汇报(4/16)新增证据：— AI 产研平台路径获认可·—提出「专家智能体必须达到 P7 高级专业工程师水平、少而精、规避大而全」——质量标准进一步拉高；合同审查 700+ 类型已成规模（南通客户评价"做得非常细"）',
+              source: '— · — · — · — · — · — · 李崧 · — · — · —(董事长) · — · —',
               arrow: 'A4S · 让每个同事几分钟用上最好的AI + LongScale 统一底座',
               accent: '#f59e0b'
             },
             {
               tag: '结论二',
               label: '增长曲线断裂',
-              evidence: '千丁外部收入占比 20-36%，目标 3-5 年跃至 50%，中间缺阶梯路径。签零团队实况：5000 万/年营收、10 个客户做 10 套产品、客单价 5000 元到 200 万元无定价规则——"为了平而平"。战略 BP 诊断：千丁"完全没有发现 Under-serve 需求的能力"，这才是未来 2-3 年成败关键。财务—确认：Q1整体亏损2700万/现金流-1900万，仅安心BU（硬件）盈利但规模从1亿萎缩至5-6千万，软件业务缺清晰产品线——"没有标准化的产品线体系，多数为衍生性需求"',
-              source: '— · — · — · — · — · 李崧 · —',
+              evidence: '千丁外部收入占比 20-36%，目标 3-5 年跃至 50%，中间缺阶梯路径。签零团队实况：5000 万/年营收、10 个客户做 10 套产品、客单价 5000 元到 200 万元无定价规则——"为了平而平"。战略 BP 诊断：千丁"完全没有发现 Under-serve 需求的能力"，这才是未来 2-3 年成败关键。财务—确认：Q1整体亏损2700万/现金流-1900万，仅安心BU（硬件）盈利但规模从1亿萎缩至5-6千万，软件业务缺清晰产品线——"没有标准化的产品线体系，多数为衍生性需求"。董事长汇报(4/16)新增证据：AI慧眼三大市场方向获认可——老旧小区（物业费降至 ¥0.6-0.7/㎡，政策补贴窗口）+ 工业/行政消防 + 渠道合作（住建部/物业协会/电信二级）；Lilalo 十一首发长营天街+重庆时代天街(集团租金#1#2) 直接对赌增长。智慧空间BU交付负责人陈路广(4/17)正面印证：亲口承认"卖一单是一单模式未来不可持续、订阅化是必然方向"，并完整接受CTO提出的Spatial Agent OS/开源闭源结合/对标Cursor-Vercel/B2C线下VR门店/珑豆珑珠游戏化方案——CTO订阅化愿景在BU一号位层首次获得正面接收',
+              source: '— · — · — · — · — · 李崧 · — · —(董事长) · —(Lilalo) · 陈路广(空间BU交付)',
               arrow: 'Track 2 · 龙湖千丁空间智能引擎',
               accent: '#ef4444'
             },
             {
               tag: '结论三',
               label: '人才密度塌陷 × 一线火苗',
-              evidence: '—原话："产品人才已经被稀释了很多，跑了很多"+"几乎没什么 Passion 放在基础的产品建设层面"。但同一人也说："一个月前就知道 CTO 要来，这对我们是火苗式的希望"。战略 BP 同步印证：产研文化四大断层——无标品迭代、AI 常识缺失、研发被动思维、重复造轮子。成都—团队验证：有创新火苗——"同学自己总结了一堆AI编码规范"，但12个传统项目并行（36人）vs AI创新仅能抽1-2人，正编/外包AI接受度鸿沟。财务—侧证：团队士气低迷"不在于单多难打，而是看不到希望"，人工成本是黑匣子——Bu层面发薪明细不可追踪',
-              source: '— · 李崧 · — · — · — · — · —',
+              evidence: '—原话："产品人才已经被稀释了很多，跑了很多"+"几乎没什么 Passion 放在基础的产品建设层面"。但同一人也说："一个月前就知道 CTO 要来，这对我们是火苗式的希望"。战略 BP 同步印证：产研文化四大断层——无标品迭代、AI 常识缺失、研发被动思维、重复造轮子。成都—团队验证：有创新火苗——"同学自己总结了一堆AI编码规范"，但12个传统项目并行（36人）vs AI创新仅能抽1-2人，正编/外包AI接受度鸿沟。财务—侧证：团队士气低迷"不在于单多难打，而是看不到希望"，人工成本是黑匣子——Bu层面发薪明细不可追踪。智慧空间BU—最前线验证：原物联网CV算法团队10人已全部流失（原数据集采集/训练/测试/上线齐备），模型停留2022-2023水平，召回准确率已不达标、建发项目存交付风险——正在"逼着产品经理张帆训练小模型"补位；算法人才断层直接卡住了慧眼模型迭代与边缘端算力盒子(40-100T)的落地',
+              source: '— · 李崧 · — · — · — · — · — · —',
               arrow: 'A4S 人才密度重建 + 千丁 AI 课分层 + Best Practice v0.1',
               accent: '#8b5cf6'
             },
             {
               tag: '结论四',
               label: '两三年窗口期',
-              evidence: '序平总原话"龙湖只有两三年窗口期"+"算力窗口半年到一年"；—判断物理空间 AI 窗口 2026-2028；战略 BP 判断约 1 年——"当通用 AI 工具成熟后千丁先发优势消失"；CEO 公开授权"航道总 AI 素养不过关就换掉"；CHO"CTO+CHO 合力推否则必败"。—一线验证：AI coding半年才从试点走到全面推开，复杂业务场景仍在第三→第四阶段过渡——窗口期内组织提速刻不容缓',
-              source: '序平总 · — · — · 李崧 · —',
+              evidence: '序平总原话"龙湖只有两三年窗口期"+"算力窗口半年到一年"；—判断物理空间 AI 窗口 2026-2028；战略 BP 判断约 1 年——"当通用 AI 工具成熟后千丁先发优势消失"；CEO 公开授权"航道总 AI 素养不过关就换掉"；CHO"CTO+CHO 合力推否则必败"。—一线验证：AI coding半年才从试点走到全面推开，复杂业务场景仍在第三→第四阶段过渡——窗口期内组织提速刻不容缓。董事长汇报(4/16)⭐ 首次落地窗口：Lilalo 十一窗口死线(2026-10-01)——董事长已批"长营先跑通、重庆时代同步"、大会员开发资源并入、珑豆闭环禁外部兑换·A/B面整合超A；造价业务董事长点名"先先弄造价、成为行业第一个把工程造价全部智能体化"+"已跟裴总打招呼"——两大项目同步进入落地窗口',
+              source: '序平总(董事长) · — · — · 李崧 · — · —(Lilalo) · —(造价)',
               arrow: '千丁战略总图 · 四股力量首次对齐 · 全速推进',
               accent: '#06b6d4'
             },
@@ -345,8 +345,26 @@ const app = createApp({
       'C2商业-机器人':               '航道/C2商业-机器人×空间智能',
       'C4空间服务':                  '航道/C4空间服务-处方',
       '千丁财务-—':            '千丁/财务-—',
+      '千丁建管BU-—':            '千丁/建管BU供应链-—',
       '千丁BU-物管BU成都研发-—': '千丁/物管BU成都-—',
       '千丁BU-智慧物业-—':       '千丁/智慧物业BU-—',
+      '千丁BU-智慧DTC-——': '千丁/智慧DTC BU-—×—',
+      '千丁BU-智慧DTC-—':     '千丁/智慧DTC BU-—',
+      '千丁战略-——·千丁产研架构总图': '千丁/战略-千丁产研架构总图',
+      '千丁战略-———':            '千丁/战略-企业智能体平台',
+      '千丁BU-智慧空间-———':       '千丁/智慧空间BU-AI慧眼',
+      '千丁BU-智慧DTC-———':        '千丁/智慧DTC BU-Lilalo',
+      '千丁战略-———':            '千丁/战略-AInative企业能力',
+      '千丁战略-——':                  '千丁/战略-产研架构总图主档(—×—主持)',
+      // 旧拆分命名（向后兼容历史报告引用）
+      '千丁BU-智慧DTC-——': '千丁/智慧DTC BU-Lilalo',
+      '千丁BU-智慧空间-——': '千丁/智慧空间BU-AI慧眼(董事长评价)',
+      '千丁战略-——':       '千丁/战略-产研架构总图(董事长汇报)',
+      '千丁战略-——':     '千丁/战略-AI产研平台(董事长评价)',
+      '集团研发设计-—':         '集团/研发设计-—',
+      'C1供应链-——':       '航道/C1供应链-—×—(造价)',
+      'C1供应链-——':       '航道/C1供应链-造价AI(董事长评价)',
+      'C5装修DMS-—':            '航道/C5装修DMS-—',
       // 20-航道
       'C1供应链-—':              '航道/C1供应链-—',
       'C1供应链-—':            '航道/C1供应链-—(计价)',
@@ -371,6 +389,25 @@ const app = createApp({
       '—': '千丁/物管BU成都-—',
       '—': '千丁/财务-—',
       '—': '千丁/智慧物业BU-—',
+      '—': '千丁/建管BU供应链-—',
+      '—': '航道/C1供应链-—(计价)',
+      '——': '航道/C1供应链-—×—(造价)',
+      '—': '航道/C5装修DMS-—',
+      '—': '集团/研发设计-—',
+      '——': '千丁/智慧DTC BU-—×—',
+      '——': '千丁/战略-AI产研平台(董事长评价)',
+      '——': '千丁/智慧空间BU-AI慧眼(董事长评价)',
+      '——': '千丁/战略-董事长汇报',
+      '——': '千丁/战略-—×—',
+      '———': '千丁/智慧DTC BU-—×—×—(Lilalo)',
+      '———': '千丁/战略-—×—×—(企业智能体)',
+      '———': '千丁/智慧空间BU-—×—×—(AI慧眼)',
+      '———': '千丁/战略-—×—×—(AInative)',
+      '—': '集团/董事长-—',
+      '—': '千丁/AI创新BU-—',
+      '—': '千丁/智慧DTC BU-—',
+      '—': '千丁/智慧空间BU-—',
+      '—': '千丁/CEO-—总',
     };
     function getReportPersonKey(r) {
       // Server now provides `person` field; fallback to eyebrow / name
@@ -655,6 +692,8 @@ const app = createApp({
     const interviewSpeakers = ref([]);
     const interviewSpeakerMap = ref({});  // { SPEAKER_00: '—', ... } — editable
     const interviewTags = ref([]);
+    const shareToast = ref('');
+    const shareDialog = reactive({ show: false, slug: '', user: 'wyon', docTitle: '', docPath: '', available: false, conflict: false, conflictTitle: '', url: '', copied: false, autoSlug: true, existing: false, pos: {}, message: '' });
     const currentFile = ref(null);
     const currentFilePath = ref('');
     const noteText = ref('');
@@ -827,7 +866,7 @@ const app = createApp({
       cockpitOpenReport.value = r;
       selectedReport.value = r;
       reportEditing.value = false;
-      if(!opts.skipNav) pushNav({view:'cockpit', detail:'doc:'+r.path});
+      if(!opts.skipNav) pushNav({view:'cockpit', detail:'doc:'+shortId(r.path), _path:r.path});
       try {
         const res = await api('/reports/file?path=' + encodeURIComponent(r.path));
         reportContent.value = res?.raw || '';
@@ -2120,10 +2159,12 @@ const app = createApp({
         items.push({ type:'task', time, timeEnd, title, done:t.done, repeat:t.repeat, data:t, badge:'任务', cls:'ag-task' });
       }
       for (const b of unifiedSchedule.value) {
+        // Skip empty time-block placeholders (scaffolding rows like "09-12 | |" from the daily template)
+        const schedTitle = (b.item||'').trim();
+        if(!schedTitle) continue;
         // Dedup: skip schedule items that match a task title
-        const schedTitle = (b.item||'').trim().toLowerCase();
-        if(taskTitles.has(schedTitle)) continue;
-        items.push({ type:'schedule', time:b.time||'', title:b.item||'—', dim:b.dim, badge:'日程', cls:'ag-schedule' });
+        if(taskTitles.has(schedTitle.toLowerCase())) continue;
+        items.push({ type:'schedule', time:b.time||'', title:schedTitle, dim:b.dim, badge:'日程', cls:'ag-schedule' });
       }
       for (const r of reminders.value) {
         // Skip auto-reminders that duplicate a timed task
@@ -2549,11 +2590,14 @@ const app = createApp({
         candidateSumSections.value = parseSummarySections(round.summary);
       }
     }
-    // ── ASR 修正词典 ──
+    // ── ASR 修正词典（硬编码兜底 + EEG 热加载） ──
+    // EEG 见 docs/EEG.md。启动时从 /api/entities/asr 热加载，失败则回落到下方硬编码清单。
     const ASR_FIXES = [
       [/海滩大法/g, '海康大华'], [/海康大法/g, '海康大华'],
       [/画术/g, '话术'], [/CD解析/g, 'CAD解析'],
       [/华阳/g, '—'], [/船长/g, '—'],
+      [/淮阳/g, '—'], [/黄阳/g, '—'], [/怀润/g, '—'],
+      [/龙丽君/g, '—'],
       [/景优/g, '竞优'], [/静优/g, '竞优'], [/金优/g, '竞优'],
       [/千金智能/g, '千丁互联'], [/C22化/g, 'C2I化'],
       [/Meta\s*C033/gi, 'Meta SAM3'], [/Meta\s*CCC\/3D/gi, 'Meta SAM3/SAM3D'], [/Meta\s*CC3D/gi, 'Meta SAM3/SAM3D'],
@@ -2563,9 +2607,16 @@ const app = createApp({
       [/Qq主要/g, 'BU主要'], [/李三月/g, '数月'],
       [/龙虾/g, 'Claude/Cursor'],
       [/田安/g, '铁安'],
-      [/龚利军/g, '—'], [/利军/g, '—'],
+      [/龚利军/g, '—'], [/利军/g, '—'], [/丽军/g, '丽君'],
       [/利服中心/g, '供应链合约中心'],
       [/郝鹏/g, '—'],
+      [/套价/g, '套价（计价）'], [/港式清单/g, '港式清单'],
+      [/广连达|广练达/g, '广联达'],
+      [/定额站/g, '定额站'],
+      [/报价咨询A\s*agent/gi, '造价咨询Agent'],
+      [/算量/g, '算量'], [/翻量/g, '翻量'],
+      [/BT团队|Bt团队|dT团队|Dt团队|bT团队/g, 'BT团队'],
+      [/Lost\s*function/gi, 'Loss function'],
       [/杨总/g, '—'],
       [/迪赛平台/g, 'Dify平台'], [/迪赛/g, 'Dify'], [/比赛平台/g, 'Dify平台'],
       [/code\s*body/gi, 'Codebuddy'],
@@ -2577,11 +2628,52 @@ const app = createApp({
       [/拉链/g, 'Claude'], [/精米三/g, 'Figma'], [/克巴里亚/g, 'Copilot'],
       [/D2s/g, 'DMS'], [/Mr的头衔/g, 'MR的头显'], [/VR的头衔/g, 'VR的头显'],
       [/C\s*twom/gi, 'C to M'], [/C\s*tom\b/gi, 'C to M'],
+      [/黑客网/g, '—总'], [/教学咨询/g, '造价咨询'],
+      [/哈里斯架构/g, 'Agentic架构'], [/哈里斯系统/g, 'Agentic系统'], [/哈里系统/g, 'Agents系统'],
+      [/装甲智能体/g, '专家智能体'],
+      [/溶豆/g, '珑豆'], [/龙豆/g, '珑豆'], [/龙珠/g, '珑珠'],
+      [/卡拉布/g, 'Claude'], [/库拉布/g, 'Claude'],
+      [/乒乓球(那个|的那个)?决赛/g, '乒乓球决赛'],
+      [/利拉漏|利拉落/g, '利拉洛（Lilalo）'],
+      [/长营/g, '长楹'],
+      [/Sars/g, 'SaaS'], [/SAA\b/g, 'SaaS'],
+      [/冷战节能/g, '冷站节能'],
+      [/护眼(?!模式)/g, '慧眼'], [/汇演/g, '慧眼'],
+      [/河道就是1T/g, '航道就是1T'],
+      [/C位的算法/g, 'CV的算法'],
+      [/Em\s*MS/g, 'EMS'], [/Ib\s*MS/g, 'IBMS'],
+      [/龙骨味/g, '龙湖味'], [/清量化/g, '轻量化'],
+      [/Venus(?![a-zA-Z])/g, 'Vercel'],
+      [/Special\s*agent\s*OS/gi, 'Spatial Agent OS'], [/Special\s*agent/gi, 'Spatial Agent'],
     ];
     function fixASR(text) {
       for (const [pat, rep] of ASR_FIXES) text = text.replace(pat, rep);
       return text;
     }
+    // EEG 启动热加载：把 /api/entities/asr 的 alias→canonical 规则追加到 ASR_FIXES。
+    // 设计为"追加"而非"替换"——硬编码的非实体修正（话术/CAD解析/造价咨询等）仍然保留。
+    async function loadASRFromEEG(tenant = 'longfor') {
+      try {
+        const r = await fetch(`/api/entities/asr?tenant=${encodeURIComponent(tenant)}`);
+        if (!r.ok) return;
+        const data = await r.json();
+        const rules = data.rules || [];
+        let added = 0;
+        for (const rule of rules) {
+          const from = rule.from || '';
+          const to = rule.to || '';
+          if (!from || !to || from === to) continue;
+          // 转义正则元字符，保守匹配字面量
+          const pat = new RegExp(from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+          ASR_FIXES.push([pat, to]);
+          added++;
+        }
+        console.log(`[EEG] loaded ${added} ASR rules from /api/entities/asr (tenant=${tenant})`);
+      } catch (e) {
+        console.warn('[EEG] ASR hot-load failed, using hardcoded fallback:', e.message);
+      }
+    }
+    loadASRFromEEG();  // 异步启动，不阻塞渲染
 
     // ── TicNote junk strip ──
     const JUNK_LINES = ['新功能','TicNote Cloud','编辑','总结','转录','思维导图','顿悟','深度研究','播客','1.0X','内容由 Shadow 生成','Shadow 2.0'];
@@ -2702,7 +2794,7 @@ const app = createApp({
           // Next line is "|"
           if (i < lines.length && lines[i].trim() === '|') i++;
           // Next line is timestamp
-          if (i < lines.length && /^\d{1,2}:\d{2}(:\d{2})?$/.test(lines[i].trim())) {
+          if (i < lines.length && /^\d{1,3}:\d{2}(:\d{2})?$/.test(lines[i].trim())) {
             currentTime = lines[i].trim();
             i++;
           }
@@ -2821,6 +2913,29 @@ const app = createApp({
     // ── Speaker identification ──
     // Hard-coded mappings for known files (key = substring of filename)
     const KNOWN_SPEAKER_MAPS = {
+      // ===== 2026-04-17 (must be defined BEFORE single-name keys below to avoid
+      // `filename.includes('—'|'—')` hijacking the wrong 04-16 mapping) =====
+      '—·数据中心项目研讨': {
+        // SPEAKER_00: "我们数据中心"、指挥—投PPT、对听者称"您"、"我估计下周跟徐总要汇报"
+        // SPEAKER_01: 接—之后继续汇报"那我接着往下说，我们本身这个空间数据工作..."（同中心同事）
+        // SPEAKER_02: 短插话"昨昨天跟那个王总简单聊了一下"（04-16见过—）+ "他那几个项目我都去过"（阿那亚）
+        'SPEAKER_00': '—（集团研发设计）',
+        'SPEAKER_01': '—（数据中心）',
+        'SPEAKER_02': '—（CTO）',
+      },
+      '——海洋李峰·AI造价场景研讨': {
+        // 9位SPEAKER，仅保留最有把握的，其余保持SPEAKER_XX不猜
+        // SPEAKER_00 汇报进展的"天津和Bt"团队对接人——可能是—/—/海洋/李峰中之一，
+        // 单凭第一段证据不足以区分，暂不映射
+        // SPEAKER_03 远程参加、提"群总这边要开启动会"——像是牵头人，但不确定具体是谁
+      },
+      '陈路广·产品标准化与AI空间智能底座': {
+        // SPEAKER_00 自述：Java后端入职龙湖→重福外拓→城投→运营→今年调空间做项目交付（陈路广履历）
+        // SPEAKER_01 提问方（—）
+        // SPEAKER_02 只是"嗯/好的"噪声片段，不映射
+        'SPEAKER_00': '陈路广',
+        'SPEAKER_01': '—',
+      },
       'BU技术评审预演上半场': {
         'SPEAKER_00': '（旁听）',
         'SPEAKER_01': '—',
@@ -2869,6 +2984,105 @@ const app = createApp({
         'SPEAKER_00': '—（C1营销建造负责人）',
         'SPEAKER_01': '—（CTO）',
       },
+      '—': {
+        'SPEAKER_00': '—（CTO）',
+        'SPEAKER_01': '—（供应链研发）',
+        'SPEAKER_02': 'SPEAKER_02',
+      },
+      '——': {
+        'SPEAKER_00': '—（CTO）',
+        'SPEAKER_01': '—（C1供应链造价）',
+        'SPEAKER_02': '—（供应链研发）',
+      },
+      'AI造价场景研讨': {
+        // 9位SPEAKER：仅高置信度映射，其余保持匿名不猜
+        'SPEAKER_00': '—（供应链研发·汇报人）',
+        'SPEAKER_07': '—（CTO）',
+        // SPEAKER_01~06/08 含—、海洋、李峰、BT团队、天津团队、造价咨询方等，未定
+      },
+      '—': {
+        'SPEAKER_00': '—（CTO）',
+        'SPEAKER_01': '—（C5装修DMS）',
+      },
+      '—': {
+        'SPEAKER_00': '—（CTO）',
+        'SPEAKER_01': '—（集团研发设计）',
+      },
+      '——': {
+        'SPEAKER_00': '—（CTO）',
+        'SPEAKER_01': '—（千丁CEO）',
+        'SPEAKER_02': '—（DTC BU）',
+      },
+      'C端团队架构调整': {
+        'SPEAKER_00': '—（CTO）',
+        'SPEAKER_01': '—（DTC BU）',
+      },
+      '产研架构总图与四项目汇报': {
+        'SPEAKER_00': '—（千丁CEO·主持·千丁总图）',
+        'SPEAKER_01': '—（董事长·评价者）',
+        'SPEAKER_02': '—（AI创新BU·企业智能体）',
+        'SPEAKER_03': '—（智慧空间BU·AI慧眼）',
+        'SPEAKER_04': '—（CTO·Lilalo C端）',
+        'SPEAKER_05': '—（智慧DTC BU·AInative企业能力）',
+      },
+      '千丁产研架构总图': {
+        'SPEAKER_00': '—',
+        'SPEAKER_01': '—',
+        'SPEAKER_02': '—',
+        'SPEAKER_03': '—',
+        'SPEAKER_04': '—',
+        'SPEAKER_05': '—',
+      },
+      '企业智能体与产研平台架构': {
+        'SPEAKER_00': '—',
+        'SPEAKER_01': '—',
+        'SPEAKER_02': '—',
+        'SPEAKER_03': '—',
+        'SPEAKER_04': '—',
+        'SPEAKER_05': '—',
+      },
+      'AI慧眼边缘计算': {
+        'SPEAKER_00': '—',
+        'SPEAKER_01': '—',
+        'SPEAKER_02': '—',
+        'SPEAKER_03': '—',
+        'SPEAKER_04': '—',
+        'SPEAKER_05': '—',
+      },
+      'Lilalo C端智能体': {
+        'SPEAKER_00': '—',
+        'SPEAKER_01': '—',
+        'SPEAKER_02': '—',
+        'SPEAKER_03': '—',
+        'SPEAKER_04': '—',
+        'SPEAKER_05': '—',
+      },
+      'AInative企业能力建设': {
+        'SPEAKER_00': '—',
+        'SPEAKER_01': '—',
+        'SPEAKER_02': '—',
+        'SPEAKER_03': '—',
+        'SPEAKER_04': '—',
+        'SPEAKER_05': '—',
+      },
+      '—': {
+        'SPEAKER_00': '—（CTO）',
+        'SPEAKER_01': '—（智慧空间BU·物联网中心）',
+        'SPEAKER_02': 'SPEAKER_02',
+      },
+      '物业机器人VR驾舱': {
+        // 5位SPEAKER：
+        // SPEAKER_00 出差人员远程组织、受李总（—）托、称—"涛哥"——候选：—/—，未定
+        // SPEAKER_01 自称"熟人"+详述C2停车无人值守———（C2资管）
+        // SPEAKER_02 补"1920年就无人值守"、讲C4———（C2商业）
+        // SPEAKER_03 问智能化进度/AI眼镜30克/徐明总提岗亭无人化——候选：—/—，未定
+        //   ⚠️ 2026-04-17 全量审计确认：文中"黄阳总"是 ASR 对"—总"的误读
+        //      （"北大本硕 CS/CV/空间模型""1 天手搓"均为—独家履历）。已在 ASR_FIXES 统一替换。
+        //      frontmatter 明确—在场，不是"黄阳=另一位天津新任 CTO"。
+        'SPEAKER_01': '—（C2资管）',
+        'SPEAKER_02': '—（C2商业）',
+        // SPEAKER_00 / SPEAKER_03 / SPEAKER_04 证据不足，不映射
+      },
     };
 
     // Fallback heuristic hints: [pattern, name]
@@ -2883,14 +3097,21 @@ const app = createApp({
     ];
 
     function inferSpeakers(blocks, filename) {
+      const blockSpeakers = [...new Set(blocks.map(b => b.speaker))];
       // 1. Check known mappings first
       for (const [key, map] of Object.entries(KNOWN_SPEAKER_MAPS)) {
-        if (filename.includes(key)) return { ...map };
+        if (filename.includes(key)) {
+          const result = { ...map };
+          for (const sp of blockSpeakers) {
+            if (!(sp in result)) result[sp] = sp;
+          }
+          return result;
+        }
       }
 
       // 2. Fallback: heuristic scoring
       const map = {};
-      const speakers = [...new Set(blocks.map(b => b.speaker))];
+      const speakers = blockSpeakers;
       const scores = {};
       for (const sp of speakers) {
         scores[sp] = {};
@@ -2953,7 +3174,7 @@ const app = createApp({
     async function openInterview(file, opts={}){
       selectedInterview.value = file;
       interviewTab.value = 'summary';
-      if(!opts.skipNav) pushNav({view:'interviews', detail:file.path});
+      if(!opts.skipNav) pushNav({view:'interviews', detail:shortId(file.path), _path:file.path});
       const res = await api('/interviews/file?path='+encodeURIComponent(file.path));
       const raw = res?.raw || '';
       interviewContent.value = raw;
@@ -3030,12 +3251,152 @@ const app = createApp({
       interviewTags.value = tagLines.slice(0,5).map(l => l.trim());
     }
 
+    async function shareInterview(file) {
+      if (!file || !file.path) return;
+      try {
+        const res = await api('/share/code?path=' + encodeURIComponent(file.path));
+        if (res && res.url) {
+          await navigator.clipboard.writeText(res.url);
+          shareToast.value = '✓ 已复制';
+          setTimeout(() => { shareToast.value = ''; }, 2000);
+        }
+      } catch (e) {
+        shareToast.value = '✗ 失败';
+        setTimeout(() => { shareToast.value = ''; }, 2000);
+      }
+    }
+
+    function autoSlugFromPath(path) {
+      return shortId(path);
+    }
+    let _slugCheckTimer = null;
+    let _shareClickAway = null;
+    async function openShareDialog(e) {
+      if (shareDialog.show) { shareDialog.show = false; return; }
+      const rpt = cockpitOpenReport.value || selectedReport.value;
+      if (!rpt) return;
+      const btn = e?.target?.closest('.share-btn-anchor');
+      if (btn) {
+        const r = btn.getBoundingClientRect();
+        shareDialog.pos = { position: 'fixed', top: (r.bottom + 6) + 'px', right: (window.innerWidth - r.right) + 'px' };
+      }
+      const title = reportParsed.value?.title || rpt.title || rpt.name || '';
+      shareDialog.show = true;
+      shareDialog.docTitle = title;
+      shareDialog.docPath = rpt.path;
+      shareDialog.available = false;
+      shareDialog.conflict = false;
+      shareDialog.conflictTitle = '';
+      shareDialog.url = '';
+      shareDialog.copied = false;
+      shareDialog.existing = false;
+      shareDialog.message = '';
+      // Query by path first — detect existing share with any slug (including custom)
+      try {
+        const res = await api('/share/by-path?path=' + encodeURIComponent(rpt.path) + '&user=' + encodeURIComponent(shareDialog.user));
+        if (res && res.found) {
+          shareDialog.slug = res.slug;
+          shareDialog.autoSlug = false;
+          shareDialog.existing = true;
+          shareDialog.available = true;
+          shareDialog.url = res.url;
+        } else {
+          shareDialog.autoSlug = true;
+          shareDialog.slug = autoSlugFromPath(rpt.path);
+          checkShareSlug();
+        }
+      } catch(e) {
+        shareDialog.autoSlug = true;
+        shareDialog.slug = autoSlugFromPath(rpt.path);
+        checkShareSlug();
+      }
+      if (_shareClickAway) document.removeEventListener('click', _shareClickAway);
+      setTimeout(() => {
+        _shareClickAway = (ev) => {
+          if (!ev.target.closest('.share-btn-anchor') && !ev.target.closest('.share-pop')) { shareDialog.show = false; document.removeEventListener('click', _shareClickAway); }
+        };
+        document.addEventListener('click', _shareClickAway);
+      }, 0);
+    }
+    function toggleSlugMode() {
+      shareDialog.autoSlug = !shareDialog.autoSlug;
+      if (shareDialog.autoSlug) {
+        shareDialog.slug = autoSlugFromPath(shareDialog.docPath);
+        checkShareSlug();
+      }
+    }
+    async function checkShareSlug() {
+      shareDialog.available = false;
+      shareDialog.conflict = false;
+      shareDialog.conflictTitle = '';
+      shareDialog.existing = false;
+      const slug = shareDialog.slug.trim();
+      if (!slug || !/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(slug)) return;
+      clearTimeout(_slugCheckTimer);
+      _slugCheckTimer = setTimeout(async () => {
+        try {
+          const res = await api('/share/check-slug?slug=' + encodeURIComponent(slug) + '&user=' + encodeURIComponent(shareDialog.user));
+          if (shareDialog.slug.trim() !== slug) return;
+          if (res.available) {
+            shareDialog.available = true;
+          } else if (res.existing?.path === shareDialog.docPath) {
+            shareDialog.existing = true;
+            shareDialog.available = true;
+            shareDialog.url = `${location.protocol}//${location.hostname}:3651/${shareDialog.user}/${slug}`;
+          } else {
+            shareDialog.conflict = true;
+            shareDialog.conflictTitle = res.existing?.title || '';
+          }
+        } catch(e) {}
+      }, 300);
+    }
+    async function registerShareSlug() {
+      const slug = shareDialog.slug.trim();
+      if (!slug || !shareDialog.available) return;
+      try {
+        const res = await api('/share/register?slug=' + encodeURIComponent(slug) + '&path=' + encodeURIComponent(shareDialog.docPath) + '&title=' + encodeURIComponent(shareDialog.docTitle) + '&user=' + encodeURIComponent(shareDialog.user), { method: 'POST' });
+        if (res && res.url) {
+          shareDialog.url = res.url;
+        }
+      } catch(e) { showToast('注册失败: ' + (e.message||''), 'error'); }
+    }
+    async function copyShareUrl() {
+      try {
+        await navigator.clipboard.writeText(shareDialog.url);
+        shareDialog.copied = true;
+        setTimeout(() => { shareDialog.copied = false; }, 2000);
+      } catch(e) {}
+    }
+    async function updateShare() {
+      const slug = shareDialog.slug.trim();
+      if (!slug) return;
+      try {
+        const res = await api('/share/register?slug=' + encodeURIComponent(slug) + '&path=' + encodeURIComponent(shareDialog.docPath) + '&title=' + encodeURIComponent(shareDialog.docTitle) + '&user=' + encodeURIComponent(shareDialog.user), { method: 'POST' });
+        if (res && res.url) { shareDialog.url = res.url; shareDialog.message = '✓ 已更新'; setTimeout(() => { shareDialog.message = ''; }, 2000); }
+      } catch(e) { shareDialog.message = '✗ 更新失败'; setTimeout(() => { shareDialog.message = ''; }, 3000); }
+    }
+    async function unregisterShare() {
+      const slug = shareDialog.slug.trim();
+      if (!slug) return;
+      try {
+        await api('/share/register?slug=' + encodeURIComponent(slug) + '&user=' + encodeURIComponent(shareDialog.user), { method: 'DELETE' });
+        shareDialog.url = '';
+        shareDialog.existing = false;
+        shareDialog.available = true;
+        shareDialog.autoSlug = true;
+        shareDialog.slug = autoSlugFromPath(shareDialog.docPath);
+        shareDialog.message = '✓ 已取消分享';
+        setTimeout(() => { shareDialog.message = ''; }, 2000);
+        checkShareSlug();
+      } catch(e) { shareDialog.message = '✗ 取消失败'; setTimeout(() => { shareDialog.message = ''; }, 3000); }
+    }
+
     // ── Reports ──
     async function loadReports(){ reportsList.value = await api('/reports')||[]; }
     async function openReport(rpt, opts={}){
       selectedReport.value = rpt;
       reportEditing.value = false;
-      if(!opts.skipNav) pushNav({view:'reports', detail:rpt.path});
+      if(!opts.skipNav) pushNav({view:'reports', detail:shortId(rpt.path), _path:rpt.path});
       const res = await api('/reports/file?path='+encodeURIComponent(rpt.path));
       reportContent.value = res?.raw || '';
     }
@@ -3670,16 +4031,23 @@ const app = createApp({
     }
 
     // ── Browser history navigation ─────────────────────────────
-    // Track whether current state change is from popstate (don't re-push)
+    history.scrollRestoration = 'manual';
     let navRestoring = false;
+    function shortId(str){
+      let h = 0x811c9dc5;
+      for(let i = 0; i < str.length; i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+      return (h >>> 0).toString(16).padStart(8, '0');
+    }
     function buildNavHash(state){
       if(!state || !state.view) return '#/dashboard';
       let h = '#/' + state.view;
-      if(state.detail) h += '/' + encodeURIComponent(state.detail);
+      if(state.detail) h += '/' + state.detail;
       return h;
     }
     function pushNav(state, replace=false){
       if(navRestoring) return;
+      const curHash = location.hash;
+      if(curHash) sessionStorage.setItem('ome365_sy_'+curHash, String(window.scrollY));
       const cur = history.state || {};
       if(cur.view === state.view && (cur.detail||'') === (state.detail||'')){
         if(replace) history.replaceState(state, '', buildNavHash(state));
@@ -4159,7 +4527,7 @@ const app = createApp({
       setTimeout(() => graph.centerAt(0, 0, 500), 200);
     }
 
-    async function openFile(path, opts={}){currentFilePath.value=path;if(!opts.skipNav)pushNav({view:'files', detail:path});currentFile.value=await api('/file?path='+encodeURIComponent(path));}
+    async function openFile(path, opts={}){currentFilePath.value=path;if(!opts.skipNav)pushNav({view:'files', detail:shortId(path), _path:path});currentFile.value=await api('/file?path='+encodeURIComponent(path));}
     const noteSourceFile = ref(null);
     async function openNoteFile(group){
       noteSourceFile.value = await api('/file?path='+encodeURIComponent(group.path));
@@ -4552,16 +4920,19 @@ const app = createApp({
         }
         // If there's a detail, open it
         if(state.detail){
+          const _p = state._path;
+          const _findByIdOrPath = (list, id) => _p ? list.find(x => x.path === _p) : list.find(x => shortId(x.path) === id);
           if(state.view === 'cockpit'){
             if(state.detail.startsWith('doc:')){
-              const docPath = state.detail.slice(4);
+              const docId = state.detail.slice(4);
               if(!reportsList.value.length) await loadReports();
-              const r = reportsList.value.find(x => x.path === docPath)
-                        || { path: docPath, name: docPath.split('/').pop().replace(/\.md$/,''), title: docPath.split('/').pop().replace(/\.md$/,'') };
-              // Ensure block is open first
-              const blockKey = cockpitActiveBlockKey.value || '';
-              if(blockKey && cockpitActiveBlockKey.value !== blockKey) await cockpitSelectBlock(blockKey, {skipNav:true});
-              await cockpitOpenDoc(r, {skipNav:true});
+              const r = _findByIdOrPath(reportsList.value, docId)
+                        || (_p ? { path: _p, name: _p.split('/').pop().replace(/\.md$/,''), title: _p.split('/').pop().replace(/\.md$/,'') } : null);
+              if(r){
+                const blockKey = cockpitActiveBlockKey.value || '';
+                if(blockKey && cockpitActiveBlockKey.value !== blockKey) await cockpitSelectBlock(blockKey, {skipNav:true});
+                await cockpitOpenDoc(r, {skipNav:true});
+              }
             } else if(state.detail.startsWith('block:')){
               const blockKey = state.detail.slice(6);
               if(cockpitActiveBlockKey.value !== blockKey) await cockpitSelectBlock(blockKey, {skipNav:true});
@@ -4569,29 +4940,28 @@ const app = createApp({
             }
           } else if(state.view === 'reports'){
             if(!reportsList.value.length) await loadReports();
-            const r = reportsList.value.find(x => x.path === state.detail)
-                      || { path: state.detail, name: state.detail.split('/').pop().replace(/\.md$/,''), title: state.detail.split('/').pop().replace(/\.md$/,'') };
-            await openReport(r, {skipNav:true});
+            const r = _findByIdOrPath(reportsList.value, state.detail)
+                      || (_p ? { path: _p, name: _p.split('/').pop().replace(/\.md$/,''), title: _p.split('/').pop().replace(/\.md$/,'') } : null);
+            if(r) await openReport(r, {skipNav:true});
           } else if(state.view === 'interviews'){
             if(!interviewGroups.value.length) await loadInterviews();
-            // Hiring candidate detail (hiring:ID)
             if(state.detail && state.detail.startsWith('hiring:')){
               const hid = state.detail.slice(7);
               if(!hiringList.value.length) await loadInterviews();
               const c = hiringList.value.find(x => x.id === hid) || {id: hid, name: hid};
               await openCandidate(c, {skipNav:true});
             } else {
-              // flatten groups to find file
               let found = null;
               for(const g of interviewGroups.value){
-                found = (g.items||[]).find(x => x.path === state.detail);
+                found = (g.items||[]).find(x => _p ? x.path === _p : shortId(x.path) === state.detail);
                 if(found) break;
               }
-              if(!found) found = { path: state.detail, name: state.detail.split('/').pop() };
-              await openInterview(found, {skipNav:true});
+              if(!found && _p) found = { path: _p, name: _p.split('/').pop() };
+              if(found) await openInterview(found, {skipNav:true});
             }
           } else if(state.view === 'files'){
-            await openFile(state.detail, {skipNav:true});
+            const fPath = _p || state.detail;
+            await openFile(fPath, {skipNav:true});
           } else if(state.view === 'contacts'){
             await selectContactDetail({slug: state.detail}, {skipNav:true});
           }
@@ -4600,7 +4970,13 @@ const app = createApp({
         navRestoring = false;
       }
     }
-    window.addEventListener('popstate', (e) => { restoreFromState(e.state); });
+    window.addEventListener('popstate', (e) => {
+      restoreFromState(e.state).then(() => {
+        const h = buildNavHash(e.state);
+        const sy = sessionStorage.getItem('ome365_sy_'+h);
+        if(sy) nextTick(() => { setTimeout(() => window.scrollTo(0, parseInt(sy)), 80); });
+      });
+    });
 
     onMounted(async () => {
       loading.value = true;
@@ -4610,7 +4986,8 @@ const app = createApp({
       const hash = location.hash.replace(/^#\/?/, '');
       if(hash){
         const parts = hash.split('/');
-        initialState = { view: parts[0], detail: parts.slice(1).join('/') ? decodeURIComponent(parts.slice(1).join('/')) : undefined };
+        const prevState = history.state || {};
+        initialState = { view: parts[0], detail: parts.slice(1).join('/') || undefined, _path: prevState._path };
       } else {
         const savedView = localStorage.getItem('ome365_view') || 'dashboard';
         initialState = { view: savedView };
@@ -4634,7 +5011,7 @@ const app = createApp({
       }
 
       // Secondary data — non-blocking, fills badges & sidebar counts
-      Promise.all([loadCategories(), loadContactCategories(), loadStreaks(), loadOnThisDay(), loadFileTree(), loadReflections(), loadInterviews(), loadReports(), loadGrowth(), loadInsights(), loadLife(), loadCockpit()]);
+      Promise.all([loadCategories(), loadContactCategories(), loadStreaks(), loadOnThisDay(), loadFileTree(), loadReflections(), loadInterviews(), loadReports(), loadGrowth(), loadInsights(), loadLife(), loadCockpit(), loadMemoryStats()]);
 
       // Start reminder & proactive timers
       requestNotifPermission();
@@ -4795,7 +5172,7 @@ const app = createApp({
       selectedInterview, interviewContent,
       interviewTab, interviewSummary, interviewTranscript, interviewMeta,
       interviewSummarySections, interviewTranscriptBlocks, interviewInsights, interviewSpeakers, interviewSpeakerMap, interviewTags,
-      SPEAKER_COLORS, fixASR, renderMd, updateSpeakerName,
+      SPEAKER_COLORS, fixASR, renderMd, updateSpeakerName, shareInterview, shareToast, shareDialog, openShareDialog, checkShareSlug, registerShareSlug, copyShareUrl, toggleSlugMode, updateShare, unregisterShare,
       reportsList, selectedReport, reportContent, reportEditing, reportEditText,
       activeReportSection, visibleReportSections, currentReportSection,
       primarySections, secondarySections, tertiarySections,
