@@ -9,6 +9,7 @@ const TicNoteRenderer = (() => {
   let ASR_FIXES = [];              // [[RegExp, replacement], ...]
   let KNOWN_SPEAKER_MAPS = {};     // { filenameKey: { SPEAKER_XX: name } }
   let SPEAKER_HINTS = [];          // [[RegExp, name], ...]
+  let JUNK_TITLE_PREFIX = '';      // 可选：TicNote 录音标题的品牌前缀（例："龙湖千丁"），从 cfg 注入
 
   function fixASR(text) {
     for (const [pat, rep] of ASR_FIXES) text = text.replace(pat, rep);
@@ -51,6 +52,9 @@ const TicNoteRenderer = (() => {
     if (cfg.KNOWN_SPEAKER_MAPS && typeof cfg.KNOWN_SPEAKER_MAPS === 'object') {
       KNOWN_SPEAKER_MAPS = { ...cfg.KNOWN_SPEAKER_MAPS };
     }
+    if (typeof cfg.JUNK_TITLE_PREFIX === 'string') {
+      JUNK_TITLE_PREFIX = cfg.JUNK_TITLE_PREFIX;
+    }
   }
 
   // ── Section icons ──
@@ -86,7 +90,7 @@ const TicNoteRenderer = (() => {
         if (/^\d+:\d+$/.test(t)) continue;
         if (t === '/') continue;
         if (/^\d{4}年\d{2}月\d{2}日/.test(t) && !t.includes('|')) continue;
-        if (/^龙湖千丁/.test(t)) continue;
+        if (JUNK_TITLE_PREFIX && t.startsWith(JUNK_TITLE_PREFIX)) continue;
         if (/\.m4a$|\.record$/.test(t)) continue;
         if (/^\d{4}-\d{2}-\d{2}\s[\d:]+\|/.test(t)) { clean.push(t); seenContent = true; continue; }
         if (t.startsWith('出席人员')) { clean.push(t); seenContent = true; continue; }

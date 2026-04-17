@@ -17,7 +17,26 @@ PORT = int(os.environ.get("SHARE_PORT", "3651"))
 BASE_URL = os.environ.get("SHARE_BASE_URL", f"http://localhost:{PORT}")
 REGISTRY_PATH = Path(__file__).parent / "share_registry.json"
 STATIC_DIR = Path(__file__).parent / "static"
-REPORTS_DIR = VAULT / "Projects" / "LongFor" / "reports"
+
+# Tenant config (live → sample fallback)
+_TENANT_LIVE = Path(__file__).parent / "tenant_config.json"
+_TENANT_SAMPLE = Path(__file__).parent / "tenant_config.sample.json"
+
+def _load_tenant():
+    for fp in (_TENANT_LIVE, _TENANT_SAMPLE):
+        if fp.exists():
+            try:
+                d = json.loads(fp.read_text("utf-8"))
+                d.setdefault("_source", fp.name)
+                return d
+            except Exception as e:
+                return {"_source": "error", "_error": str(e)}
+    return {"_source": "empty", "brand": {}, "cockpit": {}}
+
+TENANT = _load_tenant()
+# Reports dir: TENANT.reports.dir（相对 VAULT）→ 默认 'reports'
+_reports_rel = ((TENANT.get("reports") or {}).get("dir")) or "reports"
+REPORTS_DIR = VAULT / _reports_rel
 
 app = FastAPI(title="Ome365 Share")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -35,6 +54,12 @@ def save_registry(data):
 
 
 # ── API ──
+
+@app.get("/api/tenant/config")
+async def api_tenant_config():
+    """租户品牌配置（share_home.html / share.html 启动时拉）。"""
+    return TENANT
+
 
 @app.get("/api/cockpit/config")
 async def api_cockpit_config():

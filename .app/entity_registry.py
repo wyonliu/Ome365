@@ -107,7 +107,7 @@ def _load_entity_file(fp: Path, type_hint: str | None = None) -> dict | None:
         "type": etype,
         "name": str(meta.get("name") or fp.stem),
         "aliases": aliases,
-        "tenant": meta.get("tenant", "longfor"),
+        "tenant": meta.get("tenant", "default"),
         "company": meta.get("company", ""),
         "title": meta.get("title", ""),
         "vendor": meta.get("vendor", ""),
@@ -437,4 +437,4 @@ if __name__ == "__main__":
     import json
     print(json.dumps(stats(), ensure_ascii=False, indent=2))
     sample = "示例A总提了一下，让示例B和示例C去跟进下 C1 的事。考拉Code 已经用上了 Venus。"
-    print(json.dumps(resolve(sample, tenant="longfor"), ensure_ascii=False, indent=2))
+    print(json.dumps(resolve(sample, tenant="default"), ensure_ascii=False, indent=2))

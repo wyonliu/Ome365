@@ -4,9 +4,9 @@ TicNote 通用导出工具
 用法：python ticnote_export.py <关键词1> [关键词2] ... [--folder 文件夹名] [--date YYYY-MM-DD]
 
 示例：
-  python ticnote_export.py 千丁终面 千丁BU员工访谈
+  python ticnote_export.py 关键词1 关键词2
   python ticnote_export.py — --folder 录音文件 --date 2026-04-15
-  python ticnote_export.py — — --folder "龙湖千丁-0414"
+  python ticnote_export.py — — --folder "项目-0414"
 """
 import argparse, re, time, sys
 from pathlib import Path

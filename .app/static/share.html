@@ -28,9 +28,9 @@
   .share-error { text-align: center; padding: 120px 20px; color: #ef4444; font-size: 15px; }
   .sh-theme-toggle { position: fixed; top: 16px; right: 16px; z-index: 100; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface, rgba(18,18,30,0.8)); color: var(--text2); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
   .sh-theme-toggle:hover { border-color: var(--gold); color: var(--gold); }
-  [data-theme="longfor"] .sh-theme-toggle { background: rgba(255,255,255,0.7); border-color: #e2e8f0; color: #64748b; }
-  [data-theme="longfor"] .sh-theme-toggle:hover { border-color: #818cf8; color: #4f46e5; }
-  [data-theme="longfor"] .sh-footer { color: #94a3b8; border-top-color: #e2e8f0; }
+  [data-theme="light"] .sh-theme-toggle { background: rgba(255,255,255,0.7); border-color: #e2e8f0; color: #64748b; }
+  [data-theme="light"] .sh-theme-toggle:hover { border-color: #818cf8; color: #4f46e5; }
+  [data-theme="light"] .sh-footer { color: #94a3b8; border-top-color: #e2e8f0; }
   .sh-footer { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); text-align: center; font-size: 11px; color: var(--text2); }
   .rv-hero { margin: 24px 0; }
 
@@ -334,7 +334,7 @@ function renderReportPage(parsed) {
     html += `</section>`;
   }
   html += `</div></div>`;
-  html += `<div class="sh-footer">Ome365 · 千丁数智驾舱</div>`;
+  html += `<div class="sh-footer">${esc(footerText())}</div>`;
   return html;
 }
 
@@ -357,7 +357,7 @@ function renderTicNotePage(title, result) {
   html += `<div id="tab-summary" class="sh-tab-content">${renderSummary(result.sumSections)}</div>`;
   html += `<div id="tab-transcript" class="sh-tab-content" style="display:none">${renderTranscript(result.transBlocks, result.insights)}</div>`;
   html += `<div id="tab-insights" class="sh-tab-content" style="display:none">${renderInsights(result.insights)}</div>`;
-  html += `<div class="sh-footer">Ome365 · 千丁数智驾舱</div>`;
+  html += `<div class="sh-footer">${esc(footerText())}</div>`;
   return html;
 }
 
@@ -416,8 +416,19 @@ async function loadRendererConfig() {
   } catch (e) { /* 静默降级：无规则时也能渲染原文 */ }
 }
 
+let TENANT = {brand:{}};
+async function loadTenant() {
+  try {
+    const r = await fetch('/api/tenant/config');
+    if (r.ok) TENANT = await r.json();
+  } catch (e) { /* keep defaults */ }
+}
+function footerText() {
+  return (TENANT.brand && TENANT.brand.share_footer_text) || 'Ome365 Shared Document';
+}
+
 async function init() {
-  await loadRendererConfig();
+  await Promise.all([loadRendererConfig(), loadTenant()]);
   const parts = location.pathname.split('/').filter(Boolean);
   if (parts.length < 2) { showError('无效的分享链接'); return; }
   const [user, slug] = parts;
@@ -497,23 +508,25 @@ function applyEntranceAnimations() {
 
 function toggleTheme() {
   const html = document.documentElement;
-  const isLight = html.getAttribute('data-theme') === 'longfor';
-  const next = isLight ? '' : 'longfor';
+  const isLight = html.getAttribute('data-theme') === 'light';
+  const next = isLight ? '' : 'light';
   html.setAttribute('data-theme', next);
   document.getElementById('theme-toggle').textContent = isLight ? '☀️' : '🌙';
   // Use same storage key as share_home.html so theme persists across share pages
   localStorage.setItem('sh-theme', next);
 }
 (function(){
-  // Migrate legacy 'share-theme' (values 'light'/'dark') to 'sh-theme' (values 'longfor'/'')
+  // Migrate legacy 'share-theme' (values 'light'/'dark') to 'sh-theme' (values 'light'/'')
   const legacy = localStorage.getItem('share-theme');
   if (legacy !== null && localStorage.getItem('sh-theme') === null) {
-    localStorage.setItem('sh-theme', legacy === 'light' ? 'longfor' : '');
+    localStorage.setItem('sh-theme', legacy === 'light' ? 'light' : '');
     localStorage.removeItem('share-theme');
   }
+  // Migrate older value 'longfor' → 'light' (theme rename)
+  if (localStorage.getItem('sh-theme') === 'longfor') localStorage.setItem('sh-theme', 'light');
   const saved = localStorage.getItem('sh-theme');
-  if (saved === 'longfor') {
-    document.documentElement.setAttribute('data-theme', 'longfor');
+  if (saved === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
     const t = document.getElementById('theme-toggle'); if (t) t.textContent = '🌙';
   }
 })();

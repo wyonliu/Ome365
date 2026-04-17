@@ -52,7 +52,7 @@ const app = createApp({
       return parts[ri + 2] || '';
     }
     // Map person keys → org-oriented display labels for cockpit cards
-    // Keys come from filename prefix before first ·, e.g. "千丁BU-智慧建造-—"
+    // Keys come from filename prefix before first · (e.g. "<org>-<team>-<person>")
     const PERSON_DISPLAY_MAP = reactive({});  // loaded at init from /api/cockpit/config
     function getReportPersonKey(r) {
       // Server now provides `person` field; fallback to eyebrow / name
@@ -433,12 +433,12 @@ const app = createApp({
     const lifeNewMoment = ref({category:'高光', text:''});
     const lifeShowMomentForm = ref(false);
 
-    // ═══ Cockpit (千丁 · 战略驾舱) ═══
+    // ═══ Cockpit (strategy dashboard) ═══
     const cockpitData = ref(null);
     const cockpitLoading = ref(false);
     const cockpitError = ref('');
     const cockpitActiveSection = ref(''); // for scrollspy / nav highlight
-    const expandedTrack = ref('track1'); // 千丁战略总图 默认展开第一条
+    const expandedTrack = ref('track1'); // default expand first track
     // ── Cockpit in-page navigation state (W4.2 · replaces drawer) ──
     // Block selection drives the bloom area beneath the nav tiles. All drill-down
     // happens in-page (no overlay/drawer), mirroring reports-view's pattern.
@@ -759,7 +759,7 @@ const app = createApp({
       cockpitLoading.value = true;
       cockpitError.value = '';
       try {
-        const r = await fetch('/api/longfor/cockpit');
+        const r = await fetch('/api/cockpit');
         const d = await r.json();
         if (d.ok) {
           cockpitData.value = d;
@@ -864,12 +864,12 @@ const app = createApp({
     }
 
     function openCockpitExport() {
-      window.open('/api/longfor/cockpit/export', '_blank');
+      window.open('/api/cockpit/export', '_blank');
     }
 
     async function downloadCockpitHtml() {
       try {
-        const r = await fetch('/api/longfor/cockpit/export');
+        const r = await fetch('/api/cockpit/export');
         if (!r.ok) throw new Error('导出失败');
         const blob = await r.blob();
         const url = URL.createObjectURL(blob);
@@ -877,7 +877,7 @@ const app = createApp({
         const now = new Date();
         const stamp = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
         a.href = url;
-        a.download = `longfor-cockpit-${stamp}.html`;
+        a.download = `cockpit-${stamp}.html`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -1234,7 +1234,7 @@ const app = createApp({
 
     async function openCockpitEditor() {
       try {
-        const r = await fetch('/api/longfor/cockpit/raw');
+        const r = await fetch('/api/cockpit/raw');
         const d = await r.json();
         if (!d.ok) throw new Error(d.error || '读取失败');
         mdEditorContent.value = d.content;
@@ -1252,7 +1252,7 @@ const app = createApp({
     async function reloadCockpitRaw() {
       if (mdEditorDirty.value && !confirm('有未保存的修改，确定要重新读取并放弃吗？')) return;
       try {
-        const r = await fetch('/api/longfor/cockpit/raw');
+        const r = await fetch('/api/cockpit/raw');
         const d = await r.json();
         if (!d.ok) throw new Error(d.error || '读取失败');
         mdEditorContent.value = d.content;
@@ -1266,7 +1266,7 @@ const app = createApp({
       if (!mdEditorDirty.value || mdEditorSaving.value) return;
       mdEditorSaving.value = true;
       try {
-        const r = await fetch('/api/longfor/cockpit/save', {
+        const r = await fetch('/api/cockpit/save', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({content: mdEditorContent.value}),
@@ -1599,7 +1599,21 @@ const app = createApp({
     // Sidebar persistence
     watch(sidebarCollapsed, v => localStorage.setItem('ome365_sidebar', v ? '1' : '0'));
 
-    // Theme (dark / longfor light)
+    // Tenant config — loaded from /api/tenant/config on app init (brand / cockpit defaults)
+    const tenantConfig = ref({brand:{}, cockpit:{}, prompts:{}, categories:{}, entities:{}});
+    async function loadTenantConfig() {
+      try {
+        const r = await fetch('/api/tenant/config');
+        if (r.ok) tenantConfig.value = await r.json();
+      } catch (e) { /* keep defaults */ }
+    }
+
+    // Theme (dark / light) — default variant id comes from tenant, stored in localStorage
+    // Migrate legacy value 'longfor' → 'light' (user theme preserved across rename)
+    {
+      const _lt = localStorage.getItem('ome365_theme');
+      if (_lt === 'longfor') localStorage.setItem('ome365_theme', 'light');
+    }
     const theme = ref(localStorage.getItem('ome365_theme') || 'dark');
     function applyTheme(name) {
       document.documentElement.setAttribute('data-theme', name);
@@ -1647,8 +1661,11 @@ const app = createApp({
       {key:'contacts',icon:'🏢',label:'组织'},
       {key:'files',icon:'📁',label:'更多'},
     ];
-    const titles = {dashboard:'全景',tasks:'清单',plan:'365天作战地图',insights:'洞察 · 从你的碎片里看见未来',life:'生活 · 与家人和自己好好相处',cockpit:'千丁 · 战略驾舱',notes:'速记',reflections:'反思',contacts:'组织架构',memory:'记忆',growth:'养成',interviews:'访谈',reports:'汇报',files:'文件',settings:'设置'};
-    const currentTitle = computed(() => titles[view.value]||'');
+    const titles = {dashboard:'全景',tasks:'清单',plan:'365天作战地图',insights:'洞察 · 从你的碎片里看见未来',life:'生活 · 与家人和自己好好相处',notes:'速记',reflections:'反思',contacts:'组织架构',memory:'记忆',growth:'养成',interviews:'访谈',reports:'汇报',files:'文件',settings:'设置'};
+    const currentTitle = computed(() => {
+      if (view.value === 'cockpit') return tenantConfig.value?.brand?.cockpit_page_title || 'Strategy Cockpit';
+      return titles[view.value] || '';
+    });
     const notePlaceholder = computed(() => isRecording.value ? '录音中...' : isTranscribing.value ? '语音识别中...' : '写下想法、灵感、待办...');
 
     // Dashboard computed
@@ -2218,9 +2235,11 @@ const app = createApp({
     }
     // EEG 启动热加载：把 /api/entities/asr 的 alias→canonical 规则追加到 ASR_FIXES。
     // 设计为"追加"而非"替换"——硬编码的非实体修正（话术/CAD解析/造价咨询等）仍然保留。
-    async function loadASRFromEEG(tenant = 'longfor') {
+    async function loadASRFromEEG(tenant) {
+      // tenant default: fetch without param → server uses TENANT.entities.default_tenant
+      const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : '';
       try {
-        const r = await fetch(`/api/entities/asr?tenant=${encodeURIComponent(tenant)}`);
+        const r = await fetch(`/api/entities/asr${qs}`);
         if (!r.ok) return;
         const data = await r.json();
         const rules = data.rules || [];
@@ -2256,7 +2275,11 @@ const app = createApp({
           if (/^\d+:\d+$/.test(t)) continue;  // "0:00" or "64:46"
           if (t === '/') continue;
           if (/^\d{4}年\d{2}月\d{2}日/.test(t) && !t.includes('|')) continue;  // filename repeat
-          if (/^龙湖千丁/.test(t)) continue;
+          // tenant-specific junk-title filter (e.g. workspace banner that TicNote prepends)
+          {
+            const _jt = tenantConfig.value?.brand?.junk_title_prefix;
+            if (_jt && t.startsWith(_jt)) continue;
+          }
           if (/\.m4a$|\.record$/.test(t)) continue;
           // Meta line with "|" → extract and mark content start
           if (/^\d{4}-\d{2}-\d{2}\s[\d:]+\|/.test(t)) { clean.push(t); seenContent = true; continue; }
@@ -2587,7 +2610,7 @@ const app = createApp({
       // Extract tags
       const tagLines = rawSummary.split('\n').filter(l => {
         const t = l.trim();
-        return t.length > 0 && t.length < 15 && !/^\d|^[|/]|Shadow|TicNote|新功能|编辑|总结|转录|思维导图|顿悟|深度研究|播客|\.m4a|龙湖千丁|出席/.test(t) && !/^[\u{1F000}-\u{1FFFF}]/u.test(t);
+        return t.length > 0 && t.length < 15 && !/^\d|^[|\/]|Shadow|TicNote|新功能|编辑|总结|转录|思维导图|顿悟|深度研究|播客|\.m4a|出席/.test(t) && !/^[\u{1F000}-\u{1FFFF}]/u.test(t);
       });
       // Extract speakers
       const speakerM = rawSummary.match(/出席人员:\s*(.+)/);
@@ -4387,7 +4410,7 @@ const app = createApp({
         const savedView = localStorage.getItem('ome365_view') || 'dashboard';
         initialState = { view: savedView };
       }
-      await Promise.all([loadDashboard(), loadSettings()]);
+      await Promise.all([loadDashboard(), loadSettings(), loadTenantConfig()]);
       loading.value = false;
 
       // Seed history with parent state first so in-page back buttons always have somewhere to go
@@ -4562,7 +4585,7 @@ const app = createApp({
       handlePaste, pastedImage, pasteProcessing, pasteAction, pasteDismiss,
       askAI,
       loadSpecialDays, createSpecialDay, deleteSpecialDay, prevMonth, nextMonth, openDayFormForDate, onDayTypeChange,
-      loadSettings, saveSettings, testAI, toggleProxy, theme, setTheme,
+      loadSettings, saveSettings, testAI, toggleProxy, theme, setTheme, tenantConfig,
       fabAction, showToast,
       // Interviews & Reports
       interviewGroups, interviewCount, interviewStats, interviewCatFilter, interviewCats, filteredInterviewGroups,
