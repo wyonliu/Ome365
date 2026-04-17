@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>登录 · Ome365</title>
+<style>
+  :root {
+    --bg: #0b0f14; --panel: rgba(255,255,255,0.04); --fg: #e7eef7;
+    --muted: #8a96a7; --accent: #8ab4ff; --border: rgba(255,255,255,0.08);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:linear-gradient(160deg,#0b0f14 0%,#111827 100%);color:var(--fg);font-family:-apple-system,system-ui,"PingFang SC","Microsoft YaHei",sans-serif;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:32px 28px;width:100%;max-width:380px;backdrop-filter:blur(8px)}
+  h1{margin:0 0 4px;font-size:22px;font-weight:600}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:24px}
+  label{display:block;font-size:12px;color:var(--muted);margin:14px 0 6px}
+  input{width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:rgba(0,0,0,0.3);color:var(--fg);font-size:14px;outline:none}
+  input:focus{border-color:var(--accent)}
+  button{width:100%;padding:11px 14px;border-radius:8px;border:0;background:var(--accent);color:#0b0f14;font-weight:600;margin-top:20px;cursor:pointer;font-size:14px}
+  button:disabled{opacity:.6;cursor:not-allowed}
+  .tabs{display:flex;gap:4px;margin-bottom:20px;background:rgba(0,0,0,0.2);padding:4px;border-radius:8px}
+  .tabs button{flex:1;margin:0;padding:8px;background:transparent;color:var(--muted);font-weight:500}
+  .tabs button.active{background:var(--accent);color:#0b0f14}
+  .msg{margin-top:14px;font-size:13px;padding:10px 12px;border-radius:6px}
+  .msg.err{background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid rgba(239,68,68,0.3)}
+  .msg.ok{background:rgba(34,197,94,0.15);color:#86efac;border:1px solid rgba(34,197,94,0.3)}
+  .hide{display:none}
+  .foot{color:var(--muted);font-size:12px;text-align:center;margin-top:20px}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1 id="brand">Ome365</h1>
+  <div class="sub">请登录以继续</div>
+
+  <div class="tabs" id="tabs" style="display:none">
+    <button id="tab-basic" class="active" data-tab="basic">密码</button>
+    <button id="tab-magic" data-tab="magic">邮箱链接</button>
+  </div>
+
+  <form id="form-basic">
+    <label>用户名</label>
+    <input type="text" id="uid" autocomplete="username" required>
+    <label>密码</label>
+    <input type="password" id="pw" autocomplete="current-password" required>
+    <button type="submit" id="btn-basic">登录</button>
+  </form>
+
+  <form id="form-magic" class="hide">
+    <label>邮箱地址</label>
+    <input type="email" id="email" required>
+    <button type="submit" id="btn-magic">发送登录链接</button>
+    <div class="foot">点击后若邮箱在允许列表内，15 分钟内有效的登录链接将发到你邮箱。</div>
+  </form>
+
+  <div id="msg" class="msg hide"></div>
+  <div class="foot" id="provider-info"></div>
+</div>
+<script>
+(async () => {
+  const q = new URLSearchParams(location.search);
+  const nextUrl = q.get('next') || '/';
+
+  // 取租户品牌与 provider
+  const tc = await fetch('/api/tenant/config').then(r=>r.json()).catch(()=>({}));
+  const brand = (tc.brand||{}).cockpit_title || 'Ome365';
+  document.getElementById('brand').textContent = brand;
+  const provider = ((tc.auth||{}).provider) || 'basic';
+  document.getElementById('provider-info').textContent = `provider: ${provider}`;
+
+  const showMsg = (text, kind='err') => {
+    const el = document.getElementById('msg');
+    el.textContent = text;
+    el.className = 'msg ' + kind;
+  };
+
+  // 根据 provider 显示对应表单
+  const formBasic = document.getElementById('form-basic');
+  const formMagic = document.getElementById('form-magic');
+  const tabs = document.getElementById('tabs');
+
+  if (provider === 'magic_link') {
+    formBasic.classList.add('hide');
+    formMagic.classList.remove('hide');
+  } else if (provider === 'basic') {
+    formBasic.classList.remove('hide');
+    formMagic.classList.add('hide');
+  } else if (provider === 'none') {
+    location.replace(nextUrl); return;
+  } else {
+    // OIDC / wecom 将来由后端直接 302；这里给个兜底
+    showMsg(`Provider "${provider}" 需要跳转登录，请联系管理员`, 'err');
+  }
+
+  formBasic.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('btn-basic');
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          uid: document.getElementById('uid').value,
+          password: document.getElementById('pw').value,
+          next: nextUrl,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) { showMsg(d.error || '登录失败'); btn.disabled = false; return; }
+      showMsg('登录成功，跳转中…', 'ok');
+      setTimeout(()=>location.replace(d.next || nextUrl), 500);
+    } catch (err) {
+      showMsg('网络错误：' + err.message);
+      btn.disabled = false;
+    }
+  });
+
+  formMagic.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('btn-magic');
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/auth/magic/request', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          email: document.getElementById('email').value,
+          next: nextUrl,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) { showMsg(d.error || '发送失败'); btn.disabled = false; return; }
+      showMsg(d.message || '登录链接已发送，请查收邮件。', 'ok');
+    } catch (err) {
+      showMsg('网络错误：' + err.message);
+      btn.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>

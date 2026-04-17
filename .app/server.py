@@ -89,6 +89,56 @@ async def api_ctx_healthcheck():
     return healthcheck()
 
 
+# ── Auth ──────────────────────────────────────────────
+# tenant_config.auth.provider 决定用哪个 provider:
+#   - "none": 不认证（legacy 单人 / dev / demo vault）
+#   - "basic": 密码登录（demo / 家庭小团队）
+#   - "magic_link": 邮件一次性链接（家庭小团队）
+#   - "oidc" / "wecom": Phase 2c 实现
+_AUTH_CFG = (TENANT.get("auth") or {})
+_AUTH_PROVIDER_NAME = os.environ.get("OME365_AUTH_PROVIDER") or _AUTH_CFG.get("provider") or "none"
+_AUTH_PROVIDER = None
+_SESSION_STORE = None
+try:
+    from auth.session_store import SessionStore as _SessionStore
+    from ctx import ome365_home as _ome365_home
+    _sessions_db = _ome365_home() / "sessions.db"
+    _SESSION_STORE = _SessionStore(_sessions_db)
+
+    _pcfg = ((_AUTH_CFG.get("providers") or {}).get(_AUTH_PROVIDER_NAME) or {})
+    _pcfg = {**_pcfg, "tenant_id": TENANT.get("_tenant_id") or "default"}
+    if _AUTH_PROVIDER_NAME == "none":
+        from auth.providers.none_provider import NoneProvider as _P
+        _AUTH_PROVIDER = _P(_pcfg)
+    elif _AUTH_PROVIDER_NAME == "basic":
+        from auth.providers.basic_provider import BasicProvider as _P
+        _AUTH_PROVIDER = _P(_pcfg, session_store=_SESSION_STORE)
+    elif _AUTH_PROVIDER_NAME == "magic_link":
+        from auth.providers.magic_link_provider import MagicLinkProvider as _P
+        _AUTH_PROVIDER = _P(_pcfg, session_store=_SESSION_STORE, token_db_path=_ome365_home() / "magic_tokens.db")
+    else:
+        print(f"[auth] unknown provider '{_AUTH_PROVIDER_NAME}', falling back to none")
+        from auth.providers.none_provider import NoneProvider as _P
+        _AUTH_PROVIDER = _P(_pcfg)
+    print(f"[auth] provider={_AUTH_PROVIDER.name} health={_AUTH_PROVIDER.healthcheck()}")
+
+    from auth.middleware import install_auth
+    install_auth(app, _AUTH_PROVIDER, session_store=_SESSION_STORE, tenant_config=TENANT)
+except Exception as _e:
+    import traceback
+    traceback.print_exc()
+    print(f"[auth] install failed, running without auth: {_e}")
+
+
+@app.get("/api/auth/healthcheck")
+async def api_auth_healthcheck():
+    if _AUTH_PROVIDER is None:
+        return {"ok": False, "provider": None, "error": "auth not installed"}
+    hc = _AUTH_PROVIDER.healthcheck()
+    hc["sessions"] = (_SESSION_STORE.count() if _SESSION_STORE else 0)
+    return hc
+
+
 # ── Settings ──────────────────────────────────────────
 SETTINGS_FILE = Path(__file__).parent / "settings.json"
 
