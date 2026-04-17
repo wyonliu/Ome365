@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{USER}} · Ome365 共享知识库</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0c0b14; --text:#f0e8d8; --text2:rgba(240,232,216,0.6); --text3:rgba(240,232,216,0.28);
+  --gold:#c8a96e; --gold-dim:rgba(200,169,110,0.14); --gold-soft:rgba(200,169,110,0.06);
+  --border:rgba(200,169,110,0.10); --border-strong:rgba(200,169,110,0.22);
+  --card-bg:rgba(22,21,35,0.7); --surface:rgba(28,26,44,0.96); --surface-hi:rgba(34,32,54,0.98);
+  --accent:#c8a96e; --accent-2:#e5c88c; --danger:#ef4444; --success:#22c55e;
+  --shadow-sm:0 1px 3px rgba(0,0,0,0.35);
+  --shadow-lg:0 18px 48px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.3);
+  --drop-glow:0 0 0 1px var(--accent), 0 0 24px rgba(200,169,110,0.25);
+}
+[data-theme="longfor"]{
+  --bg:#f6f8fc; --text:#1e293b; --text2:#64748b; --text3:#94a3b8;
+  --gold:#3b82f6; --gold-dim:rgba(59,130,246,0.09); --gold-soft:rgba(59,130,246,0.04);
+  --border:#e5e7eb; --border-strong:#cbd5e1;
+  --card-bg:#fff; --surface:#fff; --surface-hi:#fafafa;
+  --accent:#3b82f6; --accent-2:#1d4ed8; --danger:#dc2626; --success:#16a34a;
+  --shadow-sm:0 1px 3px rgba(0,0,0,0.05);
+  --shadow-lg:0 18px 48px rgba(15,23,42,0.14), 0 2px 6px rgba(15,23,42,0.05);
+  --drop-glow:0 0 0 1.5px var(--accent), 0 0 24px rgba(59,130,246,0.18);
+}
+html,body{background:var(--bg);color:var(--text)}
+body{font:14px/1.5 -apple-system,'PingFang SC','Noto Sans SC',sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;transition:background .25s,color .25s;overflow-x:hidden}
+::selection{background:var(--gold-dim);color:var(--text)}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit}
+
+.wrap{max-width:920px;margin:0 auto;padding:36px 28px 140px;position:relative}
+body::before{content:'';position:fixed;top:-200px;left:50%;transform:translateX(-50%);width:900px;height:600px;background:radial-gradient(ellipse at center, rgba(200,169,110,0.08), transparent 65%);pointer-events:none;z-index:0}
+[data-theme="longfor"] body::before{background:radial-gradient(ellipse at center, rgba(59,130,246,0.05), transparent 65%)}
+.wrap > *{position:relative;z-index:1}
+
+/* ── Brand bar (same logo as main site) ── */
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:42px;padding-bottom:22px;border-bottom:1px solid var(--border)}
+/* 与主站一致：O 金色圆圈 + 365 等宽字 */
+.logo-r{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:2.5px solid var(--gold);border-radius:50%;font-size:0;background:radial-gradient(circle at 30% 30%, rgba(212,176,122,0.15), transparent 70%);box-shadow:0 0 12px rgba(212,176,122,0.2);transition:all .3s ease;flex-shrink:0}
+.logo-r:hover{box-shadow:0 0 20px rgba(212,176,122,0.35);border-color:#e8c892}
+[data-theme="longfor"] .logo-r{background:radial-gradient(circle at 30% 30%, rgba(59,130,246,0.18), transparent 70%);box-shadow:0 0 12px rgba(59,130,246,0.18)}
+[data-theme="longfor"] .logo-r:hover{box-shadow:0 0 22px rgba(59,130,246,0.3)}
+.logo-365{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:15px;font-weight:600;color:var(--text3);margin-left:2px;letter-spacing:0}
+.brand-name{font:600 15px/1 -apple-system;letter-spacing:-0.01em;color:var(--text)}
+.brand-dot{width:3px;height:3px;border-radius:50%;background:var(--text3);margin:0 4px}
+.brand-tag{font:500 12.5px/1 -apple-system;color:var(--text2);letter-spacing:0.02em}
+.brand-right{margin-left:auto;display:flex;align-items:center;gap:6px}
+
+/* ── Hero header ── */
+.hd{display:flex;align-items:flex-end;gap:20px;margin-bottom:22px;flex-wrap:wrap;padding:0 2px}
+.hd-avatar{width:60px;height:60px;border-radius:30px;background:linear-gradient(135deg,#c8a96e 0%,#a07840 100%);display:grid;place-items:center;font:700 22px/1 -apple-system;color:#0c0b14;flex-shrink:0;box-shadow:0 6px 20px rgba(200,169,110,0.32), inset 0 1px 0 rgba(255,255,255,0.2)}
+[data-theme="longfor"] .hd-avatar{background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;box-shadow:0 6px 20px rgba(59,130,246,0.3), inset 0 1px 0 rgba(255,255,255,0.28)}
+.hd-info{flex:1;min-width:180px}
+.hd-eyebrow{font:500 11px/1 -apple-system;color:var(--accent);letter-spacing:0.14em;text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.hd-eyebrow::before{content:'';width:14px;height:1px;background:var(--accent);display:inline-block}
+.hd-name{font-size:30px;font-weight:700;letter-spacing:-0.02em;line-height:1.15;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hd-name-suffix{font-size:15px;font-weight:500;color:var(--text2);letter-spacing:0}
+.hd-sub{font-size:12.5px;color:var(--text3);margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hd-soul{font-size:13.5px;color:var(--text2);margin-top:10px;letter-spacing:0.02em;font-weight:400;opacity:0.92}
+.hd-soul::before{content:'';display:inline-block;width:3px;height:13px;background:linear-gradient(180deg,var(--accent),transparent);border-radius:2px;margin-right:10px;vertical-align:-2px}
+
+/* ── Manifesto (progression) ── */
+.mf{margin:28px 0 32px;padding:20px 22px;border:1px solid var(--border);border-radius:14px;background:linear-gradient(180deg,var(--gold-soft),transparent 120%);position:relative;overflow:hidden}
+.mf::after{content:'';position:absolute;top:0;left:0;width:2px;height:100%;background:linear-gradient(180deg,transparent,var(--accent) 20%,var(--accent) 80%,transparent);opacity:.35}
+.mf-intro{font-size:12px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:14px}
+.mf-line{display:flex;align-items:baseline;gap:14px;padding:6px 0;font-size:14px;line-height:1.55}
+.mf-pk{min-width:96px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;font-weight:600;color:var(--text2);letter-spacing:-0.01em;flex-shrink:0}
+.mf-pv{color:var(--text2);font-weight:400}
+.mf-but{display:block;margin:10px 0 8px;color:var(--text3);font-size:12.5px;font-style:italic;padding-left:110px}
+.mf-us{padding:10px 0 4px;border-top:1px dashed var(--border);margin-top:6px}
+.mf-us .mf-pk{color:var(--accent);font-weight:700;font-size:14px}
+.mf-us .mf-pv{color:var(--text);font-weight:500;font-size:14.5px}
+.mf-close{margin-top:8px;padding-left:110px;font-size:13px;color:var(--text2);letter-spacing:0.01em}
+.mf-close b{color:var(--accent);font-weight:600}
+@media (max-width:520px){
+  .mf-line{flex-direction:column;gap:2px}
+  .mf-pk{min-width:0}
+  .mf-but,.mf-close{padding-left:0}
+}
+.hd-sub .dot{width:2.5px;height:2.5px;border-radius:50%;background:var(--text3)}
+.hd-tools{display:flex;gap:6px;flex-wrap:wrap}
+
+/* ── Search ── */
+.sb{display:flex;align-items:center;gap:8px;margin-bottom:18px;padding:0 2px}
+.sb-input{flex:1;height:38px;padding:0 14px 0 38px;border-radius:10px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);font:13px/1.5 inherit;outline:none;transition:border-color .15s, box-shadow .15s;background-image:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14' fill='none'%3E%3Ccircle cx='6' cy='6' r='4.5' stroke='%23888' stroke-width='1.3'/%3E%3Cline x1='9.5' y1='9.5' x2='12.5' y2='12.5' stroke='%23888' stroke-width='1.3' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:12px center}
+.sb-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--gold-dim)}
+.sb-input::placeholder{color:var(--text3)}
+.tb{height:34px;min-width:34px;padding:0 10px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:13px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:5px;transition:all .15s}
+.tb:hover{border-color:var(--border-strong);color:var(--text)}
+.tb.on{background:var(--gold-dim);border-color:var(--accent);color:var(--accent)}
+.tb-new{background:var(--gold-dim);border-color:var(--accent);color:var(--accent);font-weight:500}
+.tb-new:hover{background:var(--accent);color:#0c0b14;border-color:var(--accent)}
+[data-theme="longfor"] .tb-new:hover{color:#fff}
+.tb svg{display:block}
+
+/* ── Folder sections ── */
+.sec{margin-bottom:22px;border-radius:14px;transition:box-shadow .15s, background .15s;padding:4px;position:relative}
+.sec.is-drop{box-shadow:var(--drop-glow);background:var(--gold-soft)}
+.sec[data-folder=""]::before,.sec:not([data-folder])::before{display:none}
+.sec-head{display:flex;align-items:center;gap:10px;padding:9px 12px 9px 14px;border-radius:10px;cursor:pointer;user-select:none;-webkit-user-select:none;transition:background .12s;position:relative}
+.sec-head::before{content:'';position:absolute;left:4px;top:10px;bottom:10px;width:2px;border-radius:2px;background:var(--accent);opacity:0.55;transition:opacity .15s}
+.sec[data-folder=""] .sec-head::before{display:none}
+.sec-head:hover{background:var(--gold-soft)}
+.sec-head:hover::before{opacity:1}
+.sec-arrow{font-size:10px;color:var(--text3);transition:transform .22s cubic-bezier(.5,0,.5,1.6);width:14px;text-align:center;flex-shrink:0}
+.sec-arrow.shut{transform:rotate(-90deg)}
+.sec-icon{font-size:15px;flex-shrink:0;filter:saturate(1.1)}
+.sec-label{font-size:14.5px;font-weight:600;color:var(--text);flex:1;outline:none;border-radius:5px;padding:2px 4px;margin:-2px -4px;min-width:40px;letter-spacing:-0.005em}
+.sec-label[contenteditable="true"]{background:var(--gold-dim);box-shadow:0 0 0 1px var(--accent);cursor:text}
+.sec-count{font:500 11px/1 ui-monospace,monospace;color:var(--text3);padding:3px 7px;border-radius:5px;background:var(--gold-soft);flex-shrink:0;border:1px solid var(--border)}
+.sec-menu{width:24px;height:24px;border-radius:6px;border:none;background:transparent;color:var(--text3);font-size:15px;cursor:pointer;display:grid;place-items:center;opacity:0;transition:all .12s;flex-shrink:0}
+.sec-head:hover .sec-menu,.sec-head:focus-within .sec-menu{opacity:1}
+.sec-menu:hover{background:var(--gold-dim);color:var(--text)}
+.sec-body{overflow:hidden;transition:max-height .3s cubic-bezier(.2,.8,.2,1),opacity .22s ease,padding .22s ease;padding:6px 2px 2px}
+.sec-body.shut{max-height:0 !important;opacity:0;padding:0}
+.sec-empty{padding:26px 18px;font-size:12.5px;color:var(--text3);text-align:center;border:1.5px dashed var(--border);border-radius:11px;margin:4px 6px;transition:all .15s;background:linear-gradient(180deg, transparent, var(--gold-soft))}
+.sec.is-drop .sec-empty{border-color:var(--accent);color:var(--accent);background:var(--gold-dim)}
+
+/* ── Grid ── */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;padding:2px 6px}
+.card{position:relative;border-radius:14px;border:1px solid var(--border);background:var(--card-bg);padding:20px 18px 16px;cursor:pointer;transition:border-color .18s,box-shadow .18s,transform .18s,opacity .15s,background .18s;display:flex;flex-direction:column;gap:8px;min-height:148px;overflow:hidden;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.card::before{content:'';position:absolute;inset:0;border-radius:inherit;background:radial-gradient(circle at 110% -10%, var(--gold-dim), transparent 55%);opacity:0;transition:opacity .2s;pointer-events:none}
+.card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:0;transition:opacity .2s}
+.card:hover{border-color:var(--border-strong);box-shadow:var(--shadow-sm),0 8px 24px rgba(0,0,0,0.18);transform:translateY(-2px)}
+[data-theme="longfor"] .card:hover{box-shadow:var(--shadow-sm),0 8px 24px rgba(15,23,42,0.08)}
+.card:hover::before{opacity:1}
+.card:hover::after{opacity:0.5}
+.card.dragging{opacity:0.35;transform:scale(0.96) rotate(-1deg);cursor:grabbing}
+.card-icon{font-size:26px;line-height:1;filter:saturate(1.1);width:38px;height:38px;border-radius:9px;background:var(--gold-soft);display:grid;place-items:center;border:1px solid var(--border)}
+.card-title{font-size:13.5px;font-weight:600;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-all;letter-spacing:-0.005em;flex:1}
+.card-meta{margin-top:auto;display:flex;align-items:center;gap:6px;padding-top:4px}
+.card-slug{font:500 10px/1 ui-monospace,monospace;color:var(--text3);padding:3px 6px;border-radius:4px;background:var(--gold-soft);border:1px solid var(--border);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px}
+.card-date{font-size:10.5px;color:var(--text3);margin-left:auto;font-variant-numeric:tabular-nums}
+
+/* ── List ── */
+.list{display:flex;flex-direction:column;padding:2px 0}
+.row{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:9px;cursor:pointer;transition:background .1s,opacity .15s}
+.row:hover{background:var(--gold-soft)}
+.row.dragging{opacity:0.35}
+.row-icon{font-size:16px;flex:0 0 22px;text-align:center}
+.row-title{flex:1;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.row-slug{font:11px/1 ui-monospace,monospace;color:var(--text3);flex:0 0 auto;padding:3px 6px;border-radius:4px;background:var(--gold-soft)}
+.row-date{font-size:11px;color:var(--text3);flex:0 0 72px;text-align:right}
+
+/* ── New-folder drop zone (bottom, appears on drag) ── */
+.dz-new{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(80px);padding:14px 24px;border-radius:14px;background:var(--surface);border:1.5px dashed var(--border-strong);color:var(--text2);font-size:13px;font-weight:500;box-shadow:var(--shadow-lg);z-index:500;display:inline-flex;align-items:center;gap:8px;pointer-events:none;opacity:0;transition:transform .25s cubic-bezier(.2,.8,.2,1), opacity .2s, border-color .15s, color .15s, background .15s}
+.dz-new.show{transform:translateX(-50%) translateY(0);opacity:1;pointer-events:auto}
+.dz-new.is-drop{border-style:solid;border-color:var(--accent);color:var(--accent);background:var(--gold-dim);box-shadow:var(--drop-glow)}
+.dz-new svg{opacity:0.8}
+
+/* ── Context menu ── */
+.ctx{position:fixed;z-index:9999;min-width:200px;background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:5px;box-shadow:var(--shadow-lg);animation:popIn .12s cubic-bezier(.2,.8,.2,1);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.ctx-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:7px;border:none;background:transparent;color:var(--text);font:13px/1.4 -apple-system,'PingFang SC',sans-serif;cursor:pointer;width:100%;text-align:left;transition:background .08s}
+.ctx-item:hover{background:var(--gold-dim)}
+.ctx-item.danger{color:var(--danger)}
+.ctx-item.danger:hover{background:rgba(239,68,68,0.08)}
+.ctx-item .shortcut{margin-left:auto;font-size:11px;color:var(--text3);font-family:ui-monospace,monospace}
+.ctx-sep{height:1px;background:var(--border);margin:4px 8px}
+.ctx-icon{width:16px;text-align:center;flex-shrink:0;opacity:0.8}
+@keyframes popIn{from{opacity:0;transform:scale(0.94) translateY(-4px)}to{opacity:1;transform:none}}
+
+/* ── Modal ── */
+.modal-bg{position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;animation:fadeIn .15s ease}
+.modal-bg.show{display:flex}
+[data-theme="longfor"] .modal-bg{background:rgba(15,23,42,0.35)}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;min-width:360px;max-width:440px;box-shadow:var(--shadow-lg);animation:modalIn .2s cubic-bezier(.2,.8,.2,1)}
+@keyframes modalIn{from{opacity:0;transform:scale(0.92) translateY(10px)}to{opacity:1;transform:none}}
+.modal-title{font-size:16px;font-weight:600;margin-bottom:6px;letter-spacing:-0.01em}
+.modal-desc{font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.55}
+.modal-input{width:100%;height:40px;padding:0 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:border-color .15s, box-shadow .15s}
+.modal-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--gold-dim)}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+.btn{height:36px;padding:0 18px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:500;cursor:pointer;transition:all .12s}
+.btn:hover{border-color:var(--border-strong);background:var(--gold-soft)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#0c0b14}
+[data-theme="longfor"] .btn-primary{color:#fff}
+.btn-primary:hover{background:var(--accent-2);border-color:var(--accent-2);color:#0c0b14}
+[data-theme="longfor"] .btn-primary:hover{color:#fff}
+.btn-danger{background:var(--danger);border-color:var(--danger);color:#fff}
+.btn-danger:hover{opacity:0.9;background:var(--danger)}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:32px;left:50%;transform:translateX(-50%) translateY(0);padding:10px 20px;border-radius:11px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:13px;font-weight:500;z-index:9500;box-shadow:var(--shadow-lg);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);pointer-events:none;opacity:0;transition:opacity .2s, transform .2s}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+
+/* ── Footer ── */
+.ft{margin-top:80px;text-align:center;font-size:11px;color:var(--text3);padding-top:24px;border-top:1px solid var(--border)}
+.ft-logo{display:inline-flex;align-items:center;gap:4px;opacity:0.7}
+.empty-all{text-align:center;padding:72px 0 32px;color:var(--text3);font-size:13px}
+
+@keyframes slideUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.card,.row,.sec{animation:slideUp .28s cubic-bezier(.2,.8,.2,1) both}
+
+@media(max-width:640px){
+  .wrap{padding:28px 16px 120px}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:9px}
+  .row-slug{display:none}
+  .modal{min-width:calc(100vw - 40px);margin:0 20px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <a class="logo-r" href="/" title="Ome365">O</a>
+    <span class="logo-365">365</span>
+    <span class="brand-dot"></span>
+    <span class="brand-tag">共享知识库</span>
+  </div>
+  <div class="hd">
+    <div class="hd-avatar" id="avatar"></div>
+    <div class="hd-info">
+      <div class="hd-eyebrow">KNOWLEDGE THAT LIVES WITH YOU</div>
+      <div class="hd-name"><span id="userName"></span><span class="hd-name-suffix">的共享知识库</span></div>
+      <div class="hd-sub" id="docCount"></div>
+    </div>
+    <div class="hd-tools">
+      <button class="tb" id="btnGrid" title="图标视图" onclick="setView('grid')">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/></svg>
+      </button>
+      <button class="tb" id="btnList" title="列表视图" onclick="setView('list')">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><line x1="1" y1="3" x2="13" y2="3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><line x1="1" y1="7" x2="13" y2="7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><line x1="1" y1="11" x2="13" y2="11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      </button>
+      <button class="tb" id="btnTheme" title="切换色系" onclick="toggleTheme()">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.3"/><path d="M7 1.5A5.5 5.5 0 017 12.5z" fill="currentColor"/></svg>
+      </button>
+      <button class="tb tb-new" id="btnNewFolder" title="新建文件夹" onclick="askNewFolder()">
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M1.5 4.5a1 1 0 011-1h2.793a1 1 0 01.707.293l.707.707a1 1 0 00.707.293H11.5a1 1 0 011 1V11a1 1 0 01-1 1h-9a1 1 0 01-1-1V4.5z" stroke="currentColor" stroke-width="1.3"/><line x1="7" y1="6.5" x2="7" y2="9.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><line x1="5.5" y1="8" x2="8.5" y2="8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        <span>新建</span>
+      </button>
+    </div>
+  </div>
+  <div class="sb">
+    <input class="sb-input" id="sbInput" type="text" placeholder="搜索共享文档…" autocomplete="off" spellcheck="false">
+  </div>
+
+  <div id="main"></div>
+  <div class="ft">
+    <div class="ft-logo"><span class="logo-r" style="width:18px;height:18px;border-width:1.8px;box-shadow:none">O</span><span class="logo-365" style="font-size:12px">365</span></div>
+    <div style="margin-top:6px">共享知识库 · 本地部署 · 云端分享</div>
+  </div>
+</div>
+
+<!-- Drop zone (bottom) -->
+<div id="dzNew" class="dz-new">
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 5a1 1 0 011-1h3.172a1 1 0 01.707.293l1 1A1 1 0 007.586 5.5H13a1 1 0 011 1V12a1 1 0 01-1 1H3a1 1 0 01-1-1V5z" stroke="currentColor" stroke-width="1.4"/><line x1="8" y1="7.5" x2="8" y2="10.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="6.5" y1="9" x2="9.5" y2="9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+  <span>拖放到此 · 新建文件夹</span>
+</div>
+
+<!-- Context menu -->
+<div id="ctx" class="ctx" style="display:none"></div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<!-- Modal -->
+<div class="modal-bg" id="modal">
+  <div class="modal" role="dialog">
+    <div class="modal-title" id="mTitle"></div>
+    <div class="modal-desc" id="mDesc" style="display:none"></div>
+    <input class="modal-input" id="mInput" type="text" style="display:none" autocomplete="off" spellcheck="false">
+    <div class="modal-actions">
+      <button class="btn" id="mCancel">取消</button>
+      <button class="btn btn-primary" id="mOk">确定</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const USER = '{{USER}}';
+let docs = [];
+let customFolders = JSON.parse(localStorage.getItem('sh-folders-' + USER) || '[]');
+let view = localStorage.getItem('sh-view') || 'grid';
+let theme = localStorage.getItem('sh-theme') || '';
+let collapsed = JSON.parse(localStorage.getItem('sh-collapsed') || '{}');
+let searchQ = '';
+
+// ── Boot ──
+(async () => {
+  if (theme) document.documentElement.setAttribute('data-theme', theme);
+  $('avatar').textContent = USER[0].toUpperCase();
+  $('userName').textContent = USER;
+  syncViewBtns();
+  try {
+    const r = await fetch('/api/user/' + USER + '/docs');
+    const d = await r.json();
+    docs = d.docs || [];
+    refreshDocCount();
+    paint();
+  } catch (e) {
+    $('main').innerHTML = '<div class="empty-all">加载失败 · 请刷新</div>';
+  }
+  document.addEventListener('click', (e) => { if (!e.target.closest('.ctx')) hideCtx(); });
+  document.addEventListener('contextmenu', e => { if (!e.target.closest('.card,.row,.sec-head')) hideCtx(); });
+  document.addEventListener('keydown', onKey);
+  initDropZone();
+  // Search
+  const si = $('sbInput');
+  si.addEventListener('input', () => { searchQ = si.value.trim().toLowerCase(); paint(); });
+  document.addEventListener('keydown', (e) => {
+    if ((e.key === '/' || e.key === 'k' && (e.metaKey || e.ctrlKey)) && !$('modal').classList.contains('show') && document.activeElement !== si && !document.activeElement.isContentEditable) {
+      e.preventDefault(); si.focus();
+    }
+  });
+})();
+
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function refreshDocCount() {
+  const n = docs.length;
+  const f = allFolders().length;
+  let html = '<span>' + n + ' 份文档</span>';
+  if (f) html += '<span class="dot"></span><span>' + f + ' 个文件夹</span>';
+  html += '<span class="dot"></span><span>Markdown · 只读</span>';
+  $('docCount').innerHTML = html;
+}
+
+function allFolders() {
+  const docFolders = [...new Set(docs.filter(d => d.folder).map(d => d.folder))];
+  const all = [...new Set([...docFolders, ...customFolders])];
+  all.sort((a, b) => a.localeCompare(b, 'zh'));
+  return all;
+}
+function saveCustomFolders() { localStorage.setItem('sh-folders-' + USER, JSON.stringify(customFolders)); }
+
+// ── Paint ──
+function matches(d) {
+  if (!searchQ) return true;
+  return (d.title || '').toLowerCase().includes(searchQ) || (d.slug || '').toLowerCase().includes(searchQ);
+}
+function paint() {
+  const folders = allFolders();
+  const visibleDocs = docs.filter(matches);
+  const loose = visibleDocs.filter(d => !d.folder);
+  let h = '';
+  folders.forEach(f => {
+    const inFolder = visibleDocs.filter(d => d.folder === f);
+    if (searchQ && !inFolder.length && !f.toLowerCase().includes(searchQ)) return;
+    h += folderSection(f, inFolder);
+  });
+  if (loose.length) {
+    if (folders.length) h += folderSection('__loose', loose, '未归类');
+    else h += '<div class="sec" data-folder=""><div class="sec-body">' + items(loose) + '</div></div>';
+  } else if (searchQ && !visibleDocs.length) {
+    h = '<div class="empty-all">未找到匹配「' + esc(searchQ) + '」的文档</div>';
+  } else if (!docs.length) {
+    h = '<div class="empty-all">暂无共享文档<br><span style="opacity:0.6;font-size:12px">在主站通过「分享」按钮创建</span></div>';
+  }
+  $('main').innerHTML = h;
+  bindSections();
+  bindDraggables();
+  refreshDocCount();
+}
+
+function folderSection(key, list, label) {
+  const shut = !!collapsed[key];
+  const name = label || key;
+  const icon = key === '__loose' ? '📎' : '📁';
+  const editable = key !== '__loose';
+  return '<div class="sec" data-folder="' + esc(key === '__loose' ? '' : key) + '">'
+    + '<div class="sec-head">'
+    + '<span class="sec-arrow' + (shut ? ' shut' : '') + '" data-act="toggle" data-key="' + esc(key) + '">▾</span>'
+    + '<span class="sec-icon" data-act="toggle" data-key="' + esc(key) + '">' + icon + '</span>'
+    + '<span class="sec-label" ' + (editable ? 'data-editable="1" title="双击重命名"' : '') + ' data-key="' + esc(key) + '">' + esc(name) + '</span>'
+    + '<span class="sec-count">' + list.length + '</span>'
+    + (editable ? '<button class="sec-menu" data-act="menu" data-key="' + esc(key) + '" title="更多">⋯</button>' : '')
+    + '</div>'
+    + '<div class="sec-body' + (shut ? ' shut' : '') + '">' + items(list, key) + '</div></div>';
+}
+
+function items(list, folderKey) {
+  if (!list.length) return '<div class="sec-empty">拖放文档到这里</div>';
+  return view === 'grid' ? gridHtml(list) : listHtml(list);
+}
+
+function gridHtml(list) {
+  return '<div class="grid">' + list.map(d =>
+    '<a class="card" href="/' + esc(USER) + '/' + esc(d.slug) + '" draggable="true" data-slug="' + esc(d.slug) + '">'
+    + '<div class="card-icon">📄</div>'
+    + '<div class="card-title">' + esc(d.title) + '</div>'
+    + '<div class="card-meta"><span class="card-slug">/' + esc(d.slug) + '</span><span class="card-date">' + fmtDate(d.created) + '</span></div>'
+    + '</a>'
+  ).join('') + '</div>';
+}
+
+function listHtml(list) {
+  return '<div class="list">' + list.map(d =>
+    '<a class="row" href="/' + esc(USER) + '/' + esc(d.slug) + '" draggable="true" data-slug="' + esc(d.slug) + '">'
+    + '<span class="row-icon">📄</span>'
+    + '<span class="row-title">' + esc(d.title) + '</span>'
+    + '<span class="row-slug">/' + esc(d.slug) + '</span>'
+    + '<span class="row-date">' + fmtDate(d.created) + '</span>'
+    + '</a>'
+  ).join('') + '</div>';
+}
+
+// ── Section bindings (toggle / menu / rename) ──
+function bindSections() {
+  document.querySelectorAll('.sec').forEach(sec => {
+    const head = sec.querySelector('.sec-head');
+    const key = sec.dataset.folder || '__loose';
+    if (!head) {
+      // headless section (no folders at all) — only bind drop for loose
+      sec.addEventListener('dragenter', (e) => { e.preventDefault(); sec.classList.add('is-drop'); });
+      sec.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; sec.classList.add('is-drop'); });
+      sec.addEventListener('dragleave', (e) => { if (!sec.contains(e.relatedTarget)) sec.classList.remove('is-drop'); });
+      sec.addEventListener('drop', (e) => {
+        e.preventDefault(); sec.classList.remove('is-drop');
+        const slug = e.dataTransfer.getData('text/plain');
+        if (slug) mvDoc(slug, sec.dataset.folder || '');
+      });
+      return;
+    }
+    head.addEventListener('click', (e) => {
+      if (e.target.closest('.sec-label[contenteditable="true"]')) return;
+      const t = e.target.closest('[data-act]');
+      if (t && t.dataset.act === 'menu') { folderMenu(e, key); return; }
+      if (e.target.closest('button')) return;
+      // Single-click (anywhere on head, including label) toggles — but wait briefly
+      // so a dblclick on the label can cancel it and start rename instead.
+      const labelClicked = !!e.target.closest('.sec-label[data-editable="1"]');
+      if (!labelClicked) { toggle(key); return; }
+      if (head._pendToggle) { clearTimeout(head._pendToggle); head._pendToggle = null; return; }
+      head._pendToggle = setTimeout(() => { head._pendToggle = null; toggle(key); }, 220);
+    });
+    head.addEventListener('dblclick', (e) => {
+      if (head._pendToggle) { clearTimeout(head._pendToggle); head._pendToggle = null; }
+    });
+    head.addEventListener('contextmenu', (e) => {
+      if (!e.target.closest('.sec-label[contenteditable="true"]') && sec.dataset.folder !== undefined && sec.dataset.folder !== '') {
+        folderMenu(e, key);
+        e.preventDefault();
+      }
+    });
+    // Double click label to rename
+    const label = head.querySelector('.sec-label[data-editable="1"]');
+    if (label) label.addEventListener('dblclick', () => startRename(label, key));
+
+    // Drag over section body
+    sec.addEventListener('dragenter', (e) => { e.preventDefault(); sec.classList.add('is-drop'); });
+    sec.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; sec.classList.add('is-drop'); });
+    sec.addEventListener('dragleave', (e) => { if (!sec.contains(e.relatedTarget)) sec.classList.remove('is-drop'); });
+    sec.addEventListener('drop', (e) => {
+      e.preventDefault();
+      sec.classList.remove('is-drop');
+      const slug = e.dataTransfer.getData('text/plain');
+      const folder = sec.dataset.folder || '';
+      if (slug) mvDoc(slug, folder);
+    });
+  });
+
+  // Right-click context on doc cards/rows
+  document.querySelectorAll('[draggable="true"]').forEach(el => {
+    el.addEventListener('contextmenu', (e) => { ctxDoc(e, el.dataset.slug); });
+  });
+}
+
+// ── Drag bindings ──
+function bindDraggables() {
+  document.querySelectorAll('[draggable="true"]').forEach(el => {
+    el.addEventListener('dragstart', (e) => {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', el.dataset.slug);
+      el.classList.add('dragging');
+      showDropZone(true);
+    });
+    el.addEventListener('dragend', () => {
+      el.classList.remove('dragging');
+      document.querySelectorAll('.sec.is-drop').forEach(s => s.classList.remove('is-drop'));
+      showDropZone(false);
+    });
+  });
+}
+
+// ── Drop zone (new folder) ──
+function initDropZone() {
+  const dz = $('dzNew');
+  dz.addEventListener('dragenter', (e) => { e.preventDefault(); dz.classList.add('is-drop'); });
+  dz.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; dz.classList.add('is-drop'); });
+  dz.addEventListener('dragleave', (e) => { if (!dz.contains(e.relatedTarget)) dz.classList.remove('is-drop'); });
+  dz.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    dz.classList.remove('is-drop');
+    const slug = e.dataTransfer.getData('text/plain');
+    if (!slug) return;
+    const name = await modalInput({
+      title: '新建文件夹',
+      desc: '这篇文档会被移入新建的文件夹',
+      placeholder: '文件夹名称',
+      confirm: '创建并移入'
+    });
+    if (!name) return;
+    if (!customFolders.includes(name)) { customFolders.push(name); saveCustomFolders(); }
+    await mvDoc(slug, name);
+  });
+}
+function showDropZone(show) { $('dzNew').classList.toggle('show', show); }
+
+// ── Folder toggle ──
+function toggle(key) {
+  collapsed[key] = !collapsed[key];
+  localStorage.setItem('sh-collapsed', JSON.stringify(collapsed));
+  paint();
+}
+
+// ── View / Theme ──
+function setView(v) { view = v; localStorage.setItem('sh-view', v); syncViewBtns(); paint(); }
+function syncViewBtns() { $('btnGrid').classList.toggle('on', view === 'grid'); $('btnList').classList.toggle('on', view === 'list'); }
+function toggleTheme() {
+  const on = document.documentElement.getAttribute('data-theme') === 'longfor';
+  if (on) document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', 'longfor');
+  theme = on ? '' : 'longfor';
+  localStorage.setItem('sh-theme', theme);
+}
+
+// ── Context menu (doc) ──
+function ctxDoc(e, slug) {
+  e.preventDefault(); e.stopPropagation();
+  const d = docs.find(x => x.slug === slug); if (!d) return;
+  const folders = allFolders();
+  let h = '<button class="ctx-item" data-act="open" data-slug="' + esc(slug) + '"><span class="ctx-icon">↗</span>打开</button>';
+  h += '<button class="ctx-item" data-act="copy" data-slug="' + esc(slug) + '"><span class="ctx-icon">🔗</span>复制链接</button>';
+  h += '<div class="ctx-sep"></div>';
+  if (d.folder) h += '<button class="ctx-item" data-act="mv" data-slug="' + esc(slug) + '" data-folder=""><span class="ctx-icon">📎</span>移出文件夹</button>';
+  folders.forEach(f => {
+    if (f !== d.folder) h += '<button class="ctx-item" data-act="mv" data-slug="' + esc(slug) + '" data-folder="' + esc(f) + '"><span class="ctx-icon">📁</span>移到「' + esc(f) + '」</button>';
+  });
+  h += '<button class="ctx-item" data-act="mvnew" data-slug="' + esc(slug) + '"><span class="ctx-icon">📂</span>移到新文件夹…</button>';
+  h += '<div class="ctx-sep"></div>';
+  h += '<button class="ctx-item danger" data-act="rm" data-slug="' + esc(slug) + '"><span class="ctx-icon">🗑</span>移除分享</button>';
+  showCtx(e, h);
+}
+
+// ── Context menu (folder) ──
+function folderMenu(e, key) {
+  e.preventDefault(); e.stopPropagation();
+  if (key === '__loose') return;
+  const count = docs.filter(d => d.folder === key).length;
+  let h = '<button class="ctx-item" data-act="fold-rename" data-key="' + esc(key) + '"><span class="ctx-icon">✏️</span>重命名</button>';
+  h += '<button class="ctx-item" data-act="fold-toggle" data-key="' + esc(key) + '"><span class="ctx-icon">' + (collapsed[key] ? '▸' : '▾') + '</span>' + (collapsed[key] ? '展开' : '折叠') + '</button>';
+  if (count > 0) h += '<button class="ctx-item" data-act="fold-openall" data-key="' + esc(key) + '"><span class="ctx-icon">↗</span>全部打开 (' + count + ')</button>';
+  h += '<div class="ctx-sep"></div>';
+  h += '<button class="ctx-item danger" data-act="fold-del" data-key="' + esc(key) + '"><span class="ctx-icon">🗑</span>删除文件夹</button>';
+  showCtx(e, h);
+}
+
+function showCtx(e, html) {
+  const el = $('ctx');
+  el.innerHTML = html;
+  el.style.display = 'block';
+  // Measure then position (avoid viewport overflow)
+  const r = el.getBoundingClientRect();
+  el.style.left = Math.min(e.clientX, innerWidth - r.width - 8) + 'px';
+  el.style.top = Math.min(e.clientY, innerHeight - r.height - 8) + 'px';
+  // Delegate clicks
+  el.querySelectorAll('[data-act]').forEach(b => {
+    b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const a = b.dataset.act;
+      const slug = b.dataset.slug;
+      const key = b.dataset.key;
+      hideCtx();
+      if (a === 'open') location.href = '/' + USER + '/' + slug;
+      else if (a === 'copy') copyLink(slug);
+      else if (a === 'mv') mvDoc(slug, b.dataset.folder);
+      else if (a === 'mvnew') mvToNew(slug);
+      else if (a === 'rm') confirmRmDoc(slug);
+      else if (a === 'fold-rename') startRename(document.querySelector('.sec[data-folder="' + cssEsc(key) + '"] .sec-label'), key);
+      else if (a === 'fold-toggle') toggle(key);
+      else if (a === 'fold-openall') openAll(key);
+      else if (a === 'fold-del') confirmDelFolder(key);
+    });
+  });
+}
+function hideCtx() { $('ctx').style.display = 'none'; }
+function cssEsc(s) { return (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/([^\w-])/g, '\\$1'); }
+
+// ── Folder operations ──
+function startRename(labelEl, key) {
+  if (!labelEl) return;
+  labelEl.setAttribute('contenteditable', 'true');
+  labelEl.focus();
+  // Select all
+  const r = document.createRange(); r.selectNodeContents(labelEl);
+  const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  const done = async (commit) => {
+    labelEl.removeAttribute('contenteditable');
+    labelEl.removeEventListener('blur', onBlur);
+    labelEl.removeEventListener('keydown', onKd);
+    const next = labelEl.textContent.trim();
+    if (!commit || !next || next === key) { labelEl.textContent = key; return; }
+    await renameFolder(key, next);
+  };
+  const onBlur = () => done(true);
+  const onKd = (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); labelEl.blur(); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); labelEl.textContent = key; labelEl.blur(); }
+  };
+  labelEl.addEventListener('blur', onBlur);
+  labelEl.addEventListener('keydown', onKd);
+}
+
+async function renameFolder(oldName, newName) {
+  if (allFolders().includes(newName)) { toast('已存在同名文件夹', 'err'); paint(); return; }
+  const targets = docs.filter(d => d.folder === oldName);
+  await Promise.all(targets.map(d =>
+    fetch('/api/user/' + USER + '/doc/' + d.slug + '?folder=' + encodeURIComponent(newName), { method: 'PUT' })
+  ));
+  targets.forEach(d => d.folder = newName);
+  customFolders = customFolders.filter(f => f !== oldName);
+  if (!customFolders.includes(newName)) customFolders.push(newName);
+  saveCustomFolders();
+  if (collapsed[oldName] != null) { collapsed[newName] = collapsed[oldName]; delete collapsed[oldName]; localStorage.setItem('sh-collapsed', JSON.stringify(collapsed)); }
+  paint();
+  toast('已重命名为「' + newName + '」');
+}
+
+async function askNewFolder() {
+  const name = await modalInput({
+    title: '新建文件夹',
+    placeholder: '文件夹名称',
+    confirm: '创建'
+  });
+  if (!name) return;
+  if (allFolders().includes(name)) { toast('已存在同名文件夹', 'err'); return; }
+  customFolders.push(name); saveCustomFolders();
+  paint();
+  toast('已创建「' + name + '」');
+}
+
+async function confirmDelFolder(key) {
+  const inFolder = docs.filter(d => d.folder === key);
+  const msg = inFolder.length
+    ? '文件夹「' + key + '」中有 ' + inFolder.length + ' 份文档，删除后它们会移到未归类'
+    : '删除空文件夹「' + key + '」？';
+  const ok = await modalConfirm({ title: '删除文件夹', desc: msg, confirm: '删除', danger: true });
+  if (!ok) return;
+  await Promise.all(inFolder.map(d =>
+    fetch('/api/user/' + USER + '/doc/' + d.slug + '?folder=', { method: 'PUT' })
+  ));
+  inFolder.forEach(d => d.folder = '');
+  customFolders = customFolders.filter(f => f !== key);
+  saveCustomFolders();
+  delete collapsed[key]; localStorage.setItem('sh-collapsed', JSON.stringify(collapsed));
+  paint();
+  toast('已删除文件夹');
+}
+
+function openAll(key) {
+  docs.filter(d => d.folder === key).forEach(d => {
+    window.open('/' + USER + '/' + d.slug, '_blank');
+  });
+}
+
+// ── Doc operations ──
+async function copyLink(slug) {
+  try { await navigator.clipboard.writeText(location.origin + '/' + USER + '/' + slug); toast('已复制链接'); }
+  catch (e) { toast('复制失败', 'err'); }
+}
+
+async function mvDoc(slug, folder) {
+  await fetch('/api/user/' + USER + '/doc/' + slug + '?folder=' + encodeURIComponent(folder || ''), { method: 'PUT' });
+  const d = docs.find(x => x.slug === slug);
+  if (d) d.folder = folder || '';
+  // If target folder was a custom (empty) one, no need to keep as custom — it has a doc now
+  paint();
+  toast(folder ? '已移到「' + folder + '」' : '已移出文件夹');
+}
+
+async function mvToNew(slug) {
+  const name = await modalInput({
+    title: '移到新文件夹',
+    placeholder: '文件夹名称',
+    confirm: '创建并移入'
+  });
+  if (!name) return;
+  if (allFolders().includes(name)) {
+    await mvDoc(slug, name);
+    return;
+  }
+  customFolders.push(name); saveCustomFolders();
+  await mvDoc(slug, name);
+}
+
+async function confirmRmDoc(slug) {
+  const d = docs.find(x => x.slug === slug);
+  const ok = await modalConfirm({
+    title: '移除分享',
+    desc: '「' + (d ? d.title : slug) + '」的分享链接将失效，对应文档本身不会被删除。',
+    confirm: '移除分享',
+    danger: true
+  });
+  if (!ok) return;
+  await fetch('/api/register?user=' + USER + '&slug=' + slug, { method: 'DELETE' });
+  docs = docs.filter(x => x.slug !== slug);
+  paint();
+  toast('已移除分享');
+}
+
+// ── Modal ──
+let modalResolver = null;
+function modalInput({ title, desc, placeholder, confirm, initial }) {
+  return new Promise((resolve) => {
+    modalResolver = resolve;
+    $('mTitle').textContent = title || '';
+    const descEl = $('mDesc');
+    if (desc) { descEl.textContent = desc; descEl.style.display = ''; } else descEl.style.display = 'none';
+    const inp = $('mInput');
+    inp.style.display = '';
+    inp.value = initial || '';
+    inp.placeholder = placeholder || '';
+    $('mOk').textContent = confirm || '确定';
+    $('mOk').className = 'btn btn-primary';
+    $('modal').classList.add('show');
+    setTimeout(() => { inp.focus(); inp.select(); }, 30);
+    $('mOk').onclick = () => closeModal(inp.value.trim() || null);
+    $('mCancel').onclick = () => closeModal(null);
+  });
+}
+function modalConfirm({ title, desc, confirm, danger }) {
+  return new Promise((resolve) => {
+    modalResolver = resolve;
+    $('mTitle').textContent = title || '';
+    const descEl = $('mDesc');
+    if (desc) { descEl.textContent = desc; descEl.style.display = ''; } else descEl.style.display = 'none';
+    $('mInput').style.display = 'none';
+    $('mOk').textContent = confirm || '确定';
+    $('mOk').className = 'btn ' + (danger ? 'btn-danger' : 'btn-primary');
+    $('modal').classList.add('show');
+    setTimeout(() => $('mOk').focus(), 30);
+    $('mOk').onclick = () => closeModal(true);
+    $('mCancel').onclick = () => closeModal(false);
+  });
+}
+function closeModal(val) {
+  $('modal').classList.remove('show');
+  const r = modalResolver; modalResolver = null;
+  if (r) r(val);
+}
+
+function onKey(e) {
+  if (!$('modal').classList.contains('show')) {
+    if (e.key === 'Escape') hideCtx();
+    return;
+  }
+  if (e.key === 'Escape') { e.preventDefault(); $('mCancel').click(); }
+  else if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); $('mOk').click(); }
+}
+// Click-outside to close modal
+$('modal').addEventListener('click', (e) => { if (e.target === $('modal')) $('mCancel').click(); });
+
+// ── Toast ──
+let toastTimer = null;
+function toast(msg, kind) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+// ── Helpers ──
+function fmtDate(s) {
+  if (!s) return '';
+  try {
+    const d = new Date(s); const n = new Date();
+    if (isNaN(d)) return s;
+    if (d.getFullYear() === n.getFullYear()) return (d.getMonth()+1) + '月' + d.getDate() + '日';
+    return s;
+  } catch (e) { return s; }
+}
+</script>
+</body>
+</html>

@@ -273,6 +273,145 @@ def list_entities(type_filter: str | None = None, tenant: str | None = None) -> 
     return res
 
 
+# ── Vault 全量检索 + 批量改名 ─────────────────────
+# 使用场景：船长在速记里写"—→—"，系统应该：
+#   1. scan_vault("—") 返回所有包含"—"的文件 + 行号
+#   2. rename_in_vault("—", "—") 批量替换 + 写回
+#   3. 更新 EEG：把"—"加到"—"的 aliases，或新建 — 实体
+#
+# 被跳过的目录：.git, __pycache__, node_modules, .app/static 以下的 JS/CSS/HTML
+_SCAN_SKIP = {".git", "__pycache__", "node_modules", ".venv", "venv", ".DS_Store", ".obsidian", ".trash"}
+_SCAN_EXT = {".md", ".json", ".txt", ".yaml", ".yml"}
+
+
+def _scan_iter() -> Iterable[Path]:
+    """生成所有可扫描的文件（只读 vault，不碰 .app/static 的前端代码）。"""
+    root = _vault_root()
+    skip_dirs = {root / ".app" / "static", root / ".app" / "media", root / "TicNote-raw"}
+    for fp in root.rglob("*"):
+        if not fp.is_file():
+            continue
+        if fp.suffix.lower() not in _SCAN_EXT:
+            continue
+        parts = set(fp.parts)
+        if parts & _SCAN_SKIP:
+            continue
+        if any(str(fp).startswith(str(sd)) for sd in skip_dirs):
+            continue
+        yield fp
+
+
+def scan_vault(needle: str, limit: int = 200) -> dict:
+    """扫描 vault 中所有文件，返回包含 needle 的文件 + 行号 + 预览。"""
+    if not needle:
+        return {"hits": [], "total_matches": 0, "total_files": 0}
+    hits = []
+    total = 0
+    for fp in _scan_iter():
+        try:
+            text = fp.read_text("utf-8", errors="ignore")
+        except Exception:
+            continue
+        if needle not in text:
+            continue
+        lines = text.split("\n")
+        matched_lines = []
+        for i, ln in enumerate(lines, 1):
+            if needle in ln:
+                matched_lines.append({"line": i, "text": ln.strip()[:200]})
+        if not matched_lines:
+            continue
+        total += len(matched_lines)
+        rel = str(fp.relative_to(_vault_root()))
+        hits.append({
+            "file": rel,
+            "count": len(matched_lines),
+            "lines": matched_lines[:10],  # 每文件只回前 10 行
+        })
+        if len(hits) >= limit:
+            break
+    hits.sort(key=lambda h: -h["count"])
+    return {"hits": hits, "total_matches": total, "total_files": len(hits), "needle": needle}
+
+
+def rename_in_vault(old: str, new: str, dry_run: bool = True, file_filter: list | None = None) -> dict:
+    """
+    批量替换 old → new。
+    - dry_run=True: 只返回将要改动的文件列表，不写磁盘（默认，安全）
+    - dry_run=False: 真正写回磁盘
+    - file_filter: 指定文件路径列表（相对 vault），只改这些
+    返回 { changed: [{file, count}], total: int, dry_run: bool }
+    """
+    if not old or not new or old == new:
+        return {"changed": [], "total": 0, "dry_run": dry_run, "error": "invalid old/new"}
+    root = _vault_root()
+    changed = []
+    total = 0
+    filter_set = set(file_filter) if file_filter else None
+    for fp in _scan_iter():
+        rel = str(fp.relative_to(root))
+        if filter_set and rel not in filter_set:
+            continue
+        try:
+            text = fp.read_text("utf-8", errors="ignore")
+        except Exception:
+            continue
+        if old not in text:
+            continue
+        count = text.count(old)
+        if not dry_run:
+            new_text = text.replace(old, new)
+            try:
+                fp.write_text(new_text, "utf-8")
+            except Exception as e:
+                changed.append({"file": rel, "count": count, "error": str(e)})
+                continue
+        changed.append({"file": rel, "count": count})
+        total += count
+    # 失效缓存（实体文件可能也被改动了）
+    if not dry_run:
+        _CACHE["entities"] = None
+        _CACHE["asr_rules"] = None
+    return {"changed": changed, "total": total, "dry_run": dry_run, "old": old, "new": new}
+
+
+def add_alias_to_entity(entity_name: str, alias: str) -> dict:
+    """
+    为已有实体追加一个别名（落到文件）。
+    若实体不存在，返回 { ok: False, reason: "not_found" }
+    若成功，追加到 frontmatter.aliases 后重写，并返回 { ok: True, file, aliases }
+    """
+    for e in all_entities():
+        if e["name"] == entity_name or e["id"] == entity_name:
+            if alias in e["aliases"] or alias == e["name"]:
+                return {"ok": True, "file": e["_file"], "aliases": e["aliases"], "noop": True}
+            fp = Path(e["_file"])
+            text = fp.read_text("utf-8")
+            m = _FM_RE.match(text)
+            if not m:
+                return {"ok": False, "reason": "no_frontmatter"}
+            fm = m.group(1)
+            new_aliases = e["aliases"] + [alias]
+            # 如果 frontmatter 里已有 aliases 字段，替换它；否则追加一行
+            if re.search(r'^aliases\s*:', fm, re.MULTILINE):
+                alias_block = "aliases:\n" + "\n".join(f"  - {a}" for a in new_aliases)
+                fm_new = re.sub(
+                    r'^aliases\s*:(?:\s*\n(?:\s{2,}-\s.*\n)*|\s*\[.*?\]\s*\n|\s*[^\n]*\n)',
+                    alias_block + "\n",
+                    fm,
+                    count=1,
+                    flags=re.MULTILINE,
+                )
+            else:
+                fm_new = fm.rstrip() + "\naliases:\n" + "\n".join(f"  - {a}" for a in new_aliases) + "\n"
+            new_text = "---\n" + fm_new + "\n---\n" + text[m.end():]
+            fp.write_text(new_text, "utf-8")
+            _CACHE["entities"] = None
+            _CACHE["asr_rules"] = None
+            return {"ok": True, "file": str(fp), "aliases": new_aliases}
+    return {"ok": False, "reason": "entity_not_found", "entity": entity_name}
+
+
 # ── 统计 ────────────────────────────────────────
 def stats() -> dict:
     es = all_entities()
