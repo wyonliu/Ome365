@@ -1667,50 +1667,76 @@ const app = createApp({
       { key: 'root', label: '龙湖集团', icon: '🏛️', accent: '#c8a96e', children: [
         // 集团管理战略（最上面）
         { key: 'group-mgmt', label: '集团管理战略', icon: '👔', accent: '#c8a96e', desc: '集团高管 · 战略决策层', children: [
-          { key: 'gm-ceo', label: '集团CEO', icon: '🏛️', accent: '#c8a96e', persons: [{ name: '—', title: '集团CEO' }] },
-          { key: 'gm-vp', label: '集团VP · CHO', icon: '🏛️', accent: '#c8a96e', persons: [{ name: '—', title: '集团VP' }] },
-          { key: 'gm-member', label: '集团职能 · 大会员', icon: '🏛️', accent: '#c8a96e', persons: [{ name: '—', title: '大会员负责人 · 资深' }] },
-          { key: 'gm-hr', label: '集团HR', icon: '🏛️', accent: '#c8a96e', persons: [{ name: '—', title: 'HR' }] },
+          { key: 'gm-ceo', label: '集团CEO', icon: '🏛️', accent: '#c8a96e', persons: [{ name: '—', title: '集团CEO' }], matchKeys: ['董事长'] },
+          { key: 'gm-vp', label: '集团VP · CHO', icon: '🏛️', accent: '#c8a96e', persons: [{ name: '—', title: '集团VP' }], matchKeys: ['CHO'] },
+          { key: 'gm-member', label: '集团职能 · 大会员', icon: '🏛️', accent: '#c8a96e', persons: [{ name: '—', title: '大会员负责人 · 资深' }], matchKeys: ['大会员'] },
+          { key: 'gm-hr', label: '集团HR · 行政', icon: '🏛️', accent: '#c8a96e', persons: [{ name: '—', title: 'HR · 福利' }], matchKeys: ['集团HR', '集团行政', 'SSC', '高管福利', '行政文员', '前台'] },
         ]},
-        // 集团数科平台（集团下属，非千丁）
-        { key: 'group-platform', label: '集团数科平台', icon: '🖥️', accent: '#60a5fa', desc: '集团私有业务开发 · 非千丁', children: [
-          { key: 'gp-mgr', label: '平台管理', icon: '🖥️', accent: '#60a5fa', persons: [{ name: '—', title: '总经理' }, { name: '—', title: 'AI团队' }, { name: '—', title: 'DT团队' }] },
+        // 集团十大平台（研发设计 / 数科 / …，集团下属横向平台）
+        { key: 'group-platforms', label: '集团十大平台', icon: '🧩', accent: '#7ae8c0', desc: '集团横向平台体系 · 非千丁 · 共 10 个', children: [
+          { key: 'gp-design', label: '研发设计平台', icon: '✏️', accent: '#7ae8c0', persons: [{ name: '—', title: '负责人' }], tag: '数据中心', matchKeys: ['集团研发设计', '数据中心', '研发设计平台'] },
+          { key: 'gp-dt', label: '数科平台', icon: '🖥️', accent: '#60a5fa', persons: [{ name: '—', title: '总经理' }], matchKeys: ['数科平台', '集团数科', 'AI团队', 'DT团队'] },
+          { key: 'gp-todo', label: '其他 8 个平台', icon: '📥', accent: '#94a3b8', tag: '待补充' },
         ]},
         // C1-C5 业务航道
         { key: 'c-channels', label: 'C1-C5 业务航道', icon: '🌊', accent: '#60a5fa', desc: '需求方 · 业务收入主体', children: [
-          { key: 'c1', label: 'C1 · 开发业务', icon: '🏗️', accent: '#94a3b8', persons: [{ name: '—', title: '航道总' }], tag: '收缩中' },
-          { key: 'c2', label: 'C2 · 商业/天街', icon: '🛍️', accent: '#f59e0b', persons: [{ name: '—', title: '航道总' }], tag: '' },
-          { key: 'c3', label: 'C3 · 资管/冠寓', icon: '🏠', accent: '#a78bfa', persons: [{ name: '—', title: '航道总' }], tag: '' },
-          { key: 'c4', label: 'C4 · 物业', icon: '🏘️', accent: '#34d399', persons: [{ name: '—', title: '航道总' }], tag: '' },
-          { key: 'c5', label: 'C5 · 运营', icon: '⚙️', accent: '#f472b6', persons: [{ name: '—', title: '航道总' }] },
+          { key: 'c1', label: 'C1 · 开发业务', icon: '🏗️', accent: '#94a3b8', persons: [{ name: '—', title: '航道总' }], tag: '收缩中', matchKeys: ['C1', '营销建造', '合约中心'] },
+          { key: 'c2', label: 'C2 · 商业/天街', icon: '🛍️', accent: '#f59e0b', persons: [{ name: '—', title: '航道总' }], tag: '', matchKeys: ['C2', '商业', '天街', '资管（停车'] },
+          { key: 'c3', label: 'C3 · 资管/冠寓', icon: '🏠', accent: '#a78bfa', persons: [{ name: '—', title: '航道总' }], tag: '', matchKeys: ['C3', '冠寓'] },
+          { key: 'c4', label: 'C4 · 物业', icon: '🏘️', accent: '#34d399', persons: [{ name: '—', title: '航道总' }], tag: '', matchKeys: ['C4'] },
+          { key: 'c5', label: 'C5 · 运营', icon: '⚙️', accent: '#f472b6', persons: [{ name: '—', title: '航道总' }], matchKeys: ['C5', '装修', 'DMS'] },
         ]},
         // N1-N3 创新航道
         { key: 'n-channels', label: 'N1-N3 创新航道', icon: '🚀', accent: '#c48eff', desc: '创新孵化 · 千丁为N1', children: [
           { key: 'n1', label: 'N1 · 千丁数科', icon: '🧭', accent: '#e7b85a', tag: '科技子公司', ref: 'qianding' },
-          { key: 'n2', label: 'N2', icon: '🔬', accent: '#94a3b8', persons: [{ name: '—', title: '负责人' }] },
-          { key: 'n3', label: 'N3', icon: '🔬', accent: '#94a3b8', persons: [{ name: '—', title: '负责人' }] },
+          { key: 'n2', label: 'N2 · 品牌优选', icon: '🔬', accent: '#94a3b8', persons: [{ name: '—', title: '负责人' }], matchKeys: ['N2', '品牌优选'] },
+          { key: 'n3', label: 'N3', icon: '🔬', accent: '#94a3b8', persons: [{ name: '—', title: '负责人' }], matchKeys: ['N3'] },
         ]},
         // 千丁数科（N1展开）
         { key: 'qianding', label: '千丁数科', icon: '🧭', accent: '#e7b85a', desc: 'CEO — · CTO — · N1创新航道实体 · 目标逐步对外', children: [
-          { key: 'qd-ceo', label: 'CEO办公室', icon: '🏛️', accent: '#c8a96e', persons: [{ name: '—', title: 'CEO' }], tag: '战略决策' },
-          { key: 'qd-cto', label: 'CTO办公室', icon: '🎯', accent: '#ff9e7a', persons: [{ name: '—', title: 'CTO' }], tag: '战略' },
-          { key: 'qd-hrd', label: 'HRD', icon: '👤', accent: '#94a3b8', persons: [{ name: '—', title: 'HRD' }] },
-          { key: 'qd-ops', label: '项目运营BU', icon: '📋', accent: '#94a3b8', persons: [{ name: '—', title: 'BU负责人' }] },
-          { key: 'qd-space', label: '智慧空间BU', icon: '🏢', accent: '#34d399', persons: [{ name: '—', title: 'BU负责人' }], tag: 'IoT/能源/AI慧眼' },
-          { key: 'qd-build', label: '智慧建造BU', icon: '🔨', accent: '#f59e0b', persons: [{ name: '—', title: 'BU负责人' }] },
-          { key: 'qd-asset', label: '智慧资管BU', icon: '📊', accent: '#a78bfa', persons: [{ name: '—', title: 'BU负责人' }] },
-          { key: 'qd-city', label: '智慧城服BU', icon: '🌆', accent: '#38bdf8', persons: [{ name: '—', title: 'BU负责人' }] },
-          { key: 'qd-idc', label: '智慧IDC BU', icon: '🖧', accent: '#f472b6', persons: [{ name: '—', title: 'BU负责人' }] },
-          { key: 'qd-ai', label: 'AI创新BU', icon: '🤖', accent: '#ff9e7a', persons: [{ name: '—', title: 'BU负责人' }] },
-          { key: 'qd-mkt', label: '营销拓展BU', icon: '📣', accent: '#fbbf24', persons: [{ name: '—', title: 'BU负责人' }] },
-          { key: 'qd-fin', label: '财务', icon: '💰', accent: '#94a3b8', persons: [{ name: '—', title: '负责人' }] },
+          { key: 'qd-ceo', label: 'CEO办公室', icon: '🏛️', accent: '#c8a96e', persons: [{ name: '—', title: 'CEO' }], tag: '战略决策', matchKeys: ['CEO'] },
+          { key: 'qd-cto', label: 'CTO办公室', icon: '🎯', accent: '#ff9e7a', persons: [{ name: '—', title: 'CTO' }], tag: '战略', matchKeys: ['CTO'] },
+          { key: 'qd-hrd', label: 'HRD', icon: '👤', accent: '#94a3b8', persons: [{ name: '—', title: 'HRD' }], matchKeys: ['HRD'] },
+          { key: 'qd-ops', label: '项目运营BU', icon: '📋', accent: '#94a3b8', persons: [{ name: '—', title: 'BU负责人' }], matchKeys: ['项目运营'] },
+          { key: 'qd-space', label: '智慧空间BU', icon: '🏢', accent: '#34d399', persons: [{ name: '—', title: 'BU负责人' }], tag: 'IoT/能源/AI慧眼', matchKeys: ['智慧空间', '智慧空间BU', '物联网'] },
+          { key: 'qd-build', label: '智慧建造BU', icon: '🔨', accent: '#f59e0b', persons: [{ name: '—', title: 'BU负责人' }], matchKeys: ['智慧建造'] },
+          { key: 'qd-asset', label: '智慧资管BU', icon: '📊', accent: '#a78bfa', persons: [{ name: '—', title: 'BU负责人' }], matchKeys: ['智慧资管'] },
+          { key: 'qd-city', label: '智慧城服BU', icon: '🌆', accent: '#38bdf8', persons: [{ name: '—', title: 'BU负责人' }], matchKeys: ['智慧城服'] },
+          { key: 'qd-idc', label: '智慧IDC BU', icon: '🖧', accent: '#f472b6', persons: [{ name: '—', title: 'BU负责人' }], matchKeys: ['智慧IDC', 'DTC'] },
+          { key: 'qd-ai', label: 'AI创新BU', icon: '🤖', accent: '#ff9e7a', persons: [{ name: '—', title: 'BU负责人' }], matchKeys: ['AI创新', 'AI平台'] },
+          { key: 'qd-mkt', label: '营销拓展BU', icon: '📣', accent: '#fbbf24', persons: [{ name: '—', title: 'BU负责人' }], matchKeys: ['营销拓展'] },
+          { key: 'qd-mgmt', label: '物管BU', icon: '🏘️', accent: '#34d399', persons: [{ name: '—', title: 'BU负责人' }], tag: 'CTO直管', matchKeys: ['物管BU', '物管', '签零'] },
+          { key: 'qd-cms', label: '建管BU', icon: '🏗️', accent: '#f59e0b', persons: [{ name: '—', title: 'BU负责人' }], matchKeys: ['建管BU', '建管'] },
+          { key: 'qd-fin', label: '财务', icon: '💰', accent: '#94a3b8', persons: [{ name: '—', title: '负责人' }], matchKeys: ['财务'] },
+          { key: 'qd-hire', label: '招聘候选', icon: '🧑‍💼', accent: '#94a3b8', matchKeys: ['候选', '面试', '终面'], tag: 'BU 候选人' },
         ]},
         // 外部关键方
         { key: 'external', label: '外部关键方', icon: '🌐', accent: '#7ae8c0', desc: '合作伙伴 · 投资方 · 行业', children: [
-          { key: 'ext-partner', label: '战略合作', icon: '🤝', accent: '#60a5fa', tag: '待补充' },
+          { key: 'ext-partner', label: '战略合作 · 创业伙伴', icon: '🤝', accent: '#60a5fa', matchKeys: ['外部', '创业伙伴', '合作伙伴'] },
         ]},
       ]},
     ];
+
+    // 动态从联系人按 matchKeys 挂载成员：返回 [...pinned(原 persons), ...matched(联系人 tags/title/company 命中)]
+    function orgPersonsFor(node) {
+      const pinned = (node.persons || []).filter(p => p && p.name && p.name !== '—').map(p => ({ ...p, pinned: true }));
+      const pinnedNames = new Set(pinned.map(p => p.name));
+      const keys = node.matchKeys || [];
+      if (!keys.length || !contacts.value || !contacts.value.length) return pinned.length ? pinned : (node.persons || []);
+      const matched = [];
+      for (const c of contacts.value) {
+        if (pinnedNames.has(c.name)) continue;
+        const tagStr = Array.isArray(c.tags) ? c.tags.join(' | ') : (c.tags || '');
+        const hay = [c.title||'', c.company||'', tagStr].join(' | ');
+        if (keys.some(k => hay.includes(k))) {
+          matched.push({ name: c.name, title: c.title || '', slug: c.slug, _contact: true });
+        }
+      }
+      matched.sort((a,b) => (a.name||'').localeCompare(b.name||'', 'zh'));
+      const result = [...pinned, ...matched];
+      // 节点没有 matchKeys 命中又没有真实负责人时，保留原 persons（含占位"—"）以便 UI 有提示
+      return result.length ? result : (node.persons || []);
+    }
     const showInteractionForm = ref(false);
     const newContact = ref({name:'',company:'',title:'',category:'industry',tier:'B',met_context:'',background:'',location:'',wechat:'',phone:'',email:''});
     const newInteraction = ref({method:'微信',summary:''});
@@ -5047,6 +5073,9 @@ const app = createApp({
         initGraph();
       } else if(v === 'cold'){
         await loadColdContacts();
+      } else if(v === 'org'){
+        // 确保 orgPersonsFor 能读到 contacts.value
+        if(!contacts.value || !contacts.value.length) await loadContacts();
       }
     });
 
@@ -5083,7 +5112,7 @@ const app = createApp({
       categories, noteCategory, noteCategoryFilter, showCategoryForm, newCategory,
       contacts, contactGraph, coldContacts, selectedContact, contactDetailHtml,
       showContactForm, contactFilter, contactView, showInteractionForm,
-      orgTree, orgExpandedNodes, toggleOrgNode, orgPersonExpanded, toggleOrgPersons,
+      orgTree, orgExpandedNodes, toggleOrgNode, orgPersonExpanded, toggleOrgPersons, orgPersonsFor,
       newContact, newInteraction, contactCatLabels, contactCatColors,
       editingContact, editContactData, showMergeSelect,
       contactCategories, showContactCatForm, newContactCat,
