@@ -20,8 +20,8 @@ BLOCKED_PATHS=(
 )
 for p in "${BLOCKED_PATHS[@]}"; do
   if echo "$staged" | grep -q "^$p"; then
-    echo "✗ pre-commit: 禁止提交 $p（含隐私或运行时数据）"
-    echo "  如确需修改，请更新 .gitignore 或 sample 文件"
+    printf '✗ pre-commit: 禁止提交 [%s] —— 含隐私或运行时数据\n' "$p"
+    echo '  如确需修改，请更新 .gitignore 或 sample 文件'
     exit 1
   fi
 done
