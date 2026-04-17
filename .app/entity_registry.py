@@ -436,5 +436,5 @@ if __name__ == "__main__":
     # 自测
     import json
     print(json.dumps(stats(), ensure_ascii=False, indent=2))
-    sample = "X总提了一下，让龙丽君和—去跟进下 C1 的事。考拉Code 已经用上了 Venus。"
+    sample = "示例A总提了一下，让示例B和示例C去跟进下 C1 的事。考拉Code 已经用上了 Venus。"
     print(json.dumps(resolve(sample, tenant="longfor"), ensure_ascii=False, indent=2))
