@@ -19,7 +19,7 @@ logging.getLogger("mindos").setLevel(logging.ERROR)
 
 VAULT = Path(os.environ.get("OME365_VAULT", Path(__file__).parent.parent)).resolve()
 MEDIA = Path(__file__).parent / "media"
-PORT = 3650
+PORT = int(os.environ.get("OME365_PORT", "3650"))
 WEEKDAYS = ["周一","周二","周三","周四","周五","周六","周日"]
 DIMS = ["职业产出","创作事业","能力提升","社会影响力","生活品质","AI集成"]
 DIM_ICONS = {"职业产出":"💼","创作事业":"✍️","能力提升":"📚","社会影响力":"📢","生活品质":"🥊","AI集成":"🤖"}

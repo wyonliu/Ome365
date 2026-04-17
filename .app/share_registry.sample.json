@@ -1,0 +1,13 @@
+{
+  "docs": [
+    {
+      "id": "example",
+      "title": "示例分享文档",
+      "path": "Projects/Example/docs/sample.md",
+      "created": "2026-01-01",
+      "expires": null,
+      "views": 0
+    }
+  ],
+  "_note": "首次使用：复制此文件为 share_registry.json 后编辑。share_registry.json 在 .gitignore 中，不会被提交。"
+}
