@@ -2242,7 +2242,7 @@
                   <div v-if="orgExpandedNodes.has(node.key) && node.children" class="org-branch-children">
                     <template v-for="child in node.children" :key="child.key">
                       <div class="org-node" :style="{'--node-accent': child.accent || node.accent}">
-                        <div class="org-node-head" @click="child.children ? toggleOrgNode(child.key) : toggleOrgPersons(child.key)" :class="{expandable: !!child.children || !!child.persons}">
+                        <div class="org-node-head" @click="child.children ? toggleOrgNode(child.key) : toggleOrgPersons(child.key)" :class="{expandable: !!child.children || orgPersonsFor(child).length}">
                           <span class="org-tree-line"></span>
                           <span class="org-node-icon">{{child.icon}}</span>
                           <div class="org-node-info">
@@ -2250,17 +2250,17 @@
                             <div v-if="child.tag" class="org-node-tag">{{child.tag}}</div>
                           </div>
                           <!-- Person count badge (clickable) -->
-                          <span v-if="child.persons && child.persons.length" class="org-person-badge" @click.stop="toggleOrgPersons(child.key)" :class="{open: orgPersonExpanded.has(child.key)}">
-                            {{child.persons.length}}人
+                          <span v-if="orgPersonsFor(child).length" class="org-person-badge" @click.stop="toggleOrgPersons(child.key)" :class="{open: orgPersonExpanded.has(child.key)}">
+                            {{orgPersonsFor(child).length}}人
                           </span>
                           <span v-if="child.children" class="org-node-expand" :class="{open: orgExpandedNodes.has(child.key)}">▸</span>
                           <span v-if="child.ref" class="org-node-ref" @click.stop="toggleOrgNode(child.ref)">→ 展开</span>
                         </div>
                         <!-- Person cards (expandable) -->
                         <transition name="org-slide">
-                          <div v-if="child.persons && orgPersonExpanded.has(child.key)" class="org-person-cards">
-                            <div v-for="(p, pi) in child.persons" :key="pi" class="org-person-card">
-                              <span class="org-person-card-name">{{p.name}}</span>
+                          <div v-if="orgPersonsFor(child).length && orgPersonExpanded.has(child.key)" class="org-person-cards">
+                            <div v-for="(p, pi) in orgPersonsFor(child)" :key="pi" class="org-person-card" :class="{'is-pinned':p.pinned,'is-linked':p._contact}" @click.stop="p._contact && selectContactDetail({slug:p.slug})">
+                              <span class="org-person-card-name">{{p.name}}<span v-if="p.pinned" class="org-pin-dot" title="负责人">●</span></span>
                               <span class="org-person-card-title">{{p.title}}</span>
                             </div>
                           </div>
@@ -2275,14 +2275,14 @@
                                 <div class="org-bu-label">{{bu.label}}</div>
                                 <div v-if="bu.tag" class="org-bu-tag">{{bu.tag}}</div>
                               </div>
-                              <span v-if="bu.persons && bu.persons.length" class="org-person-badge is-small" :class="{open: orgPersonExpanded.has(bu.key)}">
-                                {{bu.persons.length}}人
+                              <span v-if="orgPersonsFor(bu).length" class="org-person-badge is-small" :class="{open: orgPersonExpanded.has(bu.key)}">
+                                {{orgPersonsFor(bu).length}}人
                               </span>
                               <!-- BU person cards -->
                               <transition name="org-slide">
-                                <div v-if="bu.persons && orgPersonExpanded.has(bu.key)" class="org-person-cards is-inline" @click.stop>
-                                  <div v-for="(p, pi) in bu.persons" :key="pi" class="org-person-card is-small">
-                                    <span class="org-person-card-name">{{p.name}}</span>
+                                <div v-if="orgPersonsFor(bu).length && orgPersonExpanded.has(bu.key)" class="org-person-cards is-inline" @click.stop>
+                                  <div v-for="(p, pi) in orgPersonsFor(bu)" :key="pi" class="org-person-card is-small" :class="{'is-pinned':p.pinned,'is-linked':p._contact}" @click.stop="p._contact && selectContactDetail({slug:p.slug})">
+                                    <span class="org-person-card-name">{{p.name}}<span v-if="p.pinned" class="org-pin-dot" title="负责人">●</span></span>
                                     <span class="org-person-card-title">{{p.title}}</span>
                                   </div>
                                 </div>
