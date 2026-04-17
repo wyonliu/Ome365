@@ -41,282 +41,7 @@ const app = createApp({
     const reportDrillPerson = ref(null);
     // Section-based taxonomy: mirrors reports/ folder layout, each section has optional entity sub-groups
     // tier: 'primary' | 'secondary' | 'tertiary' | 'personal' | 'archive'
-    const SECTION_TAXONOMY = [
-      {
-        key: '01-diagnosis',
-        label: '内部诊断',
-        subtitle: '自下而上的千丁全景判断',
-        tagline: '31 份一线访谈 · 三层诊断 · 10 条横截面洞察',
-        icon: '🔬',
-        tier: 'primary',
-        narrative: [
-          { stage: '目标', label: '诊断目的', desc: '全面摸清千丁组织能力、业务水位与战略空白', color: 0 },
-          { stage: '动作', label: '执行方法', desc: '31 份一线访谈 · 管理层 5 + 航道 8 + BU 13 + 一线员工 2 + 财务 1 + 成都研发 1 + 独立推演 1（含 4/16 董事长汇报首次对齐）', color: 1 },
-          { stage: '诊断', label: '分层处方', desc: '管理层 / 航道 / BU 各自症结与处方——每层 1 个关键洞察 + 1 个动作', color: 2 },
-          { stage: '处方', label: '核心判断', desc: '人才结构 · 组织瓶颈 · 增长卡点 · 关键决策——汇聚为四大结论', color: 3 },
-          { stage: '收官', label: '战略衔接', desc: '组织瓶颈 → A4S 组织变革，增长卡点 → 千丁战略总图', color: 4 },
-        ],
-        entities: [
-          { key: '10-管理层', label: '集团管理层', desc: '集团CEO·CHO·一体三翼战略决策层', icon: '🏛️' },
-          { key: '20-航道', label: 'C1-C5航道 / N1-N3创新', desc: '开发·商业·冠寓·物业·运营 + 千丁·品牌优选', icon: '🌊' },
-          { key: '30-BU', label: '千丁八大BU', desc: '智慧空间·建造·资管·城服·IDC·AI创新·营销·运营', icon: '🎯' },
-          { key: '90-独立推演', label: '独立推演', desc: 'CTO办公室侧写与沙盘', icon: '🧩' },
-        ],
-        conclusions: {
-          title: '诊断 → 千丁战略总图',
-          subtitle: '31 份一线访谈 · 10 条横截面洞察 · 四大结论',
-          points: [
-            {
-              tag: '结论一',
-              label: '组织杀死执行力',
-              evidence: '18/30 份访谈独立指向同一判断——"AI 能力 ≤80 分可用、>80 分不行"；中台缺失导致航道各自建基建，Token 预算 40-60 万/年覆盖 150 人（≈ 4000 元/人/年）。一线证言：签零团队 AI 使用完全"个人自费探索"，组织层零供给———与家人共用 MiniMax 基础账号；战略 BP 直指千丁"半死不活"三叠加：硬编码 × 刻舟求剑 × 产品经理需求承接型。成都研发—印证：AI coding去年10月试点→今年4月才全面推开，一线渴望统一企业AI平台（"像飞书那样的平台"），但组织层无供给。供应链—印证：团队Co-pilot/Claude已"不离手"，但与AI团队协作"没头苍蝇"，遵循"能不用大模型就不用大模型"——一线已有正确直觉，缺平台承接。董事长汇报(4/16)新增证据：— AI 产研平台路径获认可·—提出「专家智能体必须达到 P7 高级专业工程师水平、少而精、规避大而全」——质量标准进一步拉高；合同审查 700+ 类型已成规模（南通客户评价"做得非常细"）',
-              source: '— · — · — · — · — · — · 李崧 · — · — · —(董事长) · — · —',
-              arrow: 'A4S · 让每个同事几分钟用上最好的AI + LongScale 统一底座',
-              accent: '#f59e0b'
-            },
-            {
-              tag: '结论二',
-              label: '增长曲线断裂',
-              evidence: '千丁外部收入占比 20-36%，目标 3-5 年跃至 50%，中间缺阶梯路径。签零团队实况：5000 万/年营收、10 个客户做 10 套产品、客单价 5000 元到 200 万元无定价规则——"为了平而平"。战略 BP 诊断：千丁"完全没有发现 Under-serve 需求的能力"，这才是未来 2-3 年成败关键。财务—确认：Q1整体亏损2700万/现金流-1900万，仅安心BU（硬件）盈利但规模从1亿萎缩至5-6千万，软件业务缺清晰产品线——"没有标准化的产品线体系，多数为衍生性需求"。董事长汇报(4/16)新增证据：AI慧眼三大市场方向获认可——老旧小区（物业费降至 ¥0.6-0.7/㎡，政策补贴窗口）+ 工业/行政消防 + 渠道合作（住建部/物业协会/电信二级）；Lilalo 十一首发长营天街+重庆时代天街(集团租金#1#2) 直接对赌增长。智慧空间BU交付负责人陈路广(4/17)正面印证：亲口承认"卖一单是一单模式未来不可持续、订阅化是必然方向"，并完整接受CTO提出的Spatial Agent OS/开源闭源结合/对标Cursor-Vercel/B2C线下VR门店/珑豆珑珠游戏化方案——CTO订阅化愿景在BU一号位层首次获得正面接收',
-              source: '— · — · — · — · — · 李崧 · — · —(董事长) · —(Lilalo) · 陈路广(空间BU交付)',
-              arrow: 'Track 2 · 龙湖千丁空间智能引擎',
-              accent: '#ef4444'
-            },
-            {
-              tag: '结论三',
-              label: '人才密度塌陷 × 一线火苗',
-              evidence: '—原话："产品人才已经被稀释了很多，跑了很多"+"几乎没什么 Passion 放在基础的产品建设层面"。但同一人也说："一个月前就知道 CTO 要来，这对我们是火苗式的希望"。战略 BP 同步印证：产研文化四大断层——无标品迭代、AI 常识缺失、研发被动思维、重复造轮子。成都—团队验证：有创新火苗——"同学自己总结了一堆AI编码规范"，但12个传统项目并行（36人）vs AI创新仅能抽1-2人，正编/外包AI接受度鸿沟。财务—侧证：团队士气低迷"不在于单多难打，而是看不到希望"，人工成本是黑匣子——Bu层面发薪明细不可追踪。智慧空间BU—最前线验证：原物联网CV算法团队10人已全部流失（原数据集采集/训练/测试/上线齐备），模型停留2022-2023水平，召回准确率已不达标、建发项目存交付风险——正在"逼着产品经理张帆训练小模型"补位；算法人才断层直接卡住了慧眼模型迭代与边缘端算力盒子(40-100T)的落地',
-              source: '— · 李崧 · — · — · — · — · — · —',
-              arrow: 'A4S 人才密度重建 + 千丁 AI 课分层 + Best Practice v0.1',
-              accent: '#8b5cf6'
-            },
-            {
-              tag: '结论四',
-              label: '两三年窗口期',
-              evidence: '序平总原话"龙湖只有两三年窗口期"+"算力窗口半年到一年"；—判断物理空间 AI 窗口 2026-2028；战略 BP 判断约 1 年——"当通用 AI 工具成熟后千丁先发优势消失"；CEO 公开授权"航道总 AI 素养不过关就换掉"；CHO"CTO+CHO 合力推否则必败"。—一线验证：AI coding半年才从试点走到全面推开，复杂业务场景仍在第三→第四阶段过渡——窗口期内组织提速刻不容缓。董事长汇报(4/16)⭐ 首次落地窗口：Lilalo 十一窗口死线(2026-10-01)——董事长已批"长营先跑通、重庆时代同步"、大会员开发资源并入、珑豆闭环禁外部兑换·A/B面整合超A；造价业务董事长点名"先先弄造价、成为行业第一个把工程造价全部智能体化"+"已跟裴总打招呼"——两大项目同步进入落地窗口',
-              source: '序平总(董事长) · — · — · 李崧 · — · —(Lilalo) · —(造价)',
-              arrow: '千丁战略总图 · 四股力量首次对齐 · 全速推进',
-              accent: '#06b6d4'
-            },
-          ]
-        }
-      },
-      {
-        key: '02-research',
-        label: '外部研究',
-        subtitle: '全球AI-Native战略情报',
-        tagline: '六大赛道 · Top5候选 · 一手行业深访',
-        icon: '🌐',
-        tier: 'primary',
-        narrative: [
-          { stage: '目标', label: '研究目的', desc: '判断 AI-Native 窗口期 · 识别护城河 · 找全球对标', color: 0 },
-          { stage: '动作', label: '执行方法', desc: '六大赛道扫描 · Top5 候选筛选 · 一手行业深访 · 全球对标梳理', color: 1 },
-          { stage: '结论', label: '外部判据', desc: '竞争饱和度 · 龙湖基因匹配度 · 窗口期 · TAM', color: 2 },
-          { stage: '处方', label: '战略建议', desc: '基于外部判据，千丁应选哪条路——能力要求 · 窗口期 · 关键决策点', color: 3 },
-          { stage: '收官', label: '交叉验证', desc: '外部结论 × 内部瓶颈 = 战略总图三条赛道的必然性', color: 4 },
-        ],
-        entities: [
-          { key: 'top5', label: 'Top5战略候选', desc: '外部研究筛出的五大战略方向', icon: '🏆' },
-          { key: '外部访谈', label: '外部访谈', desc: '一手行业深访', icon: '🎙️' },
-        ],
-        conclusions: {
-          title: '研究 → 千丁战略总图',
-          subtitle: '六大赛道 · 全球对标 · Top5 筛选 · 四大量化判据',
-          points: [
-            {
-              tag: '判据一',
-              label: '赛道确定性最高',
-              evidence: 'PropTech 全球 $35-47B → 2033 $115-209B（CAGR 13-16%）——AI-PropTech 子赛道 2024 风投 $3.2B，但"物业运营×AI"头部空窗；EliseAI 签约转化率 +125%、估值 $22 亿验证 Agent 路线',
-              source: 'IMARC · Precedence · Commercial Observer · EliseAI Series E',
-              arrow: 'Track 2 · 龙湖千丁空间智能引擎',
-              accent: '#f59e0b'
-            },
-            {
-              tag: '判据二',
-              label: '龙湖基因不可复制',
-              evidence: '千丁 IoT：1000 万+设备在线 / 99% 品牌覆盖 / 日吞吐 1 亿条 / 350+ 设备类型——2000+ 社区 + 100 座天街 + 16 万间冠寓 + 163 城 840 万家庭的室内 3D 数据，Google 也拿不到',
-              source: '千丁 IoT · 珑珠会员 9000 万 / 2000 万 MAU',
-              arrow: 'LongScale 五位一体开源基础设施',
-              accent: '#10b981'
-            },
-            {
-              tag: '判据三',
-              label: 'MR 娱乐蓝海确认',
-              evidence: 'Pokemon Go 累计 $8B 流水 / 30M MAU；Ray-Ban Meta 2025 销售 7M+ 副（+3x）；XREAL 消费级 AR 累计 50 万台——中国线下沉浸式娱乐空白，剧本杀已完成用户教育但运营成本高',
-              source: 'Niantic · Meta · Samsung Galaxy XR $1799',
-              arrow: 'Track 3A · 珑珠世界 · 物理 MR 乐园连锁',
-              accent: '#8b5cf6'
-            },
-            {
-              tag: '判据四',
-              label: 'C 端超级入口有验证',
-              evidence: 'Bilt 仅靠"租金支付变积分"一个点估值 $107.5 亿、年化处理 $1000 亿——千丁三航道闭环（冠寓+天街+物业）ID 打通后 TAM ≈ ¥6000 亿，全球 Space-Native Life OS 无对标',
-              source: 'Bilt Series E · 珑珠会员 · 三航道数据',
-              arrow: 'Track 3B · Lilalo · 手机原生超级入口',
-              accent: '#06b6d4'
-            },
-          ]
-        }
-      },
-      {
-        key: '04-trident',
-        label: '龙湖第二曲线 · 千丁战略总图',
-        subtitle: '一个引擎 · 三条赛道 · 六大底盘',
-        tagline: '龙湖千丁空间智能引擎 · 珑珠世界 LongWorld · 里乐珑 Lilalo',
-        icon: '⚜️',
-        tier: 'flagship',
-        finale: {
-          // Compact pillar bar — the hardest-core supporting points in one row
-          pillars: [],  // 已合并到 Curve 1-7 表格，不再单独显示
-          // 六大底盘资产（底盘 B1-B6） — 与"航道 C1-C5"、"财务曲线 Curve 1-7"三者命名刻意错开
-          // 五年收入预测 — 按 Track 分层
-          forecast: {
-            title: '千丁战略总图 · 五年收入预测',
-            subtitle: '七条增长曲线 × 四条赛道 · Y5 总收入 ¥72 亿 · 概率加权 EV ¥835 亿',
-            years: ['Y1', 'Y2', 'Y3', 'Y4', 'Y5'],
-            tracks: [
-              { key: 't1', label: 'Track 1 · 存量', color: '#9aa4b8', values: [0.8, 1.5, 2.5, 3, 3.5] },
-              { key: 't2', label: 'Track 2 · ToB', color: '#e7b85a', values: [0.3, 1.5, 4, 8, 15] },
-              { key: 't3a', label: 'Track 3A · LongWorld', color: '#ff9e7a', values: [0.2, 1.5, 5, 10, 18] },
-              { key: 't3b', label: 'Track 3B · Lilalo', color: '#c48eff', values: [0.3, 2, 5, 15, 35] },
-            ],
-            curves: [
-              { code: 'Curve 1', name: '门店体验', y5: 12, ps: '7×', ev: 84, asset: '100 天街物理空间' },
-              { code: 'Curve 2', name: 'IP生态', y5: 6, ps: '10×', ev: 60, asset: '28 年运营 Know-how' },
-              { code: 'Curve 3', name: '会员订阅', y5: 10, ps: '12×', ev: 120, asset: '珑珠 9000 万注册 · 2000 万月活' },
-              { code: 'Curve 4', name: 'A2A+本地生活', y5: 20, ps: '6×', ev: 120, asset: '163 城空间数据闭环' },
-              { code: 'Curve 5', name: 'SpatialAgentOS ToB', y5: 15, ps: '15×', ev: 225, asset: '2000 社区 · 16 万冠寓' },
-              { code: 'Curve 6', name: '硬件+IoT+LongScale', y5: 4, ps: '5×', ev: 20, asset: '1000 万+设备 · 五位一体开源底座' },
-              { code: 'Curve 7', name: '海外', y5: 5, ps: '10×', ev: 50, asset: 'Y3 ARR ¥16.5 亿' },
-            ],
-            ev: { conservative: 280, neutral: 780, optimistic: 1500, weighted: 835 },
-          },
-          // 六大底盘资产（底盘 B1-B6）
-          curves: [
-            { code: 'B1', name: 'LongScale 空间智能底座', desc: '五位一体：long-sida(3D) + long-cozy(家居) + long-navi(VPS) + long-mira(世界模型) + long-boot(具身)' },
-            { code: 'B2', name: '三航道物理空间产权', desc: '100 天街 + 2000+ 社区 + 16 万冠寓 · 全球无第二家同时拥有商业+住宅+租赁三类真实空间' },
-            { code: 'B3', name: '千丁 IoT 设备网络', desc: '1000 万+设备在线 / 99% 品牌覆盖 / 日吞吐 1 亿条 / 350+ 设备类型 · 十年百亿级投入' },
-            { code: 'B4', name: '珑珠跨业态身份体系', desc: '9000 万注册 / 2000 万月活 · 三航道 ID 打通后覆盖租住消费全生命周期' },
-            { code: 'B5', name: '28 年不动产运营 Know-how', desc: '五航道全链路 SOP × 工单 × 设备 × 人流 × 交易数据 · AI Agent 不可替代的训练语料' },
-            { code: 'B6', name: '163 城空间数据闭环', desc: '840 万家庭 × 室内 3D × IoT 遥测 × 行为轨迹 · Google/World Labs 拿不到的真实建筑级数据' },
-          ],
-        },
-        narrative: [
-          { stage: '筛选', label: '赛道筛选逻辑', desc: 'Top5 → 收敛至 Track 1 稳存量 + Track 2 龙湖千丁空间智能引擎 + Track 3 双引擎', color: 0,
-            stageMatcher: ['战略架构', '市场判断', '核心约束'] },
-          { stage: 'Track1', label: '稳存量守成', desc: '守住龙湖现金流基本盘 · AI 提效存量航道 C1-C5', color: 1,
-            stageMatcher: ['稳存量', 'Track 1', 'AI提效', '存量航道'] },
-          { stage: 'Track2', label: '龙湖千丁空间智能引擎 · ToB 旗舰', desc: '新商业引擎完整战略 + LongScale 开源框架（long-sida/cozy/navi/mira/boot）', color: 2,
-            stageMatcher: ['LongScale', 'long-sida', 'long-cozy', 'long-navi', 'long-mira', 'long-boot', '开源', '五位一体', '空间智能引擎'] },
-          { stage: 'Track3A', label: '珑珠世界 LongWorld · 线下网络', desc: '5 Zone MR+AR体验空间 · 软件定义场景 · 轻资产快部署 · 线下网络', color: 3,
-            stageMatcher: ['珑珠世界', 'LongWorld', '5 Zone', '美好之门', 'MR'] },
-          { stage: 'Track3B', label: '里乐珑 Lilalo ToC 旗舰 · 线上入口', desc: 'Space-Native Life OS 首超级入口 · Proactive Life Agent 主引擎 · 手机原生 · 线上入口 · 100万DAU目标', color: 4,
-            stageMatcher: ['里乐珑', 'Lilalo', 'Life OS', '超级入口', 'Proactive'] },
-          { stage: '底盘', label: '六大底盘 + LongScale 五位一体', desc: 'B1 LongScale 技术底座（long-sida/cozy/navi/mira/boot 开源）/ B2 三航道物理产权 / B3 千丁 IoT / B4 珑珠身份 / B5 28年 Know-how / B6 163城数据闭环', color: 5,
-            stageMatcher: ['护城河', '底盘', 'IoT', '产权', '珑珠身份', 'LongScale', 'long-sida', 'long-cozy', 'long-navi', 'long-mira', 'long-boot', '五位', '开源', '飞轮', 'IC复活', 'GPU'] },
-          { stage: '总纲', label: '战略总纲 · 全局蓝图', desc: '一页纸摘要 · 七条增长曲线 · 路线图 · Gate 机制 · 团队资源 · 风险对冲', color: 6,
-            stageMatcher: ['一页纸', '增长曲线', '路线图', 'Gate', '团队', '资源', '风险', '对冲', '旗舰项目索引'] },
-        ],
-        entities: [
-          { key: 'top5', label: 'Top5战略候选', desc: 'Top5战略候选产品', icon: '🏆' },
-          { key: 'projects', label: '旗舰项目战略提案', desc: '龙湖千丁空间智能引擎 · 珑珠世界 LongWorld · 里乐珑 Lilalo', icon: '🚀' },
-        ]
-      },
-      {
-        key: '03-a4s',
-        label: 'A4S',
-        subtitle: 'AI Availability As A Service',
-        tagline: '让每个同事几分钟用上最好的 AI 能力',
-        icon: '🧬',
-        tier: 'secondary',
-        bloom: true,
-        narrative: [
-          { stage: '为什么', label: '为什么需要 A4S', desc: '内部AI能力碎片化 → 每个BU各自建轮子 → 需要统一的AI可用性服务', color: 0,
-            stageMatcher: ['为什么', '此刻', '必须谈', '外部证据', '谁已经在做', '内部诊断', '症结', '导言', '前言', '引言'] },
-          { stage: '原则', label: '设计原则与全球最佳实践', desc: 'AI Availability 服务设计范式 · 虚拟委员会机制 · 横向穿透授权', color: 1,
-            stageMatcher: ['设计原则', '最佳实践', '原则'] },
-          { stage: '委员会', label: '六大虚拟委员会', desc: 'VC-1 ~ VC-6 · 每个委员会的使命、成员、决策权、交付物', color: 2,
-            stageMatcher: ['委员会', '虚拟', 'VC', '跨业务', '六大'] },
-          { stage: '咬合', label: '与四条赛道的矩阵', desc: 'VC × Track 矩阵图：每个委员会分别支撑哪条赛道', color: 3,
-            stageMatcher: ['咬合', '矩阵', 'Appendix', '附录', '与《', 'Track'] },
-          { stage: 'CTO挂帅', label: '推进路线 · 红线 · VC-3', desc: 'CTO作为一号位亲自挂帅 · 90 天推进路线 · 风险与红线 · 空间AI委员会', color: 4,
-            stageMatcher: ['90 天', '推进路线', '路线', '风险', '红线', '失败', 'CTO', '挂帅', 'VC-3', '空间AI'] },
-        ],
-        entities: []
-      },
-      {
-        key: '04-longscale',
-        label: 'LongScale',
-        subtitle: '五位一体空间智能开源基础设施',
-        tagline: 'long-sida · long-cozy · long-navi · long-mira · long-boot',
-        icon: '🧱',
-        tier: 'secondary',
-        bloom: true,
-        narrative: [
-          { stage: '愿景', label: '为什么要开源', desc: '开源 = 生态飞轮 · 降低空间智能门槛 · 倒逼内部工程质量', color: 0,
-            stageMatcher: ['愿景', '开源', '为什么', '生态'] },
-          { stage: '五位', label: '五位一体架构', desc: 'long-sida(3D感知) + long-cozy(全生命周期) + long-navi(VPS定位) + long-mira(世界模型) + long-boot(具身AI)', color: 1,
-            stageMatcher: ['五位一体', 'long-sida', 'long-cozy', 'long-navi', 'long-mira', 'long-boot', '架构'] },
-          { stage: '护城河', label: '技术护城河', desc: '1000 万+设备 · 163 城数据 · 840 万家庭室内 3D · Google/World Labs 拿不到', color: 2,
-            stageMatcher: ['护城河', '数据', '壁垒', '设备', 'IoT'] },
-          { stage: '路线图', label: '开源路线图', desc: 'Phase 1 内部验证 → Phase 2 核心模块开源 → Phase 3 社区生态 → Phase 4 商业化', color: 3,
-            stageMatcher: ['路线图', 'Phase', '里程碑', '时间表'] },
-          { stage: '商业化', label: '商业模式', desc: '开源免费 + 企业版订阅 + 认证培训 + 数据服务', color: 4,
-            stageMatcher: ['商业', '收入', '订阅', '变现'] },
-        ],
-        entities: []
-      },
-      {
-        key: '05-metrics',
-        label: '北极星指标',
-        subtitle: '3-5年量化里程碑',
-        tagline: '七条曲线度量体系 · ARR主线 · 反北极星',
-        icon: '⭐',
-        tier: 'secondary',
-        bloom: true,
-        narrative: [
-          { stage: '为什么', label: '量化框架', desc: '不可量化 = 不可证伪 = 不可执行', color: 0,
-            stageMatcher: ['为什么', 'v1 的五个问题', 'v2 的六层', '必要', '复盘', 'v2.0'] },
-          { stage: '主线', label: 'ARR 北极星主线', desc: '千丁3年/5年ARR目标曲线 · 每个Track贡献多少 · 关键里程碑月份', color: 1,
-            stageMatcher: ['北极星一句话', '一句话', '总表', 'ARR', '稳存量', 'PropertyMind', '珑珠世界', 'Track 1', 'Track 2', 'Track 3'] },
-          { stage: '支线', label: '六条曲线支线度量', desc: '产品DAU/NPS/留存 · 组织效能 · 技术资产 · 生态伙伴 · 品牌声量 · 资本估值', color: 2,
-            stageMatcher: ['咬合指标', '组织健康度', '度量体系', '六层度量', '曲线', '支线', '对比表'] },
-          { stage: '时间轴', label: '3年/5年关键里程碑', desc: '可视化时间轴：Gate1/Gate2/Gate3 硬节点 · 每个节点的量化Kill条件', color: 3,
-            stageMatcher: ['时间折扣', '监测机制', '月 / 季 / 年', '里程碑', '时间轴', 'Gate', '节奏'] },
-          { stage: '反北极星', label: '我们承诺不做的事', desc: '反北极星清单 · 红线 · 缺失数据清单', color: 4,
-            stageMatcher: ['反北极星', '反向', '红线', '承诺不做', 'Anti', '缺失数据'] },
-        ],
-        entities: []
-      },
-      {
-        key: '00-personal',
-        label: '私密·个人',
-        subtitle: '仅CTO本人视图',
-        tagline: '个人事务 · 入职文档 · 外部项目',
-        icon: '🔒',
-        tier: 'personal',
-        entities: [],
-        isPersonal: true
-      },
-      {
-        key: '99-roadmap',
-        label: 'Reports体系',
-        subtitle: '本reports目录的架构说明',
-        tagline: '文档体系结构 · 下一步路线图',
-        icon: '🗺️',
-        tier: 'tertiary',
-        entities: []
-      },
-      {
-        key: '99-archive',
-        label: '旧版归档',
-        subtitle: '已被替代的早期版本',
-        tagline: '可读不可引',
-        icon: '🗄️',
-        tier: 'archive',
-        entities: []
-      }
-    ];
+    const SECTION_TAXONOMY = reactive([]);  // loaded at init from /api/cockpit/config
     function getReportEntityKey(r) {
       // Prefer server-provided entity field (folder-derived); fallback to path parse
       if (r.entity) return r.entity;
@@ -328,87 +53,7 @@ const app = createApp({
     }
     // Map person keys → org-oriented display labels for cockpit cards
     // Keys come from filename prefix before first ·, e.g. "千丁BU-智慧建造-—"
-    const PERSON_DISPLAY_MAP = {
-      // Unified 层级/类别-人名 format (matches doc title convention)
-      '千丁BU-智慧空间-—':       '千丁/智慧空间BU-—',
-      '千丁BU-智慧建造-—':       '千丁/智慧建造BU-—',
-      '千丁BU-智慧建造-—团队':   '千丁/智慧建造BU-—团队',
-      '千丁BU-智慧资管-—':       '千丁/智慧资管BU-—',
-      '千丁BU-智慧IDC-—':      '千丁/智慧IDC BU-—',
-      '千丁BU-——':          '千丁/IDC+大会员-——',
-      '千丁BU-AI创新-—':       '千丁/AI创新BU-—',
-      '千丁HRD+运营-——':    '千丁/HRD+运营-——',
-      '李崧':                        '千丁/战略BP-李崧',
-      '—':                        '千丁/CEO-—总',
-      '—·—':                 '千丁/IDC+大会员-—·—',
-      'C1供应链':                    '航道/C1供应链-阶段诊断',
-      'C2商业-机器人':               '航道/C2商业-机器人×空间智能',
-      'C4空间服务':                  '航道/C4空间服务-处方',
-      '千丁财务-—':            '千丁/财务-—',
-      '千丁建管BU-—':            '千丁/建管BU供应链-—',
-      '千丁BU-物管BU成都研发-—': '千丁/物管BU成都-—',
-      '千丁BU-智慧物业-—':       '千丁/智慧物业BU-—',
-      '千丁BU-智慧DTC-——': '千丁/智慧DTC BU-—×—',
-      '千丁BU-智慧DTC-—':     '千丁/智慧DTC BU-—',
-      '千丁战略-——·千丁产研架构总图': '千丁/战略-千丁产研架构总图',
-      '千丁战略-———':            '千丁/战略-企业智能体平台',
-      '千丁BU-智慧空间-———':       '千丁/智慧空间BU-AI慧眼',
-      '千丁BU-智慧DTC-———':        '千丁/智慧DTC BU-Lilalo',
-      '千丁战略-———':            '千丁/战略-AInative企业能力',
-      '千丁战略-——':                  '千丁/战略-产研架构总图主档(—×—主持)',
-      // 旧拆分命名（向后兼容历史报告引用）
-      '千丁BU-智慧DTC-——': '千丁/智慧DTC BU-Lilalo',
-      '千丁BU-智慧空间-——': '千丁/智慧空间BU-AI慧眼(董事长评价)',
-      '千丁战略-——':       '千丁/战略-产研架构总图(董事长汇报)',
-      '千丁战略-——':     '千丁/战略-AI产研平台(董事长评价)',
-      '集团研发设计-—':         '集团/研发设计-—',
-      'C1供应链-——':       '航道/C1供应链-—×—(造价)',
-      'C1供应链-——':       '航道/C1供应链-造价AI(董事长评价)',
-      'C5装修DMS-—':            '航道/C5装修DMS-—',
-      // 20-航道
-      'C1供应链-—':              '航道/C1供应链-—',
-      'C1供应链-—':            '航道/C1供应链-—(计价)',
-      'C1营销建造-—':            '航道/C1营销建造-—',
-      'C2商业-—':                '航道/C2商业-—',
-      'C3资管冠寓':                 '航道/C3冠寓-—',
-      'C5运营-—':              '航道/C5智慧营造-—',
-      'N2品牌优选-—':          '航道/N2品牌优选-—',
-      // 10-管理层
-      '集团CHO-—':              '集团/CHO-—总',
-      // Legacy keys (backward compat for older reports without new filename prefix)
-      '—': '千丁/智慧空间BU-—',      '—': '千丁/智慧建造BU-—',
-      '—团队': '千丁/智慧建造BU-—团队',
-      '—': '千丁/智慧资管BU-—',      '—': '千丁/智慧IDC BU-—',
-      '—': '千丁/AI创新BU-—',    '——': '千丁/HRD+运营-——',
-      '—·—': '千丁/HRD+运营-——',
-      '—': '千丁/CEO-—总',          '—': '集团/CHO-—总',
-      '—': '航道/C1供应链-—',       '—': '航道/C2商业-—',
-      '—': '航道/C5智慧营造-—',  '—': '航道/N2品牌优选-—',
-      '—': '航道/C3冠寓-—',
-      '—': '航道/C1营销建造-—',
-      '—': '千丁/物管BU成都-—',
-      '—': '千丁/财务-—',
-      '—': '千丁/智慧物业BU-—',
-      '—': '千丁/建管BU供应链-—',
-      '—': '航道/C1供应链-—(计价)',
-      '——': '航道/C1供应链-—×—(造价)',
-      '—': '航道/C5装修DMS-—',
-      '—': '集团/研发设计-—',
-      '——': '千丁/智慧DTC BU-—×—',
-      '——': '千丁/战略-AI产研平台(董事长评价)',
-      '——': '千丁/智慧空间BU-AI慧眼(董事长评价)',
-      '——': '千丁/战略-董事长汇报',
-      '——': '千丁/战略-—×—',
-      '———': '千丁/智慧DTC BU-—×—×—(Lilalo)',
-      '———': '千丁/战略-—×—×—(企业智能体)',
-      '———': '千丁/智慧空间BU-—×—×—(AI慧眼)',
-      '———': '千丁/战略-—×—×—(AInative)',
-      '—': '集团/董事长-—',
-      '—': '千丁/AI创新BU-—',
-      '—': '千丁/智慧DTC BU-—',
-      '—': '千丁/智慧空间BU-—',
-      '—': '千丁/CEO-—总',
-    };
+    const PERSON_DISPLAY_MAP = reactive({});  // loaded at init from /api/cockpit/config
     function getReportPersonKey(r) {
       // Server now provides `person` field; fallback to eyebrow / name
       let raw = (r.person && r.person.trim()) || (r.eyebrow || '').split('·').pop().trim() || (r.name || '').split('·')[0] || '';
@@ -1663,59 +1308,7 @@ const app = createApp({
       if (s.has(key)) s.delete(key); else s.add(key);
       orgPersonExpanded.value = new Set(s);
     }
-    const orgTree = [
-      { key: 'root', label: '龙湖集团', icon: '🏛️', accent: '#c8a96e', children: [
-        // 集团管理战略（最上面）
-        { key: 'group-mgmt', label: '集团管理战略', icon: '👔', accent: '#c8a96e', desc: '集团高管 · 战略决策层', children: [
-          { key: 'gm-ceo', label: '集团CEO', icon: '🏛️', accent: '#c8a96e', persons: [{ name: '—', title: '集团CEO' }], matchKeys: ['董事长'] },
-          { key: 'gm-vp', label: '集团VP · CHO', icon: '🏛️', accent: '#c8a96e', persons: [{ name: '—', title: '集团VP' }], matchKeys: ['CHO'] },
-          { key: 'gm-member', label: '集团职能 · 大会员', icon: '🏛️', accent: '#c8a96e', persons: [{ name: '—', title: '大会员负责人 · 资深' }], matchKeys: ['大会员'] },
-          { key: 'gm-hr', label: '集团HR · 行政', icon: '🏛️', accent: '#c8a96e', persons: [{ name: '—', title: 'HR · 福利' }], matchKeys: ['集团HR', '集团行政', 'SSC', '高管福利', '行政文员', '前台'] },
-        ]},
-        // 集团十大平台（研发设计 / 数科 / …，集团下属横向平台）
-        { key: 'group-platforms', label: '集团十大平台', icon: '🧩', accent: '#7ae8c0', desc: '集团横向平台体系 · 非千丁 · 共 10 个', children: [
-          { key: 'gp-design', label: '研发设计平台', icon: '✏️', accent: '#7ae8c0', persons: [{ name: '—', title: '负责人' }], tag: '数据中心', matchKeys: ['集团研发设计', '数据中心', '研发设计平台'] },
-          { key: 'gp-dt', label: '数科平台', icon: '🖥️', accent: '#60a5fa', persons: [{ name: '—', title: '总经理' }], matchKeys: ['数科平台', '集团数科', 'AI团队', 'DT团队'] },
-          { key: 'gp-todo', label: '其他 8 个平台', icon: '📥', accent: '#94a3b8', tag: '待补充' },
-        ]},
-        // C1-C5 业务航道
-        { key: 'c-channels', label: 'C1-C5 业务航道', icon: '🌊', accent: '#60a5fa', desc: '需求方 · 业务收入主体', children: [
-          { key: 'c1', label: 'C1 · 开发业务', icon: '🏗️', accent: '#94a3b8', persons: [{ name: '—', title: '航道总' }], tag: '收缩中', matchKeys: ['C1', '营销建造', '合约中心'] },
-          { key: 'c2', label: 'C2 · 商业/天街', icon: '🛍️', accent: '#f59e0b', persons: [{ name: '—', title: '航道总' }], tag: '', matchKeys: ['C2', '商业', '天街', '资管（停车'] },
-          { key: 'c3', label: 'C3 · 资管/冠寓', icon: '🏠', accent: '#a78bfa', persons: [{ name: '—', title: '航道总' }], tag: '', matchKeys: ['C3', '冠寓'] },
-          { key: 'c4', label: 'C4 · 物业', icon: '🏘️', accent: '#34d399', persons: [{ name: '—', title: '航道总' }], tag: '', matchKeys: ['C4'] },
-          { key: 'c5', label: 'C5 · 运营', icon: '⚙️', accent: '#f472b6', persons: [{ name: '—', title: '航道总' }], matchKeys: ['C5', '装修', 'DMS'] },
-        ]},
-        // N1-N3 创新航道
-        { key: 'n-channels', label: 'N1-N3 创新航道', icon: '🚀', accent: '#c48eff', desc: '创新孵化 · 千丁为N1', children: [
-          { key: 'n1', label: 'N1 · 千丁数科', icon: '🧭', accent: '#e7b85a', tag: '科技子公司', ref: 'qianding' },
-          { key: 'n2', label: 'N2 · 品牌优选', icon: '🔬', accent: '#94a3b8', persons: [{ name: '—', title: '负责人' }], matchKeys: ['N2', '品牌优选'] },
-          { key: 'n3', label: 'N3', icon: '🔬', accent: '#94a3b8', persons: [{ name: '—', title: '负责人' }], matchKeys: ['N3'] },
-        ]},
-        // 千丁数科（N1展开）
-        { key: 'qianding', label: '千丁数科', icon: '🧭', accent: '#e7b85a', desc: 'CEO — · CTO — · N1创新航道实体 · 目标逐步对外', children: [
-          { key: 'qd-ceo', label: 'CEO办公室', icon: '🏛️', accent: '#c8a96e', persons: [{ name: '—', title: 'CEO' }], tag: '战略决策', matchKeys: ['CEO'] },
-          { key: 'qd-cto', label: 'CTO办公室', icon: '🎯', accent: '#ff9e7a', persons: [{ name: '—', title: 'CTO' }], tag: '战略', matchKeys: ['CTO'] },
-          { key: 'qd-hrd', label: 'HRD', icon: '👤', accent: '#94a3b8', persons: [{ name: '—', title: 'HRD' }], matchKeys: ['HRD'] },
-          { key: 'qd-ops', label: '项目运营BU', icon: '📋', accent: '#94a3b8', persons: [{ name: '—', title: 'BU负责人' }], matchKeys: ['项目运营'] },
-          { key: 'qd-space', label: '智慧空间BU', icon: '🏢', accent: '#34d399', persons: [{ name: '—', title: 'BU负责人' }], tag: 'IoT/能源/AI慧眼', matchKeys: ['智慧空间', '智慧空间BU', '物联网'] },
-          { key: 'qd-build', label: '智慧建造BU', icon: '🔨', accent: '#f59e0b', persons: [{ name: '—', title: 'BU负责人' }], matchKeys: ['智慧建造'] },
-          { key: 'qd-asset', label: '智慧资管BU', icon: '📊', accent: '#a78bfa', persons: [{ name: '—', title: 'BU负责人' }], matchKeys: ['智慧资管'] },
-          { key: 'qd-city', label: '智慧城服BU', icon: '🌆', accent: '#38bdf8', persons: [{ name: '—', title: 'BU负责人' }], matchKeys: ['智慧城服'] },
-          { key: 'qd-idc', label: '智慧IDC BU', icon: '🖧', accent: '#f472b6', persons: [{ name: '—', title: 'BU负责人' }], matchKeys: ['智慧IDC', 'DTC'] },
-          { key: 'qd-ai', label: 'AI创新BU', icon: '🤖', accent: '#ff9e7a', persons: [{ name: '—', title: 'BU负责人' }], matchKeys: ['AI创新', 'AI平台'] },
-          { key: 'qd-mkt', label: '营销拓展BU', icon: '📣', accent: '#fbbf24', persons: [{ name: '—', title: 'BU负责人' }], matchKeys: ['营销拓展'] },
-          { key: 'qd-mgmt', label: '物管BU', icon: '🏘️', accent: '#34d399', persons: [{ name: '—', title: 'BU负责人' }], tag: 'CTO直管', matchKeys: ['物管BU', '物管', '签零'] },
-          { key: 'qd-cms', label: '建管BU', icon: '🏗️', accent: '#f59e0b', persons: [{ name: '—', title: 'BU负责人' }], matchKeys: ['建管BU', '建管'] },
-          { key: 'qd-fin', label: '财务', icon: '💰', accent: '#94a3b8', persons: [{ name: '—', title: '负责人' }], matchKeys: ['财务'] },
-          { key: 'qd-hire', label: '招聘候选', icon: '🧑‍💼', accent: '#94a3b8', matchKeys: ['候选', '面试', '终面'], tag: 'BU 候选人' },
-        ]},
-        // 外部关键方
-        { key: 'external', label: '外部关键方', icon: '🌐', accent: '#7ae8c0', desc: '合作伙伴 · 投资方 · 行业', children: [
-          { key: 'ext-partner', label: '战略合作 · 创业伙伴', icon: '🤝', accent: '#60a5fa', matchKeys: ['外部', '创业伙伴', '合作伙伴'] },
-        ]},
-      ]},
-    ];
+    const orgTree = reactive([]);  // loaded at init from /api/cockpit/config
 
     // 动态从联系人按 matchKeys 挂载成员：返回 [...pinned(原 persons), ...matched(联系人 tags/title/company 命中)]
     function orgPersonsFor(node) {
@@ -2618,60 +2211,7 @@ const app = createApp({
     }
     // ── ASR 修正词典（硬编码兜底 + EEG 热加载） ──
     // EEG 见 docs/EEG.md。启动时从 /api/entities/asr 热加载，失败则回落到下方硬编码清单。
-    const ASR_FIXES = [
-      [/海滩大法/g, '海康大华'], [/海康大法/g, '海康大华'],
-      [/画术/g, '话术'], [/CD解析/g, 'CAD解析'],
-      [/华阳/g, '—'], [/船长/g, '—'],
-      [/淮阳/g, '—'], [/黄阳/g, '—'], [/怀润/g, '—'],
-      [/龙丽君/g, '—'],
-      [/景优/g, '竞优'], [/静优/g, '竞优'], [/金优/g, '竞优'],
-      [/千金智能/g, '千丁互联'], [/C22化/g, 'C2I化'],
-      [/Meta\s*C033/gi, 'Meta SAM3'], [/Meta\s*CCC\/3D/gi, 'Meta SAM3/SAM3D'], [/Meta\s*CC3D/gi, 'Meta SAM3/SAM3D'],
-      [/DepthS3/g, 'DA3(Depth Anything 3)'], [/De3/g, 'DA3(Depth Anything 3)'],
-      [/千问Omni/g, '千问3.5-Omni'], [/千问\s*Qwen-Omni/g, '千问3.5-Omni'],
-      [/H边6/g, 'Hebi6'], [/对演/g, '慧眼'],
-      [/Qq主要/g, 'BU主要'], [/李三月/g, '数月'],
-      [/龙虾/g, 'Claude/Cursor'],
-      [/田安/g, '铁安'],
-      [/龚利军/g, '—'], [/利军/g, '—'], [/丽军/g, '丽君'],
-      [/利服中心/g, '供应链合约中心'],
-      [/郝鹏/g, '—'],
-      [/套价/g, '套价（计价）'], [/港式清单/g, '港式清单'],
-      [/广连达|广练达/g, '广联达'],
-      [/定额站/g, '定额站'],
-      [/报价咨询A\s*agent/gi, '造价咨询Agent'],
-      [/算量/g, '算量'], [/翻量/g, '翻量'],
-      [/BT团队|Bt团队|dT团队|Dt团队|bT团队/g, 'BT团队'],
-      [/Lost\s*function/gi, 'Loss function'],
-      [/杨总/g, '—'],
-      [/迪赛平台/g, 'Dify平台'], [/迪赛/g, 'Dify'], [/比赛平台/g, 'Dify平台'],
-      [/code\s*body/gi, 'Codebuddy'],
-      [/cloud\s*code/gi, 'Claude Code'], [/club\s*code/gi, 'Claude Code'],
-      [/考拉\s*code/gi, 'Claude Code'],
-      [/KoalaCode/g, 'Claude Code'],
-      [/千金数科/g, '千丁数科'],
-      [/刘怀阳/g, '—'],
-      [/拉链/g, 'Claude'], [/精米三/g, 'Figma'], [/克巴里亚/g, 'Copilot'],
-      [/D2s/g, 'DMS'], [/Mr的头衔/g, 'MR的头显'], [/VR的头衔/g, 'VR的头显'],
-      [/C\s*twom/gi, 'C to M'], [/C\s*tom\b/gi, 'C to M'],
-      [/黑客网/g, '—总'], [/教学咨询/g, '造价咨询'],
-      [/哈里斯架构/g, 'Agentic架构'], [/哈里斯系统/g, 'Agentic系统'], [/哈里系统/g, 'Agents系统'],
-      [/装甲智能体/g, '专家智能体'],
-      [/溶豆/g, '珑豆'], [/龙豆/g, '珑豆'], [/龙珠/g, '珑珠'],
-      [/卡拉布/g, 'Claude'], [/库拉布/g, 'Claude'],
-      [/乒乓球(那个|的那个)?决赛/g, '乒乓球决赛'],
-      [/利拉漏|利拉落/g, '利拉洛（Lilalo）'],
-      [/长营/g, '长楹'],
-      [/Sars/g, 'SaaS'], [/SAA\b/g, 'SaaS'],
-      [/冷战节能/g, '冷站节能'],
-      [/护眼(?!模式)/g, '慧眼'], [/汇演/g, '慧眼'],
-      [/河道就是1T/g, '航道就是1T'],
-      [/C位的算法/g, 'CV的算法'],
-      [/Em\s*MS/g, 'EMS'], [/Ib\s*MS/g, 'IBMS'],
-      [/龙骨味/g, '龙湖味'], [/清量化/g, '轻量化'],
-      [/Venus(?![a-zA-Z])/g, 'Vercel'],
-      [/Special\s*agent\s*OS/gi, 'Spatial Agent OS'], [/Special\s*agent/gi, 'Spatial Agent'],
-    ];
+    const ASR_FIXES = reactive([]);  // loaded at init from /api/cockpit/config
     function fixASR(text) {
       for (const [pat, rep] of ASR_FIXES) text = text.replace(pat, rep);
       return text;
@@ -2902,225 +2442,43 @@ const app = createApp({
     }
 
     // ── Curated insights for key meetings ──
-    const KNOWN_INSIGHTS = {
-      'C端空间智能创新落地研讨': {
-        overview: 'CTO入职后第一次与业务负责人进行深度空间智能落地研讨（~1.5h）。不是汇报、不是评审，是两个人坐下来认真想"怎么做"。战略价值远超其表面。',
-        keySignals: [
-          { icon: '🎯', title: '天然盟友锁定', text: '—总管大会员+APP+珑珠积分+用户运营IP——正好是里乐珑(Track 3B)的四根柱子。资深，组织脉络/预算路径/跨航道协调极其熟悉。' },
-          { icon: '🗺️', title: '四大场景 = 珑珠世界5 Zone', text: '商场AR(Zone 1) / 家装可视化(Zone 2) / 社区智能体(Zone 3) / 跨场景生态(全域)——业务侧独立看到了同样的机会，且愿意投入。' },
-          { icon: '🎮', title: 'Pokemon Go式AR = 最轻切入点', text: '¥10-20万预算，无需MR头显，手机即可参与，1-2个天街试点——比Zone 4山海剧场轻一个数量级，但立刻证明"空间AI+线下"的价值。' },
-          { icon: '🏗️', title: '贝辰经验 = 工程可行性背书', text: '—亲手做过贝壳"贝辰"新房AR可视化，春交会排队体验客户远超其他展位。Zone 2方案不是理论，有实战验证。' },
-          { icon: '💰', title: '资源全复用，不另起炉灶', text: '大会员预算可承担试点 / APP(MAU 500万)是冷启动流量池 / 雨湖系列活动IP是现成场景 / 户型数据直接可用。' },
-        ],
-        consensus: [
-          { icon: '🤝', text: '龙湖线下空间 = 虚实结合差异化的唯一底牌' },
-          { icon: '🤝', text: '"宏大叙事"必须配"路径节奏"——小步快跑，不为技术而技术' },
-          { icon: '🤝', text: '一切对齐业务指标：客流量 / 转化率 / 用户粘性 / 收入增长' },
-          { icon: '🤝', text: '复用现有资源：大会员+APP+活动IP+线下空间' },
-          { icon: '🤝', text: '组织共识是创新落地的关键——快赢→跨部门协作→高层支持' },
-        ],
-        risks: [
-          { icon: '⚠️', text: '组织惯性——航道指标压力大，对创新认可度低；跨部门协作困难' },
-          { icon: '⚠️', text: '数据质量差——用户信息不完整、格式不统一，无法支撑AI应用' },
-          { icon: '⚠️', text: '预算审批复杂——资源争夺激烈，创新项目难获足够支持' },
-          { icon: '⚠️', text: '热门商家不配合——不愿对接数据，精准服务难落地' },
-          { icon: '⚠️', text: '用户信任低——行业下行后隐私顾虑大，需非敏感需求切入重建信任' },
-        ],
-        actionItems: [
-          '1-2个月内启动天街AR游戏化运营试点 + 住宅AR家装改造试点',
-          '本月成立数据治理专项小组，梳理核心数据质量',
-          '建立与商业/地产/物业航道的定期沟通机制',
-          '把本次对话作为珑珠世界+里乐珑联合立项的第一份业务需求文档',
-          '—总是后续推进的关键对接人，保持高频沟通',
-        ],
-      },
-    };
+    const KNOWN_INSIGHTS = reactive({});  // loaded at init from /api/cockpit/config
 
     // ── Speaker identification ──
     // Hard-coded mappings for known files (key = substring of filename)
-    const KNOWN_SPEAKER_MAPS = {
-      // ===== 2026-04-17 (must be defined BEFORE single-name keys below to avoid
-      // `filename.includes('—'|'—')` hijacking the wrong 04-16 mapping) =====
-      '—·数据中心项目研讨': {
-        // SPEAKER_00: "我们数据中心"、指挥—投PPT、对听者称"您"、"我估计下周跟徐总要汇报"
-        // SPEAKER_01: 接—之后继续汇报"那我接着往下说，我们本身这个空间数据工作..."（同中心同事）
-        // SPEAKER_02: 短插话"昨昨天跟那个王总简单聊了一下"（04-16见过—）+ "他那几个项目我都去过"（阿那亚）
-        'SPEAKER_00': '—（集团研发设计）',
-        'SPEAKER_01': '—（数据中心）',
-        'SPEAKER_02': '—（CTO）',
-      },
-      '——海洋李峰·AI造价场景研讨': {
-        // 9位SPEAKER，仅保留最有把握的，其余保持SPEAKER_XX不猜
-        // SPEAKER_00 汇报进展的"天津和Bt"团队对接人——可能是—/—/海洋/李峰中之一，
-        // 单凭第一段证据不足以区分，暂不映射
-        // SPEAKER_03 远程参加、提"群总这边要开启动会"——像是牵头人，但不确定具体是谁
-      },
-      '陈路广·产品标准化与AI空间智能底座': {
-        // SPEAKER_00 自述：Java后端入职龙湖→重福外拓→城投→运营→今年调空间做项目交付（陈路广履历）
-        // SPEAKER_01 提问方（—）
-        // SPEAKER_02 只是"嗯/好的"噪声片段，不映射
-        'SPEAKER_00': '陈路广',
-        'SPEAKER_01': '—',
-      },
-      'BU技术评审预演上半场': {
-        'SPEAKER_00': '（旁听）',
-        'SPEAKER_01': '—',
-        'SPEAKER_02': '催缴BU',
-        'SPEAKER_03': '—',
-        'SPEAKER_04': '—',
-      },
-      'BU技术评审预演下半场': {
-        'SPEAKER_00': '（旁听）',
-        'SPEAKER_01': '—',
-        'SPEAKER_02': '—',
-        'SPEAKER_03': '（旁听）',
-        'SPEAKER_04': '—',
-        'SPEAKER_05': '—',
-      },
-      'C端空间智能创新落地研讨': {
-        'SPEAKER_00': '—',
-        'SPEAKER_01': '—',
-        'SPEAKER_02': '—',
-      },
-      '供应链计价与分层架构': {
-        'SPEAKER_00': '—',
-        'SPEAKER_01': '—',
-      },
-      '—': {
-        'SPEAKER_00': '—（HR负责人）',
-        'SPEAKER_01': '—（候选人）',
-        'SPEAKER_02': '—（CTO）',
-        'SPEAKER_03': 'SPEAKER_03',
-      },
-      '—': {
-        'SPEAKER_00': '—',
-        'SPEAKER_01': '—（CTO）',
-      },
-      '—': {
-        'SPEAKER_00': '—（财务负责人）',
-        'SPEAKER_01': '—（CTO）',
-        'SPEAKER_02': 'SPEAKER_02',
-      },
-      '—': {
-        'SPEAKER_00': '—（成都研发负责人）',
-        'SPEAKER_01': '—（CTO）',
-        'SPEAKER_02': 'SPEAKER_02',
-      },
-      '—': {
-        'SPEAKER_00': '—（C1营销建造负责人）',
-        'SPEAKER_01': '—（CTO）',
-      },
-      '—': {
-        'SPEAKER_00': '—（CTO）',
-        'SPEAKER_01': '—（供应链研发）',
-        'SPEAKER_02': 'SPEAKER_02',
-      },
-      '——': {
-        'SPEAKER_00': '—（CTO）',
-        'SPEAKER_01': '—（C1供应链造价）',
-        'SPEAKER_02': '—（供应链研发）',
-      },
-      'AI造价场景研讨': {
-        // 9位SPEAKER：仅高置信度映射，其余保持匿名不猜
-        'SPEAKER_00': '—（供应链研发·汇报人）',
-        'SPEAKER_07': '—（CTO）',
-        // SPEAKER_01~06/08 含—、海洋、李峰、BT团队、天津团队、造价咨询方等，未定
-      },
-      '—': {
-        'SPEAKER_00': '—（CTO）',
-        'SPEAKER_01': '—（C5装修DMS）',
-      },
-      '—': {
-        'SPEAKER_00': '—（CTO）',
-        'SPEAKER_01': '—（集团研发设计）',
-      },
-      '——': {
-        'SPEAKER_00': '—（CTO）',
-        'SPEAKER_01': '—（千丁CEO）',
-        'SPEAKER_02': '—（DTC BU）',
-      },
-      'C端团队架构调整': {
-        'SPEAKER_00': '—（CTO）',
-        'SPEAKER_01': '—（DTC BU）',
-      },
-      '产研架构总图与四项目汇报': {
-        'SPEAKER_00': '—（千丁CEO·主持·千丁总图）',
-        'SPEAKER_01': '—（董事长·评价者）',
-        'SPEAKER_02': '—（AI创新BU·企业智能体）',
-        'SPEAKER_03': '—（智慧空间BU·AI慧眼）',
-        'SPEAKER_04': '—（CTO·Lilalo C端）',
-        'SPEAKER_05': '—（智慧DTC BU·AInative企业能力）',
-      },
-      '千丁产研架构总图': {
-        'SPEAKER_00': '—',
-        'SPEAKER_01': '—',
-        'SPEAKER_02': '—',
-        'SPEAKER_03': '—',
-        'SPEAKER_04': '—',
-        'SPEAKER_05': '—',
-      },
-      '企业智能体与产研平台架构': {
-        'SPEAKER_00': '—',
-        'SPEAKER_01': '—',
-        'SPEAKER_02': '—',
-        'SPEAKER_03': '—',
-        'SPEAKER_04': '—',
-        'SPEAKER_05': '—',
-      },
-      'AI慧眼边缘计算': {
-        'SPEAKER_00': '—',
-        'SPEAKER_01': '—',
-        'SPEAKER_02': '—',
-        'SPEAKER_03': '—',
-        'SPEAKER_04': '—',
-        'SPEAKER_05': '—',
-      },
-      'Lilalo C端智能体': {
-        'SPEAKER_00': '—',
-        'SPEAKER_01': '—',
-        'SPEAKER_02': '—',
-        'SPEAKER_03': '—',
-        'SPEAKER_04': '—',
-        'SPEAKER_05': '—',
-      },
-      'AInative企业能力建设': {
-        'SPEAKER_00': '—',
-        'SPEAKER_01': '—',
-        'SPEAKER_02': '—',
-        'SPEAKER_03': '—',
-        'SPEAKER_04': '—',
-        'SPEAKER_05': '—',
-      },
-      '—': {
-        'SPEAKER_00': '—（CTO）',
-        'SPEAKER_01': '—（智慧空间BU·物联网中心）',
-        'SPEAKER_02': 'SPEAKER_02',
-      },
-      '物业机器人VR驾舱': {
-        // 5位SPEAKER：
-        // SPEAKER_00 出差人员远程组织、受李总（—）托、称—"涛哥"——候选：—/—，未定
-        // SPEAKER_01 自称"熟人"+详述C2停车无人值守———（C2资管）
-        // SPEAKER_02 补"1920年就无人值守"、讲C4———（C2商业）
-        // SPEAKER_03 问智能化进度/AI眼镜30克/徐明总提岗亭无人化——候选：—/—，未定
-        //   ⚠️ 2026-04-17 全量审计确认：文中"黄阳总"是 ASR 对"—总"的误读
-        //      （"北大本硕 CS/CV/空间模型""1 天手搓"均为—独家履历）。已在 ASR_FIXES 统一替换。
-        //      frontmatter 明确—在场，不是"黄阳=另一位天津新任 CTO"。
-        'SPEAKER_01': '—（C2资管）',
-        'SPEAKER_02': '—（C2商业）',
-        // SPEAKER_00 / SPEAKER_03 / SPEAKER_04 证据不足，不映射
-      },
-    };
+    const KNOWN_SPEAKER_MAPS = reactive({});  // loaded at init from /api/cockpit/config
+
+    // ─────────────────────────────────────────────────────────────
+    // Cockpit config loader (data separation: code vs user-data)
+    // Real data in .app/cockpit_config.json (gitignored);
+    // fallback to .app/cockpit_config.sample.json in git repo.
+    // ─────────────────────────────────────────────────────────────
+    async function loadCockpitConfig() {
+      try {
+        const r = await fetch("/api/cockpit/config");
+        if (!r.ok) return;
+        const cfg = await r.json();
+        if (Array.isArray(cfg.SECTION_TAXONOMY))   SECTION_TAXONOMY.splice(0, SECTION_TAXONOMY.length, ...cfg.SECTION_TAXONOMY);
+        if (cfg.PERSON_DISPLAY_MAP && typeof cfg.PERSON_DISPLAY_MAP === "object") Object.assign(PERSON_DISPLAY_MAP, cfg.PERSON_DISPLAY_MAP);
+        if (Array.isArray(cfg.orgTree))            orgTree.splice(0, orgTree.length, ...cfg.orgTree);
+        if (Array.isArray(cfg.ASR_FIXES)) {
+          const fixes = cfg.ASR_FIXES.map(f => [new RegExp(f.pattern, f.flags || "g"), f.replacement]);
+          ASR_FIXES.splice(0, ASR_FIXES.length, ...fixes);
+        }
+        if (cfg.KNOWN_SPEAKER_MAPS && typeof cfg.KNOWN_SPEAKER_MAPS === "object") Object.assign(KNOWN_SPEAKER_MAPS, cfg.KNOWN_SPEAKER_MAPS);
+        if (cfg.KNOWN_INSIGHTS && typeof cfg.KNOWN_INSIGHTS === "object") Object.assign(KNOWN_INSIGHTS, cfg.KNOWN_INSIGHTS);
+        if (Array.isArray(cfg.SPEAKER_HINTS)) {
+          const hints = cfg.SPEAKER_HINTS.map(h => [new RegExp(h.pattern, h.flags || ""), h.replacement]);
+          SPEAKER_HINTS.splice(0, SPEAKER_HINTS.length, ...hints);
+        }
+        console.log("[cockpit-config] loaded from", cfg._source || "inline");
+      } catch (err) { console.warn("[cockpit-config] load failed:", err); }
+    }
+    // Kick off loader (fire-and-forget; reactive configs repopulate when ready)
+    loadCockpitConfig();
 
     // Fallback heuristic hints: [pattern, name]
-    const SPEAKER_HINTS = [
-      [/我们慧眼|慧眼(系统|平台|产品|这边)/, '—团队'],
-      [/我们(企业|平台)(AI|智能)|企业(AI|智能)平台/, '铁安团队'],
-      [/研发效能|Skill(平台|管理)|AI\s*PD/, '研发效能团队'],
-      [/催缴|智能催收|催收Agent/, '催缴团队'],
-      [/空间(智能|计算|自动化)|贝壳|AR|VR|MR|悉见|LBS/, '—'],
-      [/董事长|组织|航道总|窗口期|战略/, '—'],
-      [/大会员|珑豆|珑珠|APP.*MAU|用户运营|雨湖/, '—'],
-    ];
+    const SPEAKER_HINTS = reactive([]);  // loaded at init from /api/cockpit/config
 
     function inferSpeakers(blocks, filename) {
       const blockSpeakers = [...new Set(blocks.map(b => b.speaker))];
