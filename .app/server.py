@@ -560,7 +560,7 @@ def contact_cat_map() -> dict:
 # ── Plan Parsing (structured) ─────────────────────────
 def parse_plan():
     fp = VAULT / "000-365-PLAN.md"
-    if not fp.exists(): return {"quarters":[], "milestones":[], "overview":{}}
+    if not fp.exists(): return {"quarters":[], "milestones":[], "overview":{"total":0,"done":0,"pct":0}}
     text = fp.read_text("utf-8")
     m = re.match(r'^---.*?---\s*\n', text, re.DOTALL)
     if m: text = text[m.end():]
