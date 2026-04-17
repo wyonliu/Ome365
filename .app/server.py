@@ -1933,6 +1933,26 @@ async def eeg_get(type: str, id: str):
     return e
 
 
+@app.get("/api/cockpit/config")
+async def get_cockpit_config():
+    """驾舱可视化配置（SECTION_TAXONOMY / orgTree / PERSON_DISPLAY_MAP / ASR_FIXES / KNOWN_SPEAKER_MAPS）。
+    优先读 .app/cockpit_config.json（本地真实数据，gitignored）；不存在则读 .app/cockpit_config.sample.json（代码仓 sample）。
+    """
+    app_dir = Path(__file__).parent
+    live = app_dir / "cockpit_config.json"
+    sample = app_dir / "cockpit_config.sample.json"
+    target = live if live.exists() else sample
+    if not target.exists():
+        return {"_source": "empty", "SECTION_TAXONOMY": [], "PERSON_DISPLAY_MAP": {},
+                "orgTree": [], "ASR_FIXES": [], "KNOWN_SPEAKER_MAPS": {}}
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise HTTPException(500, f"failed to load {target.name}: {e}")
+    data["_source"] = target.name
+    return data
+
+
 @app.get("/api/contacts")
 async def list_contacts(category:str=None, tier:str=None):
     PEOPLE_DIR.mkdir(parents=True, exist_ok=True)
@@ -5169,7 +5189,7 @@ def _render_section_html(sid: str, data: dict) -> str:
 <div class="ch-head"><span class="ch-code">{esc(c.get('code',''))}</span><span class="ch-name">{esc(c.get('name',''))}</span><span class="ch-status">{esc(c.get('status',''))}</span></div>
 <div class="ch-row"><b>痛点</b>{esc(c.get('pain',''))}</div>
 <div class="ch-row"><b>AI 落点</b>{esc(c.get('ai_hook',''))}</div>
-<div class="ch-row"><b>千丁位</b>{esc(c.get('qianding_role',''))}</div>
+<div class="ch-row"><b>定位</b>{esc(c.get('qianding_role',''))}</div>
 </div>""")
             return f"""<div class="ch-group {cls}-group">
 <div class="ch-group-head"><span class="ch-group-label">{label_en}</span><span class="ch-group-title">{label_zh}</span></div>
@@ -5340,7 +5360,7 @@ static_dir = Path(__file__).parent / "static"
 # ── Share: read-only document sharing ──
 # URL: /<user>/<code>  (e.g. /wyon/43ce7eaa)
 # Config: SHARE_USERS lists allowed usernames
-# Deploy: set SHARE_BASE_URL=https://ome365.longfor.com
+# Deploy: set SHARE_BASE_URL to your public domain (e.g. https://ome365.example.com)
 import hashlib
 
 SHARE_USERS = os.environ.get("SHARE_USERS", "wyon").split(",")
@@ -5514,6 +5534,9 @@ async def share_get(code: str):
     raw = fp.read_text("utf-8")
     return {"raw": raw, "name": entry["name"], "title": entry["title"], "path": entry["path"]}
 
+# 空仓（sample-vault）场景：REPORTS_DIR 可能不存在，StaticFiles 会抛错 → 确保目录存在
+REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+MEDIA.mkdir(parents=True, exist_ok=True)
 app.mount("/reports-static", StaticFiles(directory=str(REPORTS_DIR)), name="reports-static")
 app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 

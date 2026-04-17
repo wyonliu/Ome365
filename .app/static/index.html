@@ -1675,7 +1675,7 @@
                   <div class="rv-flagship-header" v-if="cockpitActiveBlockData.tier === 'flagship' && sg.key === 'projects'">
                     <div class="rv-flagship-header-rule"></div>
                     <div class="rv-flagship-header-title">旗舰项目战略提案</div>
-                    <div class="rv-flagship-header-sub">龙湖千丁空间智能引擎 <span class="rv-flagship-tag">ToB</span> · 珑珠世界 LongWorld <span class="rv-flagship-tag">ToC 线下</span> · 里乐珑 Lilalo <span class="rv-flagship-tag">ToC 线上</span></div>
+                    <div class="rv-flagship-header-sub" v-if="cockpitActiveBlockData.flagshipSubtitle" v-html="cockpitActiveBlockData.flagshipSubtitle"></div>
                   </div>
                   <div class="rv-person-grid" v-if="sg.persons && sg.persons.length > 1 && cockpitActiveBlockData.tier !== 'flagship'">
                     <div v-for="p in sg.persons" :key="p.key"
