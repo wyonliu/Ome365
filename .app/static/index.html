@@ -719,7 +719,7 @@
               </div>
               <div class="ih-field ih-field-grow">
                 <label>特别关注（可选）</label>
-                <input v-model="insightsFocus" class="input" placeholder="例：龙湖千丁下半场 / 365 天 AI 规划 / 和团队的沟通">
+                <input v-model="insightsFocus" class="input" :placeholder="tenantConfig?.brand?.insight_placeholder || 'Focus area? e.g. team / product / finance'">
               </div>
               <button class="btn-insight-run" @click="runSynthesize" :disabled="insightsLoading">
                 <span v-if="!insightsLoading">✨ 生成综合洞察</span>
@@ -1179,7 +1179,7 @@
 
       </div>
 
-      <!-- ══ COCKPIT · 千丁战略驾舱 (data: Vault/Longfor/cockpit.md) ══ -->
+      <!-- ══ COCKPIT · strategy dashboard (data: <vault>/<tenant.cockpit.dir_name>/cockpit.md) ══ -->
       <div v-if="view==='cockpit'" class="view cockpit-view view-wide" key="cockpit">
 
         <div v-if="cockpitLoading && !cockpitData" class="cockpit-loading">加载战略驾舱中…</div>
@@ -1315,7 +1315,7 @@
               <div class="cc-body">
                 <div class="cc-eyebrow">
                   <span class="cce-dot"></span>
-                  {{cockpitData.meta?.eyebrow || 'LONGFOR·QIANDING STRATEGY COCKPIT'}}
+                  {{cockpitData.meta?.eyebrow || tenantConfig?.brand?.cockpit_eyebrow || 'STRATEGY · COCKPIT'}}
                   <span class="cce-version" v-if="cockpitData.meta?.version">{{cockpitData.meta.version}}</span>
                 </div>
                 <h1 class="cc-title">{{cockpitData.meta?.title}}</h1>
@@ -1889,7 +1889,7 @@
             <div class="ce-head">
               <div class="ce-head-left">
                 <div class="ce-title">✎ cockpit.md · 数据源编辑</div>
-                <div class="ce-path">{{cockpitData?.path || 'Vault/Longfor/cockpit.md'}}</div>
+                <div class="ce-path">{{cockpitData?.path || ((tenantConfig?.cockpit?.dir_name || 'Cockpit') + '/' + (tenantConfig?.cockpit?.file_name || 'cockpit.md'))}}</div>
               </div>
               <div class="ce-head-right">
                 <span v-if="mdEditorDirty" class="ce-dirty">● 未保存</span>
@@ -3534,7 +3534,7 @@
         <div class="card">
           <div class="card-top">
             <span class="card-label">外观主题</span>
-            <span class="theme-current-label">{{ theme==='longfor' ? '龙湖蓝白' : '船长暗金' }}</span>
+            <span class="theme-current-label">{{ theme==='light' ? (tenantConfig?.brand?.theme_variant_label || '浅色主题') : '船长暗金' }}</span>
           </div>
           <div class="theme-toggle" :data-active="theme">
             <div class="theme-toggle-indicator"></div>
@@ -3542,9 +3542,9 @@
               <svg class="theme-opt-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
               <span>船长暗金</span>
             </button>
-            <button class="theme-toggle-opt" :class="{active: theme==='longfor'}" @click="setTheme('longfor')">
+            <button class="theme-toggle-opt" :class="{active: theme==='light'}" @click="setTheme('light')">
               <svg class="theme-opt-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-              <span>龙湖蓝白</span>
+              <span>{{ tenantConfig?.brand?.theme_variant_label || '浅色主题' }}</span>
             </button>
           </div>
         </div>

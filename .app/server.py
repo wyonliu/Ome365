@@ -47,6 +47,41 @@ app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
+# ── Tenant config（品牌 / 驾舱路径 / 分类规则 / 提示词 bio）──────────
+# live (tenant_config.json, gitignored) 不存在则降级到 sample。
+# 前端通过 /api/tenant/config 取值；server 内部用 TENANT 字典。
+_TENANT_LIVE = Path(__file__).parent / "tenant_config.json"
+_TENANT_SAMPLE = Path(__file__).parent / "tenant_config.sample.json"
+
+def _load_tenant_config():
+    for fp in (_TENANT_LIVE, _TENANT_SAMPLE):
+        if fp.exists():
+            try:
+                data = json.loads(fp.read_text("utf-8"))
+                data.setdefault("_source", fp.name)
+                return data
+            except Exception as e:
+                return {"_source": "error", "_error": str(e)}
+    return {"_source": "empty", "brand": {}, "cockpit": {}, "prompts": {}, "categories": {}, "entities": {}}
+
+TENANT = _load_tenant_config()
+
+def _tb(path, default=""):
+    """TENANT 深取；path 用 '.' 分隔，如 'brand.cockpit_title'。"""
+    node = TENANT
+    for key in path.split("."):
+        if not isinstance(node, dict) or key not in node:
+            return default
+        node = node[key]
+    return node
+
+
+@app.get("/api/tenant/config")
+async def api_tenant_config():
+    """返回当前租户品牌 / 驾舱 / 分类配置。前端启动时拉一次，做品牌替换。"""
+    return TENANT
+
+
 # ── Settings ──────────────────────────────────────────
 SETTINGS_FILE = Path(__file__).parent / "settings.json"
 
@@ -1405,8 +1440,9 @@ async def ai_smart_input_apply(body: dict):
                 slug = re.sub(r'[^\w\u4e00-\u9fff]', '_', new).strip('_').lower() or new
                 fp = ed / f"{slug}.md"
                 if not fp.exists():
+                    _dt = _tb("entities.default_tenant", "default")
                     fp.write_text(
-                        f"---\nid: {slug}\ntype: person\nname: {new}\naliases:\n  - {old}\ntenant: longfor\nconfidence: medium\nevidence:\n  - 速记改名: {today_s()}\nupdated_at: {today_s()}\n---\n\n# {new}\n\n速记改名自动建档：{old} → {new}，{today_s()}。\n",
+                        f"---\nid: {slug}\ntype: person\nname: {new}\naliases:\n  - {old}\ntenant: {_dt}\nconfidence: medium\nevidence:\n  - 速记改名: {today_s()}\nupdated_at: {today_s()}\n---\n\n# {new}\n\n速记改名自动建档：{old} → {new}，{today_s()}。\n",
                         "utf-8"
                     )
                     results["entity_created"] = new
@@ -1858,11 +1894,14 @@ async def eeg_stats_api():
     return _eeg_stats()
 
 
+_DEFAULT_TENANT = _tb("entities.default_tenant", "default")
+
 @app.get("/api/entities/asr")
-async def eeg_asr(tenant: str = "longfor"):
+async def eeg_asr(tenant: str = None):
     """返回 ASR 规则字典（app.js 启动时热加载）。"""
     _require_eeg()
-    return {"rules": _eeg_asr_rules(tenant=tenant), "tenant": tenant}
+    t = tenant or _DEFAULT_TENANT
+    return {"rules": _eeg_asr_rules(tenant=t), "tenant": t}
 
 
 @app.post("/api/entities/resolve")
@@ -1870,7 +1909,7 @@ async def eeg_resolve_api(body: dict):
     """别名 → 规范名；所有送进 LLM / 检索前的文本都应该过一遍。"""
     _require_eeg()
     text = body.get("text", "") or ""
-    tenant = body.get("tenant") or "longfor"
+    tenant = body.get("tenant") or _DEFAULT_TENANT
     return _eeg_resolve(text, tenant=tenant)
 
 
@@ -2381,10 +2420,10 @@ async def get_interviews():
                         break
             stem = fp.stem
             # Parse org/person from filename
-            # New format: "千丁BU-智慧建造-—·主题·2026-04-08"
-            # Legacy:     "千丁数科-—-主题-04月08日"
+            # New format: "<org>-<team>-<person>·<topic>·YYYY-MM-DD"
+            # Legacy:     "<org>-<person>-<topic>-MM月DD日"
             # Split on · first to get prefix, then split prefix on -
-            seg0 = stem.split("·")[0]  # "千丁BU-智慧建造-—" or "C1供应链-—"
+            seg0 = stem.split("·")[0]  # prefix (e.g. "C1-Supply-Alice" or "BU-Smart-Bob")
             dash_parts = seg0.split("-")
             org = dash_parts[0] if len(dash_parts) >= 2 else ""
             person = dash_parts[-1] if len(dash_parts) >= 2 else ""
@@ -2426,20 +2465,28 @@ async def get_interviews():
             # Transcript character count (CJK + non-space chars, skip frontmatter)
             body = raw[(len("\n".join(_lines[:_start]))):] if _start else raw
             chars = len(_re.sub(r'\s+', '', body))
-            # Auto-classify by filename prefix
+            # Auto-classify by filename prefix (rules driven by tenant_config)
             cat = "未分类"
             low = seg0.lower()
-            if low.startswith("集团") or low.startswith("千丁ceo") or low.startswith("千丁hrd"):
+            _cat_cfg = TENANT.get("categories") or {}
+            _mgmt = _cat_cfg.get("management_prefixes") or []
+            _chan = _cat_cfg.get("channel_prefix_patterns") or []
+            _bu_root = _cat_cfg.get("bu_prefix_root") or ""
+            _bu_suf = _cat_cfg.get("bu_suffix_keywords") or []
+            _iv = _cat_cfg.get("interview_keywords") or ["面试", "终面"]
+            _ext = _cat_cfg.get("external_prefix") or "外部"
+            _int = _cat_cfg.get("internal_keywords") or []
+            if any(low.startswith(p.lower()) for p in _mgmt):
                 cat = "管理层"
-            elif _re.match(r'^C\d', seg0) or _re.match(r'^N\d', seg0) or _re.match(r'^龙湖C\d', seg0) or _re.match(r'^龙湖N\d', seg0):
+            elif any(_re.match(p, seg0) for p in _chan):
                 cat = "航道"
-            elif "终面" in seg0 or "面试" in seg0:
+            elif any(k in seg0 for k in _iv):
                 cat = "面试"
-            elif "千丁BU" in seg0 or "千丁战略" in seg0 or (seg0.startswith("千丁") and any(k in seg0 for k in ["物管", "财务", "签零", "员工", "数科", "建造", "建管", "空间", "资管", "城服", "IDC", "营销", "运营", "AI创新"])):
+            elif _bu_root and (_bu_root in seg0 or (_bu_suf and any(k in seg0 for k in _bu_suf))):
                 cat = "BU"
-            elif seg0.startswith("外部"):
+            elif _ext and seg0.startswith(_ext):
                 cat = "外部"
-            elif "AI赋能" in stem or "ASR" in stem:
+            elif _int and any(k in stem for k in _int):
                 cat = "内部"
             files.append({
                 "name": stem,
@@ -4363,7 +4410,7 @@ async def insights_synthesize(body: dict):
     system = "你是船长的高级战略顾问。输入是船长最近的工作语料（访谈、反思、速记、汇报、长期记忆、联系人）。输出必须是合法 JSON，不要任何说明文字。"
     user = f"""{context}
 {focus_hint}
-请基于以上语料，为船长（北大计算机硕士、AI 产品与技术领导者、龙湖千丁 CTO）输出以下 JSON：
+请基于以上语料，为船长（{_tb("prompts.user_bio", "a senior AI product & tech leader")}）输出以下 JSON：
 
 {{
   "headline": "一句话点明本轮洞察的核心发现（25 字内，直接、有穿透力）",
@@ -4794,14 +4841,14 @@ async def life_moment_delete(mid: str):
     return {"ok": True}
 
 
-# ── LONGFOR COCKPIT · 千丁战略驾舱 ───────────────────
-# Data source: a single markdown file (Vault/Longfor/cockpit.md).
+# ── COCKPIT · 战略驾舱 ──────────────────────────────
+# Data source: a single markdown file at <vault>/<TENANT.cockpit.dir_name>/<TENANT.cockpit.file_name>.
 # Structure: YAML frontmatter (meta) + H2 sections (`## id · title`),
 # each section may contain prose and ONE optional fenced yaml block (structured data).
 # Parsed into {meta, sections:[{id, title, prose_md, data}]} — frontend picks renderer by id.
 
-LONGFOR_DIR = VAULT / "Longfor"
-COCKPIT_FILE = LONGFOR_DIR / "cockpit.md"
+COCKPIT_DIR = VAULT / _tb("cockpit.dir_name", "Cockpit")
+COCKPIT_FILE = COCKPIT_DIR / _tb("cockpit.file_name", "cockpit.md")
 
 def _parse_frontmatter(text: str):
     import yaml as _yaml
@@ -4900,8 +4947,8 @@ def _format_inline(s: str) -> str:
     s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
     return s
 
-@app.get("/api/longfor/cockpit")
-async def longfor_cockpit():
+@app.get("/api/cockpit")
+async def cockpit_get():
     if not COCKPIT_FILE.exists():
         return {"ok": False, "error": "cockpit.md not found", "path": str(COCKPIT_FILE)}
     try:
@@ -4920,8 +4967,8 @@ async def longfor_cockpit():
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
-@app.get("/api/longfor/cockpit/raw")
-async def longfor_cockpit_raw():
+@app.get("/api/cockpit/raw")
+async def cockpit_raw():
     if not COCKPIT_FILE.exists():
         raise HTTPException(404, "cockpit.md not found")
     return {"ok": True, "content": COCKPIT_FILE.read_text(encoding="utf-8"), "mtime": COCKPIT_FILE.stat().st_mtime}
@@ -4929,18 +4976,18 @@ async def longfor_cockpit_raw():
 class CockpitSaveBody(BaseModel):
     content: str
 
-@app.post("/api/longfor/cockpit/save")
-async def longfor_cockpit_save(body: CockpitSaveBody):
+@app.post("/api/cockpit/save")
+async def cockpit_save(body: CockpitSaveBody):
     # Keep a lightweight backup (previous version) before writing
     if COCKPIT_FILE.exists():
-        backup = LONGFOR_DIR / ".cockpit.backup.md"
+        backup = COCKPIT_DIR / ".cockpit.backup.md"
         backup.write_text(COCKPIT_FILE.read_text(encoding="utf-8"), encoding="utf-8")
     COCKPIT_FILE.parent.mkdir(parents=True, exist_ok=True)
     COCKPIT_FILE.write_text(body.content, encoding="utf-8")
     return {"ok": True, "mtime": COCKPIT_FILE.stat().st_mtime, "bytes": len(body.content)}
 
-@app.get("/api/longfor/cockpit/export")
-async def longfor_cockpit_export():
+@app.get("/api/cockpit/export")
+async def cockpit_export():
     """Return a standalone, print-ready HTML with inline CSS for sharing."""
     if not COCKPIT_FILE.exists():
         raise HTTPException(404, "cockpit.md not found")
@@ -4958,11 +5005,11 @@ def _render_cockpit_standalone(parsed: dict) -> str:
     """Render parsed cockpit into a self-contained shareable HTML page."""
     import html as _html
     meta = parsed.get("meta", {}) or {}
-    title = _html.escape(meta.get("title", "千丁 · 战略驾舱"))
+    title = _html.escape(meta.get("title", _tb("brand.cockpit_title", "Strategy Cockpit")))
     subtitle = _html.escape(meta.get("subtitle", ""))
     author = _html.escape(meta.get("author", ""))
     updated = _html.escape(str(meta.get("updated", "")))
-    eyebrow = _html.escape(meta.get("eyebrow", "LONGFOR · QIANDING"))
+    eyebrow = _html.escape(meta.get("eyebrow", _tb("brand.cockpit_eyebrow", "STRATEGY · COCKPIT")))
     north_star = _html.escape(meta.get("north_star", ""))
     one_liner = _html.escape(meta.get("one_liner", ""))
     blocks = []
@@ -5148,7 +5195,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Helvetica Neue'
   </header>
   {''.join(blocks)}
   <footer class="footer">
-    Longfor Qianding Strategy Cockpit &nbsp;·&nbsp; {updated}<br>
+    {_html.escape(_tb("brand.share_footer_text", "Strategy Cockpit"))} &nbsp;·&nbsp; {updated}<br>
     <div class="sign">{author}</div>
   </footer>
 </div>
@@ -5551,7 +5598,12 @@ if __name__ == "__main__":
     # Validate vault
     if not VAULT.exists():
         VAULT.mkdir(parents=True, exist_ok=True)
-    for d in ["Journal/Daily","Journal/Weekly","Journal/Monthly","Journal/Quarterly","Notes","Decisions","Contacts/people","Projects","AI-Logs","Templates","Memory","Memory/insights","Insights","Life","Longfor"]:
+    _boot_dirs = ["Journal/Daily","Journal/Weekly","Journal/Monthly","Journal/Quarterly","Notes","Decisions","Contacts/people","Projects","AI-Logs","Templates","Memory","Memory/insights","Insights","Life"]
+    # Add tenant cockpit dir so cockpit saves never 500 on fresh vault
+    _cd = _tb("cockpit.dir_name", "Cockpit")
+    if _cd and _cd not in _boot_dirs:
+        _boot_dirs.append(_cd)
+    for d in _boot_dirs:
         (VAULT / d).mkdir(parents=True, exist_ok=True)
     MEDIA.mkdir(exist_ok=True)
 

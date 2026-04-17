@@ -13,14 +13,14 @@
 │  ├─ 12 Views: dashboard/tasks/plan/insights/life/cockpit/    │
 │  │            notes/reflections/contacts/memory/growth/      │
 │  │            interviews/reports/files/settings              │
-│  └─ Theme: dark (default) + longfor (蓝白)                   │
+│  └─ Theme: dark (default) + light (可按租户换色)             │
 ├──────────────────────────────────────────────────────────────┤
 │  FastAPI :3650  ◀──  server.py（5095 行，121 个 endpoints）  │
 │  ├─ Task/Day/Week/Quarter 管理                               │
 │  ├─ Contacts + 关系图 + 冷启动提醒                           │
 │  ├─ Memory/反思/Growth (Ome 养成)                            │
 │  ├─ Insights 综合分析                                         │
-│  ├─ Interviews + Reports（千丁驾舱特化）                     │
+│  ├─ Interviews + Reports（驾舱：租户可配置分类/品牌）        │
 │  ├─ Life（家庭/仪式/健康）                                   │
 │  ├─ AI Proxy (OpenRouter / Ollama)                           │
 │  └─ Whisper / OCR / Media upload                             │
@@ -29,7 +29,7 @@
 │  ├─ $VAULT/Journal, Notes, Decisions, Contacts...            │
 │  ├─ $VAULT/Memory/*.md（Ome 记忆）                           │
 │  ├─ $VAULT/TicNote/{date}/*.md（访谈转录）                   │
-│  ├─ $VAULT/Projects/LongFor/reports/**（千丁诊断报告）       │
+│  ├─ $VAULT/reports/**（按租户可配置的报告/诊断目录）         │
 │  └─ .app/*.json（运行时状态：growth/settings/reminders...）  │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -59,11 +59,11 @@
 - Ome 养成（4 阶段 × 7 级羁绊）
 - **Enterprise Entity Graph (EEG)** — 企业术语/人名/组织/产品常识层，见 `docs/EEG.md` · `Knowledge/entities/`
 
-**Tier 1 · 工作上下文特化**（龙湖千丁驾舱）
-- Interviews 抽屉（TicNote pipeline，36 份访谈，87.4 万字）
-- Reports 驾舱（6 大板块，内部诊断 41 份，处方卡/A4S/三叉戟/metrics）
+**Tier 1 · 工作上下文特化**（租户驾舱，由 `.app/tenant_config.json` 驱动）
+- Interviews 抽屉（TicNote pipeline）
+- Reports 驾舱（6 大板块，可按租户裁剪）
 - SECTION_TAXONOMY + PERSON_DISPLAY_MAP + 叙事弧
-- 蓝白版 Longfor 主题
+- 可配置浅色主题（`tenant_config.brand.theme_variant_label`）
 
 **Tier 2 · 个人生活特化**
 - Life：女儿/周末/仪式/健康记录
@@ -136,7 +136,7 @@
 ### Phase 4 · 开源化（可选）
 > **目标**：Tier 0 核心开源，Tier 1/2 做成 plugin
 - [ ] 抽出 `ome365-core`：Tier 0 + 插件系统
-- [ ] `ome365-longfor-plugin`：驾舱、TicNote、Reports
+- [ ] `ome365-tenant-pack`：驾舱、TicNote、Reports（由 `tenant_config.json` 驱动）
 - [ ] `ome365-life-plugin`：Life、Growth 深度特性
 - [ ] MIT license + 文档网站
 
@@ -167,7 +167,7 @@ cd .app && python3 server.py
 ```
 
 **局限**：
-- 驾舱/Interviews/Reports 是千丁特化，同事看到可能空
+- 驾舱/Interviews/Reports 依赖 `tenant_config.json` + 租户数据，新装时为空
 - Life/Growth 要从 0 养
 - 所有数据在本地，不要写公司机密
 
@@ -184,7 +184,7 @@ cd .app && python3 server.py
 - `sample-vault/`（示例数据）
 
 **绝不推送**（已 .gitignore）：
-- `Longfor/`, `TicNote/`, `Hiring/`, `Life/`, `Insights/`, `Projects/`（公司 + 私人数据）
+- 租户 vault 数据目录（驾舱目录、`TicNote/`, `Hiring/`, `Life/`, `Insights/`, `Projects/`）
 - `Memory/`, `Journal/`, `Notes/`, `Decisions/`, `Contacts/`（个人 vault）
 - `.app/settings.json`（含 API key）
 - `.app/growth.json`, `.app/reminders.json`, `.app/media/`（个人状态）

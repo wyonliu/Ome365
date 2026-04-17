@@ -65,7 +65,7 @@ def extract_recording_title(raw):
     m = re.search(r'([^\n/]+)\.record', raw)
     if m:
         return m.group(1).strip()
-    # 也从时间戳行前一行提取: "千丁财务-—-经营业务盘点\n2026-04-15 13:27:39|..."
+    # 也从时间戳行前一行提取: "<录音标题>\n2026-04-15 13:27:39|..."
     m2 = re.search(r'\n([^\n]{4,80})\n\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\|', raw)
     if m2:
         return m2.group(1).strip()

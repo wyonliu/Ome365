@@ -1,0 +1,34 @@
+{
+  "_doc": "租户品牌与分类配置 · sample 版本。复制为 tenant_config.json 后按需改。tenant_config.json 已 gitignore。",
+  "brand": {
+    "name": "Example Workspace",
+    "short_name": "Workspace",
+    "cockpit_title": "Strategy Cockpit",
+    "cockpit_eyebrow": "STRATEGY · COCKPIT",
+    "cockpit_page_title": "Strategy Cockpit",
+    "insight_placeholder": "Focus area? e.g. team / product / finance / risk",
+    "share_footer_text": "Strategy Cockpit",
+    "theme_variant_id": "light",
+    "theme_variant_label": "Light theme"
+  },
+  "cockpit": {
+    "dir_name": "Cockpit",
+    "file_name": "cockpit.md"
+  },
+  "prompts": {
+    "user_bio": "a senior AI product & tech leader"
+  },
+  "categories": {
+    "_doc": "访谈文件名前缀 → 分类。空数组=禁用该分类。seg0 = stem.split('·')[0]",
+    "management_prefixes": ["Management", "Exec"],
+    "channel_prefix_patterns": ["^C\\d", "^N\\d"],
+    "bu_prefix_root": "BU",
+    "bu_suffix_keywords": [],
+    "interview_keywords": ["interview", "面试", "终面"],
+    "external_prefix": "External",
+    "internal_keywords": ["AI", "ASR"]
+  },
+  "entities": {
+    "default_tenant": "default"
+  }
+}
