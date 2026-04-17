@@ -1223,6 +1223,33 @@ async def ai_session_info():
     settings = load_settings()
     return {"session_id": "sdk", "name": "Ome365", "provider": settings.get("ai_mode","none")}
 
+# ── 速记中的"改名意图"识别：跳过 LLM，直连 EEG rename pipeline ──
+# 支持格式：
+#   — → —       / — -> —        / —=>—
+#   — 是 —      / — 就是 —      / — = —
+#   — 改成 —    / — 改叫 —      / 把—改成—
+_RENAME_RE = re.compile(
+    r'^\s*(?:把\s*)?(\S{1,30}?)\s*(?:→|->|=>|=|就是|是|改成|改为|改叫|应该叫)\s*(\S{1,30}?)\s*[。.!！]?\s*$'
+)
+
+
+def _detect_rename_intent(text: str):
+    """如果是简洁的 X→Y 语句，返回 (old, new)；否则 None。"""
+    if not text or '\n' in text.strip():
+        # 多行输入不走快路径，交给 LLM
+        return None
+    m = _RENAME_RE.match(text.strip())
+    if not m:
+        return None
+    old, new = m.group(1).strip(), m.group(2).strip()
+    if not old or not new or old == new or len(old) < 1 or len(new) < 1:
+        return None
+    # 明显不像改名的 stop words
+    if old in {"今天", "明天", "我", "他", "她", "这"} or new in {"今天", "明天"}:
+        return None
+    return old, new
+
+
 @app.post("/api/ai/smart-input")
 async def ai_smart_input(body: dict):
     """AI分析非结构化输入，提取联系人/事件/待办/笔记等结构化数据。"""
@@ -1230,6 +1257,24 @@ async def ai_smart_input(body: dict):
     text = body.get("text", "").strip()
     if not text:
         return {"ok": False, "error": "请输入内容"}
+
+    # —— 快路径：检测到改名意图，跳过 LLM，直接 scan vault ——
+    intent = _detect_rename_intent(text)
+    if intent and _EEG_OK:
+        old, new = intent
+        preview = _eeg_scan(old, limit=500)
+        return {
+            "ok": True,
+            "data": {
+                "type": "rename",
+                "old": old,
+                "new": new,
+                "total_files": preview["total_files"],
+                "total_matches": preview["total_matches"],
+                "hits": preview["hits"][:20],  # UI 预览最多 20 个文件
+                "summary": f"检测到改名指令：{old} → {new}（命中 {preview['total_files']} 个文件 / {preview['total_matches']} 处）",
+            }
+        }
 
     settings = load_settings()
     if settings.get("ai_mode", "none") == "none":
@@ -1321,9 +1366,59 @@ async def ai_smart_input(body: dict):
 
 @app.post("/api/ai/smart-input/apply")
 async def ai_smart_input_apply(body: dict):
-    """Apply extracted structured data: create/update contacts, add todos, add notes, add interactions."""
-    results = {"contacts_created":0, "contacts_updated":0, "interactions_added":0, "todos_added":0, "notes_added":0}
+    """Apply extracted structured data: create/update contacts, add todos, add notes, add interactions.
+    特殊路径：data.type=='rename' 走 EEG vault 批量改名。"""
+    results = {"contacts_created":0, "contacts_updated":0, "interactions_added":0,
+               "todos_added":0, "notes_added":0,
+               "files_renamed":0, "replacements":0}
     data = body.get("data", {})
+
+    # —— 改名快路径 ——
+    if data.get("type") == "rename" and _EEG_OK:
+        old = (data.get("old") or "").strip()
+        new = (data.get("new") or "").strip()
+        if not old or not new or old == new:
+            return {"ok": False, "error": "old/new 不合法"}
+        # 1. 批量内容替换
+        r = _eeg_rename(old, new, dry_run=False, file_filter=None)
+        results["files_renamed"] = len(r.get("changed", []))
+        results["replacements"] = r.get("total", 0)
+        # 2. 如果 Contacts/people/{old}.md 存在，重命名该文件并更新 frontmatter.name
+        old_fp = PEOPLE_DIR / f"{old}.md"
+        new_fp = PEOPLE_DIR / f"{new}.md"
+        if old_fp.exists() and not new_fp.exists():
+            try:
+                raw = old_fp.read_text("utf-8")
+                raw = re.sub(r'^(name:\s*).*$', f'\\g<1>{new}', raw, count=1, flags=re.MULTILINE)
+                new_fp.write_text(raw, "utf-8")
+                old_fp.unlink()
+                results["contacts_updated"] += 1
+            except Exception as e:
+                results["contact_rename_error"] = str(e)
+        # 3. 追加到 EEG：如 new 已是实体，把 old 加入 aliases；否则新建 people 实体
+        try:
+            alias_res = _eeg_add_alias(new, old)
+            if not alias_res.get("ok"):
+                # 实体不存在 → 新建
+                ed = Path(os.environ.get("OME365_VAULT", Path(__file__).parent.parent)).resolve() / "Knowledge" / "entities" / "people"
+                ed.mkdir(parents=True, exist_ok=True)
+                slug = re.sub(r'[^\w\u4e00-\u9fff]', '_', new).strip('_').lower() or new
+                fp = ed / f"{slug}.md"
+                if not fp.exists():
+                    fp.write_text(
+                        f"---\nid: {slug}\ntype: person\nname: {new}\naliases:\n  - {old}\ntenant: longfor\nconfidence: medium\nevidence:\n  - 速记改名: {today_s()}\nupdated_at: {today_s()}\n---\n\n# {new}\n\n速记改名自动建档：{old} → {new}，{today_s()}。\n",
+                        "utf-8"
+                    )
+                    results["entity_created"] = new
+                else:
+                    # 再试一次 alias（可能之前没刷新缓存）
+                    _eeg_add_alias(new, old)
+            else:
+                results["entity_alias_added"] = f"{old} → {new}"
+        except Exception as e:
+            results["entity_error"] = str(e)
+        return {"ok": True, "results": results, "rename_detail": r.get("changed", [])[:50]}
+
 
     # 1. Process contacts
     for c in data.get("contacts", []):
