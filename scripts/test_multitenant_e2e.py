@@ -1707,7 +1707,107 @@ def suite_http_oidc():
         idp_srv.server_close()
 
 
+def suite_cli_ome365():
+    """根目录 ./ome365 CLI 契约：--help 可跑 / doctor 可跑 / --no-bootstrap --no-open 能起服务"""
+    print("\n[cli · ./ome365 极简启动器]")
+    cli = ROOT / "ome365"
+
+    @test("./ome365 存在且可执行")
+    def t1():
+        assert cli.exists(), f"缺 {cli}"
+        assert os.access(cli, os.X_OK), f"{cli} 不可执行（chmod +x）"
+
+    @test("./ome365 --help 退出 0 且含用法")
+    def t2():
+        r = subprocess.run([sys.executable, str(cli), "--help"], capture_output=True, text=True, timeout=10)
+        assert r.returncode == 0, r.stderr
+        assert "ome365" in (r.stdout + r.stderr).lower()
+
+    @test("./ome365 doctor 退出 0（自检通过）")
+    def t3():
+        r = subprocess.run([sys.executable, str(cli), "doctor"], capture_output=True, text=True, timeout=15)
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "依赖" in r.stdout or "Python" in r.stdout
+
+    @test("./ome365 --no-bootstrap --no-open 起服务，端口监听，Ctrl-C 干净关")
+    def t4():
+        import signal
+        import urllib.request
+        port = _test_port + 2
+        # 确保端口干净（SO_REUSEADDR 让我们忽略 TIME_WAIT 残留）
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(("127.0.0.1", port))
+        except OSError:
+            raise AssertionError(f"测试端口 {port} 被占")
+        env = os.environ.copy()
+        env["OME365_COOKIE_SECURE"] = "0"
+        proc = subprocess.Popen(
+            [sys.executable, str(cli), "--no-bootstrap", "--no-open", "--port", str(port)],
+            cwd=str(ROOT), env=env,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        try:
+            # 最多等 15s 端口就绪
+            deadline = time.time() + 15
+            ready = False
+            while time.time() < deadline:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(0.3)
+                try:
+                    s.connect(("127.0.0.1", port))
+                    ready = True
+                    break
+                except Exception:
+                    time.sleep(0.3)
+                finally:
+                    s.close()
+            assert ready, f"ome365 CLI 未在 15s 内起服务（port={port}）"
+            # healthcheck
+            opener = build_opener(_NO_PROXY_HANDLER)
+            r = opener.open(f"http://localhost:{port}/api/auth/healthcheck", timeout=3)
+            assert r.status == 200
+        finally:
+            # SIGINT 模拟 Ctrl-C；CLI 会 graceful 关掉子 server
+            try:
+                proc.send_signal(signal.SIGINT)
+                proc.wait(timeout=8)
+            except Exception:
+                proc.kill()
+                proc.wait(timeout=3)
+            # 确认端口释放（最多轮询 6s；用 SO_REUSEADDR 忽略 TIME_WAIT）
+            released = False
+            for _ in range(30):
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                try:
+                    s.bind(("127.0.0.1", port))
+                    released = True
+                    s.close()
+                    break
+                except OSError:
+                    s.close()
+                    time.sleep(0.2)
+            # 兜底：强杀占用端口的进程，避免污染后续测试
+            if not released:
+                try:
+                    out = subprocess.check_output(["lsof", "-ti", f":{port}"], text=True).strip()
+                    for pid in out.splitlines():
+                        try:
+                            os.kill(int(pid), signal.SIGKILL)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                raise AssertionError(f"Ctrl-C 后端口 {port} 没释放")
+
+    t1(); t2(); t3(); t4()
+
+
 # ── 主入口 ─────────────────────────────────────
+
+import socket  # 给 suite_cli_ome365 用
 
 SUITES = {
     "ctx": suite_ctx,
@@ -1729,6 +1829,7 @@ SUITES = {
     "http_multitenant": suite_http_multitenant,
     "http_magic": suite_http_magic,
     "http_oidc": suite_http_oidc,
+    "cli_ome365": suite_cli_ome365,
 }
 
 
