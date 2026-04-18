@@ -5,8 +5,8 @@ Ome365 · AuthProvider 抽象基座
   - none        : 单人自用 / 开发 / sample-vault，无认证（Phase 2a 默认）
   - basic       : 开源 demo 模式，OME365_DEMO_PASSWORD env 单用户
   - magic_link  : 家庭/小团队，邮件 + 一次性链接
-  - oidc        : OIDC 标准（云图搜等企业 SSO，Phase 2c 实现）
-  - wecom       : 企微扫码（贝壳等，Phase 2c 实现）
+  - oidc        : OIDC 标准（Okta / Azure AD / Keycloak / 企业自建 SSO）
+  - wecom       : 企微扫码（企微生态企业自建应用）
 
 Session 存储走服务端 SQLite（非 JWT），可撤销、不泄露 payload。
 Provider 构造时接收自己的 config dict，自行校验。
