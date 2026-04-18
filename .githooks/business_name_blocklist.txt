@@ -1,0 +1,25 @@
+# ══════════════════════════════════════════════════════════════
+# Business-name blocklist · pre-commit hook 使用
+# ══════════════════════════════════════════════════════════════
+#
+# 规则（与 memory: feedback_examples_not_content.md 对齐）：
+#   船长口头举例 ≠ 可写进 public 仓的素材。
+#   具体企业 / 产品 / 内部俗称禁止写进 .app/ docs/ scripts/ 的 public 代码。
+#
+# 替换成占位符：
+#   企业：acme / globex / example.com
+#   人名：alice / bob / carol
+#   自建产品：enterprise SSO / tenant-specific product
+#
+# 格式：每行一个词（忽略大小写 + regex 片段），# 开头为注释，空行跳过。
+# 添加新词直接加行即可，无需改 hook 脚本。
+
+# ── 企业名 / 产品名（2026-04-18 Phase 2c 事故） ──
+贝壳
+龙湖
+千丁
+云图搜
+beike
+longfor
+qianding
+LongFor
