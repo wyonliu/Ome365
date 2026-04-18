@@ -118,7 +118,7 @@ P1（两周）：
 P2（一月）：
 - [ ] 多租户切分（`/t/<tenant>`）
 - [ ] Permission-Aware RAG
-- [ ] 试点第二个租户（除龙湖千丁外）
+- [ ] 试点第二个租户（除首个 anchor 租户外）
 
 P3（两月）：
 - [ ] 公开发布：SaaS + Self-Host 双版本

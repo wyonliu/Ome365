@@ -9,7 +9,7 @@ const TicNoteRenderer = (() => {
   let ASR_FIXES = [];              // [[RegExp, replacement], ...]
   let KNOWN_SPEAKER_MAPS = {};     // { filenameKey: { SPEAKER_XX: name } }
   let SPEAKER_HINTS = [];          // [[RegExp, name], ...]
-  let JUNK_TITLE_PREFIX = '';      // 可选：TicNote 录音标题的品牌前缀（例："龙湖千丁"），从 cfg 注入
+  let JUNK_TITLE_PREFIX = '';      // 可选：TicNote 录音标题的品牌前缀（例："Acme Corp"），从 cfg 注入
 
   function fixASR(text) {
     for (const [pat, rep] of ASR_FIXES) text = text.replace(pat, rep);

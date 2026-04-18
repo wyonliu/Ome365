@@ -14460,7 +14460,7 @@ body.cockpit-drawer-open { overflow: hidden; }
   letter-spacing: 0.01em;
 }
 
-/* ═══ Conclusions · LongFor light theme ═══ */
+/* ═══ Conclusions · light theme ═══ */
 [data-theme="light"] .cp-conclusions {
   background: linear-gradient(180deg, rgba(0,52,120,0.04) 0%, rgba(245,245,248,0.8) 100%);
   border-top-color: rgba(0,52,120,0.12);

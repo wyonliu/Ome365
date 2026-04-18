@@ -2587,7 +2587,9 @@ async def get_interview_file(path: str):
 
 
 # ── API: Reports ─────────────────────────────────────
-REPORTS_DIR = VAULT / "Projects" / "LongFor" / "reports"
+# 报告目录从 tenant_config.reports.dir 读，默认 "reports"。
+# 老仓（业务耦合期）可在 tenant_config.json 里显式配 "dir": "Projects/XXX/reports" 兼容。
+REPORTS_DIR = VAULT / (((TENANT.get("reports") or {}).get("dir")) or "reports")
 
 @app.get("/api/reports")
 async def get_reports():
@@ -5266,7 +5268,7 @@ def _render_section_html(sid: str, data: dict) -> str:
 <div class="ch-head"><span class="ch-code">{esc(c.get('code',''))}</span><span class="ch-name">{esc(c.get('name',''))}</span><span class="ch-status">{esc(c.get('status',''))}</span></div>
 <div class="ch-row"><b>痛点</b>{esc(c.get('pain',''))}</div>
 <div class="ch-row"><b>AI 落点</b>{esc(c.get('ai_hook',''))}</div>
-<div class="ch-row"><b>定位</b>{esc(c.get('qianding_role',''))}</div>
+<div class="ch-row"><b>定位</b>{esc(c.get('role',''))}</div>
 </div>""")
             return f"""<div class="ch-group {cls}-group">
 <div class="ch-group-head"><span class="ch-group-label">{label_en}</span><span class="ch-group-title">{label_zh}</span></div>
