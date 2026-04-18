@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import fnmatch
 from typing import Optional, Callable
+from urllib.parse import urlparse
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, RedirectResponse
@@ -57,6 +58,32 @@ def _path_matches(path: str, patterns: list[str]) -> bool:
         if fnmatch.fnmatch(path, p):
             return True
     return False
+
+
+def safe_next_url(next_url: str | None, default: str = "/") -> str:
+    """Open-redirect 防护：next_url 必须是本站相对路径。
+
+    拒绝：
+      - 协议-相对 "//evil.com/..."（浏览器会当外站跳）
+      - 带 scheme 的绝对 URL "https://evil.com/..."
+      - javascript:/data: 等 scheme
+      - 非 "/" 开头的 "evil.com" 这类裸域名
+
+    允许：以 "/" 开头（非 "//"）且无 scheme/netloc 的 path（可带 query/fragment）。
+    """
+    if not next_url or not isinstance(next_url, str):
+        return default
+    if next_url.startswith("//"):
+        return default
+    if not next_url.startswith("/"):
+        return default
+    try:
+        p = urlparse(next_url)
+    except Exception:
+        return default
+    if p.scheme or p.netloc:
+        return default
+    return next_url
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -156,13 +183,31 @@ def install_auth(app, registry: AuthRegistry, public_patterns=None, default_prot
         tid = resolve_tenant_id(request)
         return tid, registry.get(tid)
 
+    def _cookie_secure() -> bool:
+        """默认 secure=true（生产 HTTPS）。仅 OME365_COOKIE_SECURE=0 时关（本地 http dev）。"""
+        return os.environ.get("OME365_COOKIE_SECURE", "1") != "0"
+
     def _set_session_cookie(resp, sid: str):
         resp.set_cookie(
             "ome365_sid", sid,
             httponly=True, samesite="lax",
-            secure=os.environ.get("OME365_COOKIE_SECURE", "0") == "1",
+            secure=_cookie_secure(),
             path="/", max_age=60 * 60 * 24 * 30,
         )
+
+    def _rotate_and_set(request: Request, resp, new_sid: str) -> None:
+        """Session fixation 防护：登录成功时先吊销请求里带的旧 sid，再下发新 cookie。
+
+        即使攻击者在受害者浏览器里预埋 ome365_sid=ATTACKER_SID，
+        登录成功后旧 sid 会从 session_store 删掉 + 被新 Set-Cookie 覆盖。
+        """
+        old_sid = request.cookies.get("ome365_sid")
+        if old_sid and old_sid != new_sid:
+            try:
+                registry.session_store.delete(old_sid)
+            except Exception:
+                pass
+        _set_session_cookie(resp, new_sid)
 
     @app.get("/auth/login")
     async def _login_page(request: Request):
@@ -200,12 +245,12 @@ def install_auth(app, registry: AuthRegistry, public_patterns=None, default_prot
                 payload = await request.json()
                 uid = payload.get("uid") or payload.get("username")
                 password = payload.get("password")
-                next_url = payload.get("next") or "/"
+                next_url = safe_next_url(payload.get("next"))
             else:
                 form = await request.form()
                 uid = form.get("uid") or form.get("username")
                 password = form.get("password")
-                next_url = form.get("next") or "/"
+                next_url = safe_next_url(form.get("next"))
         except Exception:
             return JSONResponse({"error": "bad request"}, status_code=400)
 
@@ -214,7 +259,7 @@ def install_auth(app, registry: AuthRegistry, public_patterns=None, default_prot
             return JSONResponse({"error": "invalid credentials"}, status_code=401)
         sess = registry.session_store.create(user)
         resp = JSONResponse({"ok": True, "user": user.to_dict(), "next": next_url, "tenant": tid})
-        _set_session_cookie(resp, sess.sid)
+        _rotate_and_set(request, resp, sess.sid)
         return resp
 
     # ── magic_link ──
@@ -227,11 +272,11 @@ def install_auth(app, registry: AuthRegistry, public_patterns=None, default_prot
             if request.headers.get("content-type", "").startswith("application/json"):
                 payload = await request.json()
                 email = payload.get("email", "")
-                next_url = payload.get("next") or "/"
+                next_url = safe_next_url(payload.get("next"))
             else:
                 form = await request.form()
                 email = form.get("email", "")
-                next_url = form.get("next") or "/"
+                next_url = safe_next_url(form.get("next"))
         except Exception:
             return JSONResponse({"error": "bad request"}, status_code=400)
         try:
@@ -246,12 +291,12 @@ def install_auth(app, registry: AuthRegistry, public_patterns=None, default_prot
         if provider.name != "magic_link":
             return JSONResponse({"error": f"tenant '{tid}' uses {provider.name}, not magic_link"}, status_code=400)
         token = request.query_params.get("token", "")
-        next_url = request.query_params.get("next") or "/"
+        next_url = safe_next_url(request.query_params.get("next"))
         sess = await provider.verify_token(token)
         if not sess:
             return JSONResponse({"error": "invalid or expired token"}, status_code=401)
         resp = RedirectResponse(next_url)
-        _set_session_cookie(resp, sess.sid)
+        _rotate_and_set(request, resp, sess.sid)
         return resp
 
     # ── OIDC ──
@@ -260,7 +305,7 @@ def install_auth(app, registry: AuthRegistry, public_patterns=None, default_prot
         tid, provider = _prov(request)
         if provider.name != "oidc":
             return JSONResponse({"error": f"tenant '{tid}' uses {provider.name}, not oidc"}, status_code=400)
-        next_url = request.query_params.get("next") or "/"
+        next_url = safe_next_url(request.query_params.get("next"))
         try:
             url = provider.start_url(next_url)
         except Exception as e:
@@ -284,9 +329,9 @@ def install_auth(app, registry: AuthRegistry, public_patterns=None, default_prot
             return JSONResponse({"error": str(e), "tenant": tid}, status_code=401)
         if not sess:
             return JSONResponse({"error": "callback returned no session"}, status_code=401)
-        next_url = (sess.data or {}).get("_next_url", "/")
+        next_url = safe_next_url((sess.data or {}).get("_next_url"))
         resp = RedirectResponse(next_url)
-        _set_session_cookie(resp, sess.sid)
+        _rotate_and_set(request, resp, sess.sid)
         return resp
 
     # ── Wecom ──
@@ -295,7 +340,7 @@ def install_auth(app, registry: AuthRegistry, public_patterns=None, default_prot
         tid, provider = _prov(request)
         if provider.name != "wecom":
             return JSONResponse({"error": f"tenant '{tid}' uses {provider.name}, not wecom"}, status_code=400)
-        next_url = request.query_params.get("next") or "/"
+        next_url = safe_next_url(request.query_params.get("next"))
         try:
             url = provider.start_url(next_url)
         except Exception as e:
@@ -313,9 +358,9 @@ def install_auth(app, registry: AuthRegistry, public_patterns=None, default_prot
             return JSONResponse({"error": str(e), "tenant": tid}, status_code=401)
         if not sess:
             return JSONResponse({"error": "callback returned no session"}, status_code=401)
-        next_url = (sess.data or {}).get("_next_url", "/")
+        next_url = safe_next_url((sess.data or {}).get("_next_url"))
         resp = RedirectResponse(next_url)
-        _set_session_cookie(resp, sess.sid)
+        _rotate_and_set(request, resp, sess.sid)
         return resp
 
     # ── 健康检查 ──

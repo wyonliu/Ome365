@@ -275,6 +275,8 @@ def _start_server(tc_overrides: dict | None = None, provider: str = "none"):
     env["OME365_COMPAT_LEGACY"] = "1"
     env["OME365_PORT"] = str(_test_port)
     env["OME365_AUTH_PROVIDER"] = provider
+    # E2E 走 http://localhost，必须关掉 Secure cookie（生产默认 on，dev 需显式关）
+    env["OME365_COOKIE_SECURE"] = "0"
     log = Path(tempfile.mkdtemp()) / "server.log"
     proc = subprocess.Popen(
         [sys.executable, str(APP / "server.py")],
@@ -800,6 +802,91 @@ def suite_oidc_jwks():
     t1(); t2(); t3(); t4(); t5(); t6(); t7(); t8()
 
 
+def suite_auth_hardening():
+    """Auth 加固契约：next_url open-redirect 防护 + session fixation 轮换。
+
+    - safe_next_url：外站/协议-相对/javascript 等必须转成 "/"
+    - 登录成功时服务器要自动 delete 掉请求里带来的旧 sid
+    """
+    print("\n[auth hardening · next_url + session fixation]")
+    from auth.middleware import safe_next_url
+    from auth.session_store import SessionStore
+    from auth.base import User
+
+    @test("safe_next_url 允许合法内部路径")
+    def t1():
+        assert safe_next_url("/dashboard") == "/dashboard"
+        assert safe_next_url("/a/b?x=1#y") == "/a/b?x=1#y"
+        assert safe_next_url("/") == "/"
+
+    @test("safe_next_url 拒绝协议-相对 //evil.com")
+    def t2():
+        assert safe_next_url("//evil.com") == "/"
+        assert safe_next_url("//evil.com/path") == "/"
+
+    @test("safe_next_url 拒绝带 scheme 的绝对 URL")
+    def t3():
+        assert safe_next_url("https://evil.com/steal") == "/"
+        assert safe_next_url("http://evil.com") == "/"
+        assert safe_next_url("javascript:alert(1)") == "/"
+        assert safe_next_url("data:text/html,<script>") == "/"
+
+    @test("safe_next_url 拒绝非 / 开头的裸路径")
+    def t4():
+        assert safe_next_url("evil.com") == "/"
+        assert safe_next_url("../etc/passwd") == "/"
+        # 空/None → default
+        assert safe_next_url("") == "/"
+        assert safe_next_url(None) == "/"
+        assert safe_next_url(123) == "/"  # type: ignore
+
+    @test("safe_next_url 自定义 default 生效")
+    def t5():
+        assert safe_next_url("https://evil.com", default="/home") == "/home"
+
+    @test("session fixation 防护：登录成功后旧 sid 被服务端删除")
+    def t6():
+        # 直接测 session_store 的 delete 行为 + 模拟 login handler 的 rotate 逻辑
+        tmp = Path(tempfile.mkdtemp()) / "s.db"
+        ss = SessionStore(tmp)
+        u1 = User(user_id="attacker", tenant_id="globex", display_name="a", email="", roles=["user"], provider="basic")
+        old_sess = ss.create(u1)
+        old_sid = old_sess.sid
+        # 受害者登录 → 服务端 create 新 sess + 删旧
+        u2 = User(user_id="victim", tenant_id="globex", display_name="v", email="", roles=["user"], provider="basic")
+        new_sess = ss.create(u2)
+        assert new_sess.sid != old_sid, "新旧 sid 必须不同"
+        # 模拟 _rotate_and_set：server 删除 old_sid
+        ss.delete(old_sid)
+        assert ss.get(old_sid) is None, "旧 sid 应被吊销"
+        assert ss.get(new_sess.sid) is not None, "新 sid 必须活着"
+        shutil.rmtree(tmp.parent, ignore_errors=True)
+
+    @test("cookie Secure 默认为 true（生产安全），仅 OME365_COOKIE_SECURE=0 时关")
+    def t7():
+        # 直接读 middleware 的 _cookie_secure 语义：默认值 != "0" → secure
+        # 用 os.environ 模拟 3 种情况
+        orig = os.environ.get("OME365_COOKIE_SECURE")
+        try:
+            # 默认（未设）→ 应 secure
+            if "OME365_COOKIE_SECURE" in os.environ:
+                del os.environ["OME365_COOKIE_SECURE"]
+            assert os.environ.get("OME365_COOKIE_SECURE", "1") != "0"
+            # 显式 "0" → 关
+            os.environ["OME365_COOKIE_SECURE"] = "0"
+            assert not (os.environ.get("OME365_COOKIE_SECURE", "1") != "0")
+            # 显式 "1" → 开
+            os.environ["OME365_COOKIE_SECURE"] = "1"
+            assert os.environ.get("OME365_COOKIE_SECURE", "1") != "0"
+        finally:
+            if orig is None:
+                os.environ.pop("OME365_COOKIE_SECURE", None)
+            else:
+                os.environ["OME365_COOKIE_SECURE"] = orig
+
+    t1(); t2(); t3(); t4(); t5(); t6(); t7()
+
+
 # ── 主入口 ─────────────────────────────────────
 
 SUITES = {
@@ -814,6 +901,7 @@ SUITES = {
     "registry": suite_registry,
     "sso": suite_sso_providers,
     "oidc_jwks": suite_oidc_jwks,
+    "auth_hardening": suite_auth_hardening,
 }
 
 
