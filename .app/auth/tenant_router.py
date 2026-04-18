@@ -27,6 +27,14 @@ _PATH_TENANT_RE = re.compile(r"^/t/([a-z][a-z0-9_-]{1,31})(/|$)")
 
 def resolve_tenant_id(request) -> str:
     """从 starlette Request 里解析 tenant_id。"""
+    # 0. middleware 已经设好了 → 直接复用（避免 path 被剥后再次解析拿到错误结果）
+    try:
+        cached = getattr(request.state, "tenant_id", None)
+        if cached and _SLUG_RE.match(cached):
+            return cached
+    except Exception:
+        pass
+
     # 1. header
     try:
         h = request.headers.get("x-ome-tenant")
