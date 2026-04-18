@@ -12,7 +12,8 @@ OIDCProvider · OpenID Connect 标准 Authorization Code Flow + PKCE
   2. 用户在公司 SSO 登录、同意授权 → 302 回到 redirect_uri?code=xxx&state=xxx
   3. 后端校验 state → 取 tid → 查 tenant 的 provider 实例
   4. provider POST {issuer}/token 换 access_token + id_token
-  5. 解 id_token claims（可选 JWKS 验签；Phase 2c 先不验签，走 HTTPS + state 验 CSRF）
+  5. 解 id_token claims；默认走 JWKS 验签（RS256/ES256），校验 iss/aud/exp/nonce
+     仅当 verify_signature=false 时跳过验签（只推荐本地 dev 用）
   6. GET {issuer}/userinfo 拿完整 profile（按 scope）
   7. 校验 allowed_domains / allowlist_userids（企业白名单）
   8. 建 session，redirect 回 next_url
@@ -30,7 +31,10 @@ Config schema (tenant_config.auth.providers.oidc):
       "email_claim": "email",
       "display_name_claim": "name",
       "role_map": {"company-admins": "admin"},   // group claim → 角色（可选）
-      "discovery_cache_seconds": 3600            // 可选，默认 1h 不重新拉 issuer 配置
+      "discovery_cache_seconds": 3600,           // 可选，默认 1h 不重新拉 issuer 配置
+      "verify_signature": true,                  // 默认 true。设 false 只允许本地 dev
+      "allowed_algorithms": ["RS256", "ES256"],  // 允许的 JWS 签名算法；HS* 默认禁
+      "jwks_cache_seconds": 3600                 // JWKS 缓存 TTL
     }
 
 state/verifier 存 SQLite（同 SessionStore 的模式，独立表避免冲突）：
@@ -52,6 +56,15 @@ from typing import Optional
 from urllib.parse import urlencode, urlparse
 
 import requests  # 已经在 requirements.txt
+
+try:
+    import jwt as _jwt  # PyJWT，验签用
+    from jwt import PyJWKClient as _PyJWKClient
+    _JWT_AVAILABLE = True
+except Exception:
+    _jwt = None
+    _PyJWKClient = None
+    _JWT_AVAILABLE = False
 
 from ..base import User, Session, AuthError, AuthConfigError
 
@@ -143,9 +156,15 @@ class OIDCProvider:
         self.display_claim = self.config.get("display_name_claim", "name")
         self.role_map = dict(self.config.get("role_map") or {})
         self.discovery_cache_sec = int(self.config.get("discovery_cache_seconds", 3600))
+        self.verify_signature = bool(self.config.get("verify_signature", True))
+        self.allowed_algorithms = list(self.config.get("allowed_algorithms") or ["RS256", "ES256", "RS384", "RS512", "ES384", "ES512"])
+        self.jwks_cache_sec = int(self.config.get("jwks_cache_seconds", 3600))
 
         self._discovery = None
         self._discovery_fetched_at = 0.0
+        self._jwks_client = None
+        self._jwks_uri = None
+        self._jwks_fetched_at = 0.0
         self._session = requests.Session()
 
     # ---------- AuthProvider Protocol ----------
@@ -206,11 +225,17 @@ class OIDCProvider:
             issues.append(f"client_secret not resolved (env {self.config.get('client_secret_env')} empty?)")
         if not self.redirect_uri:
             issues.append("redirect_uri missing")
+        if self.verify_signature and not _JWT_AVAILABLE:
+            issues.append("verify_signature=true but PyJWT/cryptography not installed")
+        if not self.verify_signature:
+            issues.append("verify_signature=false (dev mode) — DO NOT use in prod")
         return {
             "ok": not issues,
             "provider": "oidc",
             "tenant_id": self.tenant_id,
             "issuer": self.issuer,
+            "verify_signature": self.verify_signature,
+            "allowed_algorithms": self.allowed_algorithms,
             "allowed_domains": list(self.allowed_domains),
             "allowlist_size": len(self.allowlist_userids),
             "issues": issues,
@@ -285,10 +310,23 @@ class OIDCProvider:
             raise AuthError(f"token exchange failed ({r.status_code}): {r.text[:200]}")
         return r.json()
 
-    def _parse_id_token(self, id_token: str) -> dict:
-        """解 JWT payload（不验签；Phase 2c 先不做 JWKS 验签，下一版补）。"""
-        if not id_token:
-            return {}
+    def _get_jwks_client(self):
+        """拿（并缓存）PyJWKClient。jwks_uri 从 discovery 取。"""
+        if not _JWT_AVAILABLE:
+            raise AuthConfigError("PyJWT not installed; cannot verify id_token signature")
+        now = time.time()
+        if self._jwks_client and (now - self._jwks_fetched_at) < self.jwks_cache_sec:
+            return self._jwks_client
+        disc = self._discover()
+        jwks_uri = disc.get("jwks_uri") or f"{self.issuer}/.well-known/jwks.json"
+        # PyJWKClient 内部有自己的 cache，但我们外层 TTL 控制重建频率
+        self._jwks_client = _PyJWKClient(jwks_uri, cache_keys=True, lifespan=self.jwks_cache_sec)
+        self._jwks_uri = jwks_uri
+        self._jwks_fetched_at = now
+        return self._jwks_client
+
+    def _decode_payload_unverified(self, id_token: str) -> dict:
+        """仅解 JWT payload，不验签。只在 verify_signature=false 时用。"""
         parts = id_token.split(".")
         if len(parts) != 3:
             return {}
@@ -297,6 +335,55 @@ class OIDCProvider:
             return json.loads(base64.urlsafe_b64decode(payload.encode()).decode("utf-8"))
         except Exception:
             return {}
+
+    def _parse_id_token(self, id_token: str) -> dict:
+        """验签 + 校验 claims 并返回 payload。
+
+        默认走 JWKS 验签（RS256/ES256）+ 校验 iss/aud/exp/iat/nbf。
+        只有 verify_signature=false 才跳过（本地 dev 用，生产严禁）。
+        nonce 校验在 callback() 中，因为要和 pending_store 的值比对。
+        """
+        if not id_token:
+            return {}
+        if not self.verify_signature:
+            # dev 兜底：不验签，只解 payload
+            return self._decode_payload_unverified(id_token)
+        if not _JWT_AVAILABLE:
+            raise AuthConfigError("PyJWT/cryptography not installed; install or set verify_signature=false (dev only)")
+        try:
+            # 从 header 拿 kid，找对应 signing key
+            jwks_client = self._get_jwks_client()
+            signing_key = jwks_client.get_signing_key_from_jwt(id_token)
+            claims = _jwt.decode(
+                id_token,
+                signing_key.key,
+                algorithms=self.allowed_algorithms,
+                audience=self.client_id,
+                issuer=self.issuer or None,
+                options={
+                    "verify_signature": True,
+                    "verify_exp": True,
+                    "verify_iat": True,
+                    "verify_nbf": True,
+                    "verify_aud": bool(self.client_id),
+                    "verify_iss": bool(self.issuer),
+                    "require": ["exp", "iat", "iss", "sub"],
+                },
+                leeway=60,  # 容忍 1 分钟时钟漂移
+            )
+            return claims
+        except _jwt.ExpiredSignatureError as e:
+            raise AuthError(f"id_token expired: {e}")
+        except _jwt.InvalidAudienceError as e:
+            raise AuthError(f"id_token audience mismatch: {e}")
+        except _jwt.InvalidIssuerError as e:
+            raise AuthError(f"id_token issuer mismatch: {e}")
+        except _jwt.InvalidSignatureError as e:
+            raise AuthError(f"id_token signature invalid: {e}")
+        except _jwt.InvalidTokenError as e:
+            raise AuthError(f"id_token invalid: {e}")
+        except Exception as e:
+            raise AuthError(f"id_token verify failed: {e}")
 
     def _fetch_userinfo(self, access_token: str) -> dict:
         disc = self._discover()

@@ -22,6 +22,7 @@ from __future__ import annotations
 import os
 import sys
 import json
+import base64
 import shutil
 import asyncio
 import sqlite3
@@ -634,6 +635,171 @@ def suite_sso_providers():
     t1(); t2(); t3(); t4(); t5(); t6(); t7()
 
 
+def suite_oidc_jwks():
+    """OIDC id_token JWKS 验签契约：
+
+    构造 RSA keypair → 自签 id_token → 灌 provider 的 JWKS client →
+    验 OK/exp/aud/iss/sig 五种 case。
+    用 PyJWT 的 PyJWK 直接构造 signing_key，绕开 HTTP。
+    """
+    print("\n[oidc jwks · id_token 验签契约]")
+    try:
+        import jwt as _jwt
+        from jwt import PyJWK
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.hazmat.primitives import serialization
+    except Exception as e:
+        print(f"  ⊘ 跳过：PyJWT/cryptography 不可用 ({e})")
+        return
+
+    from auth.providers.oidc_provider import OIDCProvider
+    from auth.base import AuthError
+
+    # 一次生成的 RSA keypair + JWK（公钥）共享给所有 case
+    priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    pub_pem = priv.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    # 构造 JWK（n/e）供 PyJWK 使用
+    pub_numbers = priv.public_key().public_numbers()
+    def _b64u_int(i: int) -> str:
+        b = i.to_bytes((i.bit_length() + 7) // 8, "big")
+        return base64.urlsafe_b64encode(b).rstrip(b"=").decode("ascii")
+    jwk_dict = {
+        "kty": "RSA",
+        "kid": "test-key-1",
+        "use": "sig",
+        "alg": "RS256",
+        "n": _b64u_int(pub_numbers.n),
+        "e": _b64u_int(pub_numbers.e),
+    }
+    pyjwk = PyJWK(jwk_dict)
+
+    def _mint(claims: dict) -> str:
+        priv_pem = priv.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        return _jwt.encode(claims, priv_pem, algorithm="RS256", headers={"kid": "test-key-1"})
+
+    def _make_provider(**overrides):
+        cfg = {
+            "issuer": "https://sso.example.com",
+            "client_id": "ome365",
+            "redirect_uri": "https://ome.example.com/auth/oidc/callback",
+            **overrides,
+        }
+        p = OIDCProvider(cfg, tenant_id="globex")
+        # 绕开 HTTP 的 JWKS client：自定义 shim
+        class _Shim:
+            def get_signing_key_from_jwt(self, token):
+                return pyjwk
+        p._jwks_client = _Shim()
+        p._jwks_fetched_at = time.time()
+        return p
+
+    now = int(time.time())
+    good_claims = {
+        "iss": "https://sso.example.com",
+        "aud": "ome365",
+        "sub": "alice",
+        "iat": now,
+        "exp": now + 300,
+        "nonce": "n-1",
+    }
+
+    @test("JWKS 验签 OK：合法 id_token → claims 正确返回")
+    def t1():
+        p = _make_provider()
+        tok = _mint(good_claims)
+        claims = p._parse_id_token(tok)
+        assert claims["sub"] == "alice", f"sub 错: {claims}"
+        assert claims["aud"] == "ome365"
+        assert claims["iss"] == "https://sso.example.com"
+
+    @test("JWKS 验签失败：过期 id_token → AuthError (expired)")
+    def t2():
+        p = _make_provider()
+        bad = {**good_claims, "iat": now - 1000, "exp": now - 500}
+        tok = _mint(bad)
+        try:
+            p._parse_id_token(tok)
+            assert False, "应抛"
+        except AuthError as e:
+            assert "expired" in str(e).lower(), f"错误信息应含 expired: {e}"
+
+    @test("JWKS 验签失败：aud 不匹配 → AuthError (audience)")
+    def t3():
+        p = _make_provider()
+        bad = {**good_claims, "aud": "someone-else"}
+        tok = _mint(bad)
+        try:
+            p._parse_id_token(tok)
+            assert False, "应抛"
+        except AuthError as e:
+            assert "audience" in str(e).lower(), f"错误信息应含 audience: {e}"
+
+    @test("JWKS 验签失败：iss 不匹配 → AuthError (issuer)")
+    def t4():
+        p = _make_provider()
+        bad = {**good_claims, "iss": "https://evil.example.com"}
+        tok = _mint(bad)
+        try:
+            p._parse_id_token(tok)
+            assert False, "应抛"
+        except AuthError as e:
+            assert "issuer" in str(e).lower(), f"错误信息应含 issuer: {e}"
+
+    @test("JWKS 验签失败：签名被篡改 → AuthError")
+    def t5():
+        p = _make_provider()
+        tok = _mint(good_claims)
+        # 改 payload（第二段）里一个字符 → 签名不匹配
+        parts = tok.split(".")
+        # 解 → 改 sub → 再 base64 编，但不重新签名
+        raw = base64.urlsafe_b64decode(parts[1] + "=" * ((4 - len(parts[1]) % 4) % 4))
+        tampered = raw.replace(b"alice", b"mallo")
+        parts[1] = base64.urlsafe_b64encode(tampered).rstrip(b"=").decode("ascii")
+        bad_tok = ".".join(parts)
+        try:
+            p._parse_id_token(bad_tok)
+            assert False, "应抛"
+        except AuthError as e:
+            # PyJWT 会报 signature invalid 或 invalid token
+            pass
+
+    @test("verify_signature=false → 不验签直接解 payload（仅 dev）")
+    def t6():
+        p = _make_provider(verify_signature=False)
+        # 随便编个不可验签的 payload
+        fake = "xx." + base64.urlsafe_b64encode(json.dumps({"sub": "bob"}).encode()).rstrip(b"=").decode() + ".yy"
+        claims = p._parse_id_token(fake)
+        assert claims.get("sub") == "bob", f"dev 模式应直接解 payload: {claims}"
+
+    @test("verify_signature=false → healthcheck 明确警告")
+    def t7():
+        p = OIDCProvider({
+            "issuer": "https://x",
+            "client_id": "a",
+            "redirect_uri": "https://y",
+            "client_secret_env": "OME365_OIDC_SECRET",
+            "verify_signature": False,
+        }, tenant_id="globex")
+        hc = p.healthcheck()
+        assert hc["verify_signature"] is False
+        assert any("verify_signature=false" in i for i in hc["issues"]), f"应警告 dev 模式: {hc}"
+
+    @test("allowed_algorithms 默认不含 HS256（避免 key confusion 攻击）")
+    def t8():
+        p = _make_provider()
+        assert "HS256" not in p.allowed_algorithms, f"默认不应含 HS256: {p.allowed_algorithms}"
+        assert "RS256" in p.allowed_algorithms
+
+    t1(); t2(); t3(); t4(); t5(); t6(); t7(); t8()
+
+
 # ── 主入口 ─────────────────────────────────────
 
 SUITES = {
@@ -647,6 +813,7 @@ SUITES = {
     "tenant_router": suite_tenant_router,
     "registry": suite_registry,
     "sso": suite_sso_providers,
+    "oidc_jwks": suite_oidc_jwks,
 }
 
 
