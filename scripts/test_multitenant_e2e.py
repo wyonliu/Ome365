@@ -887,6 +887,155 @@ def suite_auth_hardening():
     t1(); t2(); t3(); t4(); t5(); t6(); t7()
 
 
+def suite_basic_plaintext():
+    """basic_provider · 明文密码运行时拒绝契约"""
+    print("\n[basic · 明文密码运行时拒绝]")
+    from auth.providers.basic_provider import BasicProvider, _verify_password, hash_sha256
+
+    @test("argon2/bcrypt/sha256$ 前缀哈希可验")
+    def t1():
+        h = hash_sha256("s3cret")
+        assert _verify_password("s3cret", h) is True
+        assert _verify_password("wrong", h) is False
+
+    @test("明文密码默认拒绝（allow_plaintext=False）")
+    def t2():
+        # 直接给明文哈希 = "hello"；用户传 "hello" 也应返回 False
+        assert _verify_password("hello", "hello") is False
+        assert _verify_password("hello", "hello", allow_plaintext=False) is False
+
+    @test("明文密码仅在 allow_plaintext=True 时通过")
+    def t3():
+        assert _verify_password("hello", "hello", allow_plaintext=True) is True
+        assert _verify_password("wrong", "hello", allow_plaintext=True) is False
+
+    @test("BasicProvider 误配明文 → verify_password 返 None")
+    def t4():
+        p = BasicProvider({
+            "tenant_id": "globex",
+            "users": [{"uid": "alice", "password_hash": "plaintext-oops", "display": "A"}],
+        })
+        u = asyncio.run(p.verify_password("alice", "plaintext-oops"))
+        assert u is None, "明文密码必须被运行时拒绝"
+
+    @test("BasicProvider 用户标 allow_plaintext=true → 放行（兼容历史）")
+    def t5():
+        p = BasicProvider({
+            "tenant_id": "globex",
+            "users": [{"uid": "alice", "password_hash": "legacy-plain", "allow_plaintext": True, "display": "A"}],
+        })
+        u = asyncio.run(p.verify_password("alice", "legacy-plain"))
+        assert u is not None and u.user_id == "alice"
+
+    @test("BasicProvider healthcheck 明文用户 → 明确标 BLOCKED / ALLOWED")
+    def t6():
+        p = BasicProvider({
+            "tenant_id": "globex",
+            "users": [
+                {"uid": "blocked", "password_hash": "plain-bad"},
+                {"uid": "allowed", "password_hash": "plain-ok", "allow_plaintext": True},
+                {"uid": "good", "password_hash": hash_sha256("x")},
+            ],
+        })
+        hc = p.healthcheck()
+        assert "blocked" in hc["plaintext_blocked"], f"应标 blocked: {hc}"
+        assert "allowed" not in hc["plaintext_blocked"]
+        # 显示两条相关 issues
+        assert any("REJECTED" in i for i in hc["issues"])
+        assert any("allowed" in i for i in hc["issues"])
+
+    @test("OME365_DEMO_PASSWORD 注入的 demo 用户 → 明文放行")
+    def t7():
+        orig = os.environ.get("OME365_DEMO_PASSWORD")
+        try:
+            os.environ["OME365_DEMO_PASSWORD"] = "demo-pass-123"
+            p = BasicProvider({"tenant_id": "globex"})
+            u = asyncio.run(p.verify_password("demo", "demo-pass-123"))
+            assert u is not None and u.user_id == "demo"
+            u2 = asyncio.run(p.verify_password("demo", "wrong"))
+            assert u2 is None
+        finally:
+            if orig is None:
+                os.environ.pop("OME365_DEMO_PASSWORD", None)
+            else:
+                os.environ["OME365_DEMO_PASSWORD"] = orig
+
+    t1(); t2(); t3(); t4(); t5(); t6(); t7()
+
+
+def suite_rate_limit():
+    """登录限流契约"""
+    print("\n[rate limit · 登录暴力破解防护]")
+    from auth.middleware import LoginRateLimiter
+
+    @test("窗口内失败 < max → 不锁")
+    def t1():
+        rl = LoginRateLimiter(max_attempts=3, window=60, lockout=60)
+        for _ in range(2):
+            rl.record_fail("t", "u")
+        ok, retry = rl.check("t", "u")
+        assert ok and retry == 0
+
+    @test("窗口内失败 >= max → 锁 + 返回 retry_after")
+    def t2():
+        rl = LoginRateLimiter(max_attempts=3, window=60, lockout=60)
+        for _ in range(3):
+            rl.record_fail("t", "u")
+        ok, retry = rl.check("t", "u")
+        assert not ok and retry > 0
+
+    @test("成功登录清零计数")
+    def t3():
+        rl = LoginRateLimiter(max_attempts=3, window=60, lockout=60)
+        rl.record_fail("t", "u")
+        rl.record_fail("t", "u")
+        rl.record_success("t", "u")
+        # 再来一次 fail 不应立刻锁
+        rl.record_fail("t", "u")
+        ok, _ = rl.check("t", "u")
+        assert ok, "成功后应清零"
+
+    @test("不同 key 互不影响（tid/uid/ip 分桶）")
+    def t4():
+        rl = LoginRateLimiter(max_attempts=2, window=60, lockout=60)
+        rl.record_fail("acme", "alice", "1.1.1.1")
+        rl.record_fail("acme", "alice", "1.1.1.1")
+        # alice 在 1.1.1.1 已锁
+        assert not rl.check("acme", "alice", "1.1.1.1")[0]
+        # 同 uid 不同 ip 不受影响
+        assert rl.check("acme", "alice", "2.2.2.2")[0]
+        # 同 ip 不同 uid 不受影响
+        assert rl.check("acme", "bob", "1.1.1.1")[0]
+        # 同 ip+uid 不同 tenant 不受影响
+        assert rl.check("globex", "alice", "1.1.1.1")[0]
+
+    @test("窗口外旧失败被丢弃（滑动窗口）")
+    def t5():
+        rl = LoginRateLimiter(max_attempts=3, window=1, lockout=60)
+        rl.record_fail("t", "u")
+        rl.record_fail("t", "u")
+        time.sleep(1.1)
+        # 窗口已过，再一次 fail 应重新计数
+        rl.record_fail("t", "u")
+        ok, _ = rl.check("t", "u")
+        assert ok, "窗口外旧失败不应累计"
+
+    @test("env 读 OME365_LOGIN_MAX_ATTEMPTS 生效")
+    def t6():
+        orig = os.environ.get("OME365_LOGIN_MAX_ATTEMPTS")
+        try:
+            os.environ["OME365_LOGIN_MAX_ATTEMPTS"] = "2"
+            rl = LoginRateLimiter()
+            assert rl.max_attempts == 2
+        finally:
+            if orig is None:
+                os.environ.pop("OME365_LOGIN_MAX_ATTEMPTS", None)
+            else:
+                os.environ["OME365_LOGIN_MAX_ATTEMPTS"] = orig
+
+    t1(); t2(); t3(); t4(); t5(); t6()
+
+
 # ── 主入口 ─────────────────────────────────────
 
 SUITES = {
@@ -902,6 +1051,8 @@ SUITES = {
     "sso": suite_sso_providers,
     "oidc_jwks": suite_oidc_jwks,
     "auth_hardening": suite_auth_hardening,
+    "basic_plaintext": suite_basic_plaintext,
+    "rate_limit": suite_rate_limit,
 }
 
 
