@@ -15,6 +15,10 @@
     "dir_name": "Cockpit",
     "file_name": "cockpit.md"
   },
+  "reports": {
+    "_doc": "报告目录（相对 vault 根）。不配则默认 'reports'。老仓可设 'Projects/XXX/reports' 兼容既有路径。",
+    "dir": "reports"
+  },
   "prompts": {
     "user_bio": "a senior AI product & tech leader"
   },

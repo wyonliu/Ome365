@@ -8,14 +8,14 @@
 ## 一 · 为什么这是 Ome365 的一级能力
 
 通用 LLM 不知道：
-- 「X」在acme语境里是 ASR 对「—」的误读（不是另一个 CTO）
-- 「C1」在acme是住宅航道，不是「Customer 1」
-- 「demo」=「利拉洛」=「利拉漏」=「利拉落」指同一个 C 端智能体产品
-- 「群总 / — / 涛哥」分别是谁
+- 某个 ASR 误读（如「XX」→「YY」）在企业语境里指谁
+- 企业内部缩写（如「C1」「N3」）指哪条业务线，不是通用词
+- 同一产品的多个俗称 / 音译变体（「Acme」=「艾克米」=「艾克美」）指同一个
+- 口语化人称（「总 / 哥 / 姐」）分别对应谁
 
 **企业智能体要靠谱，第一块必须硬的就是实体层**。否则：
-- RAG 检索会漏（搜「—」召回不到「X」的录音段）
-- 生成会错（把「X」写成新人）
+- RAG 检索会漏（搜规范名召回不到 ASR 误读的录音段）
+- 生成会错（把误读当作新人另立户头）
 - 展示会乱（同一个人出现两个头像卡片）
 
 EEG 把这件事做成 Ome365 平台的**公共基础设施**：单一事实源，所有模块消费。
@@ -40,27 +40,22 @@ EEG 把这件事做成 Ome365 平台的**公共基础设施**：单一事实源�
 
 ```yaml
 ---
-id: huaiyang                          # slug，租户内唯一
+id: alice_example                      # slug，租户内唯一
 type: person
-name: —                             # 规范显示名
+name: Alice Zhang                      # 规范显示名
 aliases:                               # 所有别名 / ASR 误读 / 口语化称呼
-  - 用户
-  - 华阳          # ASR
-  - 淮阳          # ASR
-  - X          # ASR（血泪史：2026-04-17 全量审计确认）
-  - 怀润          # ASR
-  - 杨总          # 口语
-  - 刘怀阳        # ASR 加姓
-  - 杨怀阳        # ASR
-tenant: acme
-company: acme
+  - 张三
+  - 艾丽丝         # 音译
+  - 张总           # 口语
+  - Alice.Z        # 英文缩写
+tenant: acme                           # 租户 slug
+company: Acme Corp
 title: CTO
 confidence: high
 evidence:
-  - TicNote/2026-04-08/集团CHO-—·入职沟通·2026-04-08.md
+  - TicNote/2026-04-08/HR-入职沟通·2026-04-08.md
 relations:
-  - { type: reports_to, target: chenxuping }   # —
-  - { type: reports_to, target: liu_li }       # —
+  - { type: reports_to, target: ceo_slug }
 updated_at: 2026-04-17
 ---
 
@@ -84,9 +79,9 @@ $VAULT/Knowledge/entities/
 ### 2.4 租户隔离
 
 `tenant` 字段区分实体归属：
-- `acme` — acme全部实体
+- `<tenant-slug>` — 某一家企业租户的全部实体
 - `ome365` — Ome365 平台自身术语
-- `personal` — 用户个人
+- `personal` — 单用户/用户个人
 - `public` — 行业通用（DeepSeek、Claude、Figma、GPT 等）
 
 查询时按租户过滤。**这就是企业智能体平台的核心隔离层**。
@@ -156,7 +151,7 @@ GET  /api/entities/_pending               # 审核队列：pipeline 自动提取
 - ✅ `Knowledge/entities/products/` + `Knowledge/entities/terms/`
 - ✅ `server.py`: `/api/entities`, `/api/entities/resolve`, `/api/entities/asr`
 - ✅ `app.js`: `ASR_FIXES` 启动时向 `/api/entities/asr` 热加载（保留硬编码兜底）
-- ✅ `seed_entities.py`: 从 `Contacts/people/` + `reference_acme_terminology.md` 一次性播种
+- ✅ `seed_entities.py`: 从 `Contacts/people/` + 租户术语参考文档一次性播种
 
 ### Phase 1 · 审核队列（下周）
 - [ ] TicNote 清洗管线抽取人名到 `_pending/`
