@@ -1,0 +1,284 @@
+#!/usr/bin/env python3
+"""
+Ome365 · 极简一键启动
+
+用法：
+    ./ome365              # 首跑自动装依赖 + 起服务 + 开浏览器
+    ./ome365 --port 8080  # 换端口
+    ./ome365 --no-open    # 不开浏览器（SSH/无头环境）
+    ./ome365 --setup      # 强制跑一次初始化（装依赖、复制 .env、hooks）
+    ./ome365 setup        # 进入完整向导（family/demo/enterprise 场景）
+    ./ome365 doctor       # 自检：依赖、端口、tenant_config
+
+首跑等同于 `./setup.sh --mode solo --non-interactive`：
+单人自用、无认证、vault=项目根。要换成 family/demo/enterprise 再跑 `./setup.sh`。
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import time
+import webbrowser
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+APP = ROOT / ".app"
+SERVER = APP / "server.py"
+REQUIREMENTS = ROOT / "requirements.txt"
+ENV_EXAMPLE = ROOT / ".env.example"
+ENV_FILE = ROOT / ".env"
+MARKER = ROOT / ".ome365-bootstrapped"
+
+
+# ── 小工具 ───────────────────────────────────
+def say(msg: str) -> None:
+    print(f"\033[36m[ome365]\033[0m {msg}", flush=True)
+
+
+def warn(msg: str) -> None:
+    print(f"\033[33m[warn]\033[0m {msg}", flush=True)
+
+
+def die(msg: str, code: int = 1) -> None:
+    print(f"\033[31m[fail]\033[0m {msg}", flush=True)
+    sys.exit(code)
+
+
+def port_is_free(port: int) -> bool:
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # SO_REUSEADDR：忽略 BSD/macOS 上 TIME_WAIT 残留（uvicorn 自己也这样 bind）
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        s.bind(("127.0.0.1", port))
+        return True
+    except OSError:
+        return False
+    finally:
+        s.close()
+
+
+def wait_for_port(port: int, timeout: float = 20.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(0.3)
+        try:
+            s.connect(("127.0.0.1", port))
+            return True
+        except Exception:
+            time.sleep(0.2)
+        finally:
+            s.close()
+    return False
+
+
+# ── 依赖检查 ─────────────────────────────────
+CORE_PKGS = ("fastapi", "uvicorn", "yaml", "requests", "jwt")
+
+
+def missing_core_pkgs() -> list[str]:
+    missing = []
+    for name in CORE_PKGS:
+        try:
+            __import__(name)
+        except ImportError:
+            missing.append(name)
+    return missing
+
+
+def install_deps(quiet: bool = True) -> None:
+    if not REQUIREMENTS.exists():
+        warn("requirements.txt 缺失，跳过依赖安装")
+        return
+    say("装 Python 依赖（pip install -r requirements.txt）...")
+    cmd = [sys.executable, "-m", "pip", "install", "-r", str(REQUIREMENTS)]
+    if quiet:
+        cmd.insert(4, "-q")
+    r = subprocess.run(cmd, cwd=str(ROOT))
+    if r.returncode != 0:
+        die("pip install 失败；手动跑：pip install -r requirements.txt")
+
+
+# ── 首跑 bootstrap ───────────────────────────
+def bootstrap(force: bool = False) -> None:
+    """首跑：装依赖 + 复制 .env + 启 git hooks。等价于 setup.sh --mode solo --non-interactive"""
+    done_before = MARKER.exists() and not force
+
+    # 依赖
+    missing = missing_core_pkgs()
+    if missing or force:
+        if missing:
+            say(f"缺依赖：{', '.join(missing)}")
+        install_deps()
+
+    # .env
+    if not ENV_FILE.exists() and ENV_EXAMPLE.exists():
+        shutil.copyfile(ENV_EXAMPLE, ENV_FILE)
+        say(f"已复制 .env.example → .env")
+
+    # git hooks（隐私守门员）
+    if (ROOT / ".git").exists() and (ROOT / ".githooks").exists():
+        try:
+            subprocess.run(
+                ["git", "config", "core.hooksPath", ".githooks"],
+                cwd=str(ROOT), check=False, capture_output=True,
+            )
+        except Exception:
+            pass
+
+    # share_registry 兜底
+    sr_live = APP / "share_registry.json"
+    sr_sample = APP / "share_registry.sample.json"
+    if not sr_live.exists() and sr_sample.exists():
+        shutil.copyfile(sr_sample, sr_live)
+
+    if not done_before:
+        MARKER.write_text("ok\n", encoding="utf-8")
+        say("首跑初始化完成（solo 模式：单人自用、无认证）")
+        say("  - 要切成 family / demo / enterprise：跑 ./setup.sh")
+        say("  - 要改 AI key：编辑 .env")
+
+
+# ── 启动服务 ─────────────────────────────────
+def run_server(port: int, open_browser: bool) -> int:
+    if not SERVER.exists():
+        die(f"找不到 {SERVER}；是不是不在 Ome365 项目根目录？")
+
+    if not port_is_free(port):
+        warn(f"端口 {port} 已被占用")
+        warn(f"  查占用：lsof -ti:{port}")
+        warn(f"  换端口：./ome365 --port 8080")
+        return 2
+
+    env = os.environ.copy()
+    env["OME365_PORT"] = str(port)
+    # http://localhost 下 Secure cookie 会被浏览器吞掉，dev 默认关
+    env.setdefault("OME365_COOKIE_SECURE", "0")
+
+    say(f"启动 server.py（port={port}）...")
+    proc = subprocess.Popen(
+        [sys.executable, str(SERVER)],
+        cwd=str(APP), env=env,
+    )
+
+    try:
+        if wait_for_port(port, timeout=20):
+            url = f"http://localhost:{port}"
+            say(f"已就绪 → {url}")
+            if open_browser:
+                try:
+                    webbrowser.open(url)
+                except Exception:
+                    pass
+            say("按 Ctrl-C 停止")
+        else:
+            warn("server 20s 内未响应；看上面日志")
+
+        # 等 server 进程退出 / 用户 Ctrl-C
+        return proc.wait()
+    except KeyboardInterrupt:
+        say("收到 Ctrl-C，关停 server...")
+        try:
+            proc.terminate()
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        return 0
+
+
+# ── 子命令：doctor 自检 ─────────────────────
+def cmd_doctor() -> int:
+    ok = True
+    print("─" * 50)
+    print(f"  Python : {sys.version.split()[0]} ({sys.executable})")
+    print(f"  项目根  : {ROOT}")
+
+    missing = missing_core_pkgs()
+    if missing:
+        print(f"  依赖    : \033[31m缺{missing}\033[0m → 跑 ./ome365 --setup")
+        ok = False
+    else:
+        print(f"  依赖    : \033[32m核心包齐\033[0m")
+
+    if ENV_FILE.exists():
+        print(f"  .env    : \033[32m存在\033[0m")
+    else:
+        print(f"  .env    : \033[33m缺失\033[0m（首跑会自动复制）")
+
+    tc_live = APP / "tenant_config.json"
+    tc_sample = APP / "tenant_config.sample.json"
+    if tc_live.exists():
+        print(f"  租户配置 : live（{tc_live.name}）")
+    elif tc_sample.exists():
+        print(f"  租户配置 : sample 兜底（solo/demo 默认 OK）")
+    else:
+        print(f"  租户配置 : \033[31m两个都缺\033[0m")
+        ok = False
+
+    port = int(os.environ.get("OME365_PORT", "3650"))
+    if port_is_free(port):
+        print(f"  端口 {port} : \033[32m空闲\033[0m")
+    else:
+        print(f"  端口 {port} : \033[33m被占\033[0m（lsof -ti:{port}）")
+
+    home = Path(os.environ.get("OME365_HOME", Path.home() / ".ome365"))
+    tenants = home / "tenants"
+    if tenants.exists():
+        n = len([p for p in tenants.iterdir() if p.is_dir()])
+        print(f"  多租户  : {n} 个（{tenants}）")
+    else:
+        print(f"  多租户  : 未启用（legacy 单用户）")
+
+    print("─" * 50)
+    return 0 if ok else 1
+
+
+# ── 主入口 ───────────────────────────────────
+def main() -> int:
+    # 支持两种用法：./ome365 [flags] | ./ome365 <subcommand>
+    argv = sys.argv[1:]
+    if argv and argv[0] in ("setup", "doctor", "help", "--help", "-h"):
+        sub = argv[0]
+        if sub in ("help", "--help", "-h"):
+            print(__doc__)
+            return 0
+        if sub == "setup":
+            setup_sh = ROOT / "setup.sh"
+            if not setup_sh.exists():
+                die("setup.sh 缺失")
+            os.execv("/bin/bash", ["bash", str(setup_sh), *argv[1:]])
+        if sub == "doctor":
+            return cmd_doctor()
+
+    p = argparse.ArgumentParser(
+        prog="ome365",
+        description="Ome365 极简启动器：首跑自动装依赖、起服务、开浏览器。",
+    )
+    p.add_argument("--port", type=int, default=int(os.environ.get("OME365_PORT", "3650")),
+                   help="服务端口（默认 3650 或 env OME365_PORT）")
+    p.add_argument("--no-open", action="store_true", help="不自动打开浏览器")
+    p.add_argument("--setup", action="store_true", help="强制跑一次 bootstrap（装依赖 / 复制 .env / 装 git hooks）")
+    p.add_argument("--no-bootstrap", action="store_true", help="跳过 bootstrap（已装好了只想起服务）")
+    args = p.parse_args(argv)
+
+    if args.setup:
+        bootstrap(force=True)
+        return 0
+
+    if not args.no_bootstrap:
+        if not MARKER.exists() or missing_core_pkgs():
+            bootstrap(force=False)
+
+    return run_server(args.port, open_browser=not args.no_open)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(130)
