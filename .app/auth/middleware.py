@@ -1,21 +1,15 @@
 """
-Ome365 · Auth 中间件
+Ome365 · Auth 中间件（多租户 · registry 模式）
 
 职责：
-1. 每个 HTTP 请求进来先解 cookie → session_store → User
-2. 把 User + tenant_id 注入 ctx.RequestCtx（ContextVar）
-3. 挂到哪些路由前面，让 VAULT 调用点自动按 tenant 走到正确的 user vault
-4. 未登录且路径在保护列表 → 301 到 login_url；否则放行（public 路径仍可访问）
+1. 解析请求的 tenant_id（subdomain / path / header / env）
+2. 从 AuthRegistry 取该租户的 AuthProvider
+3. 用 provider.authenticate 解 cookie → User（且校验 user.tenant_id 匹配）
+4. 注入 RequestCtx（含 provider & tid）到 ContextVar
+5. 保护路径未登录 → 302 到 provider.login_url 或 401
 
-使用姿势（在 server.py 里）:
-    from auth.middleware import AuthMiddleware, install_auth
-    install_auth(app, provider, session_store, tenant_config=TENANT)
-
-保护策略默认：
-- /api/** 要求已登录（除了 /api/tenant/config、/api/health 等白名单）
-- /auth/** 永远放行（登录流程自身）
-- /share-static/**、/s/** 放行（分享站走 token，不走登录）
-- / 与静态资源放行（前端路由；未登录由前端触发登录）
+企业 A 的企微扫码只能登进企业 A 租户；企业 B 的 OIDC 只能登进企业 B 租户。
+跨租户 cookie 由 middleware 拒认（provider.authenticate 内部比 tenant_id）。
 """
 from __future__ import annotations
 
@@ -25,12 +19,16 @@ from typing import Optional, Callable
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, RedirectResponse
-from starlette.requests import Request  # 放在模块级，方便 FastAPI 通过 __globals__ 解析类型注解
+from starlette.requests import Request  # 放模块级，FastAPI 通过 __globals__ 解析类型注解
 
 try:
     from ctx import RequestCtx, _ctx_var, load_tenant_config, user_vault, user_state_dir, user_settings_path, ome365_home, is_multi_user_mode
+    from auth.tenant_router import resolve_tenant_id
+    from auth.registry import AuthRegistry
 except ImportError:  # pragma: no cover
     from ..ctx import RequestCtx, _ctx_var, load_tenant_config, user_vault, user_state_dir, user_settings_path, ome365_home, is_multi_user_mode
+    from .tenant_router import resolve_tenant_id
+    from .registry import AuthRegistry
 
 
 DEFAULT_PUBLIC_PATTERNS = [
@@ -39,16 +37,15 @@ DEFAULT_PUBLIC_PATTERNS = [
     "/s/*",
     "/static/*",
     "/favicon.ico",
-    "/",                 # index.html（前端路由；登录态由前端检查）
+    "/",
     "/api/tenant/config",
     "/api/cockpit/config",
     "/api/_ctx/healthcheck",
     "/api/auth/healthcheck",
     "/api/auth/me",
-    "/api/auth/login",   # POST 登录表单
+    "/api/auth/login",
     "/api/auth/logout",
     "/api/auth/magic/request",
-    # 分享站公开路径
     "/api/doc/*",
     "/api/registry",
     "/api/user/*/docs",
@@ -63,121 +60,128 @@ def _path_matches(path: str, patterns: list[str]) -> bool:
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    """
-    每请求：
-    - 读 cookie 'ome365_sid' → provider.authenticate(request) → User
-    - 写 ContextVar（ctx.RequestCtx）供下游代码读
-    - 保护路径未登录时重定向到 login_url 或返回 401
-    """
+    """每请求：解租户 → 取 provider → 解 session → 注入 ctx → 放行或拦截"""
 
     def __init__(
         self,
         app,
-        provider,
-        session_store=None,
-        tenant_config: dict | None = None,
+        registry: AuthRegistry,
         public_patterns: list[str] | None = None,
-        protect_api: bool = True,
+        default_protect_api: bool = True,
     ):
         super().__init__(app)
-        self.provider = provider
-        self.session_store = session_store
-        self.tenant_config = tenant_config or {}
+        self.registry = registry
         self.public_patterns = list(public_patterns or DEFAULT_PUBLIC_PATTERNS)
-        self.protect_api = protect_api
+        self.default_protect_api = default_protect_api
 
     async def dispatch(self, request, call_next):
         path = request.url.path
+        tid = resolve_tenant_id(request)
+        provider = self.registry.get(tid)
+
+        # 取当前租户的保护开关
+        tcfg = load_tenant_config(tid) or {}
+        acfg = tcfg.get("auth") or {}
+        protect_api = bool(acfg.get("protect_api", self.default_protect_api if provider.name != "none" else False))
+
         user = None
         try:
-            user = await self.provider.authenticate(request)
+            user = await provider.authenticate(request)
         except Exception as e:
-            # Provider 炸了不要阻断请求，降级成未登录
-            print(f"[auth] provider.authenticate error: {e}")
+            print(f"[auth] provider.authenticate error (tid={tid}): {e}")
             user = None
 
-        tenant_id = (user.tenant_id if user else self.tenant_config.get("tenant_id") or "default")
         uid = (user.user_id if user else "captain")
-
-        # 构造 RequestCtx 并注入 ContextVar
+        # 构造 RequestCtx
         try:
             ctx = RequestCtx(
-                tenant_id=tenant_id,
+                tenant_id=tid,
                 user_id=uid,
-                vault_path=user_vault(tenant_id, uid),
-                state_dir=user_state_dir(tenant_id, uid),
-                settings_path=user_settings_path(tenant_id, uid),
-                tenant_config=load_tenant_config(tenant_id),
+                vault_path=user_vault(tid, uid),
+                state_dir=user_state_dir(tid, uid),
+                settings_path=user_settings_path(tid, uid),
+                tenant_config=tcfg,
                 is_multi_user=is_multi_user_mode(),
                 user=user,
             )
         except Exception as e:
-            print(f"[auth] ctx build error: {e}")
+            print(f"[auth] ctx build error (tid={tid}): {e}")
             ctx = None
 
         token = _ctx_var.set(ctx) if ctx is not None else None
 
         try:
-            # 保护策略：未登录 + 非 public → 拦截
-            needs_auth = self._needs_auth(path)
-            if needs_auth and user is None:
+            if self._needs_auth(path, protect_api) and user is None:
+                login_url = await provider.login_url(path)
                 if path.startswith("/api/"):
-                    return JSONResponse({"error": "unauthorized", "login_url": await self.provider.login_url(path)}, status_code=401)
-                return RedirectResponse(await self.provider.login_url(path))
-            resp = await call_next(request)
-            return resp
+                    return JSONResponse(
+                        {"error": "unauthorized", "tenant": tid, "provider": provider.name, "login_url": login_url},
+                        status_code=401,
+                    )
+                return RedirectResponse(login_url)
+            return await call_next(request)
         finally:
             if token is not None:
                 _ctx_var.reset(token)
 
-    def _needs_auth(self, path: str) -> bool:
+    def _needs_auth(self, path: str, protect_api: bool) -> bool:
         if _path_matches(path, self.public_patterns):
             return False
-        if self.protect_api and path.startswith("/api/"):
+        if protect_api and path.startswith("/api/"):
             return True
-        # 其它路径默认放行（前端自己处理登录态）
         return False
 
 
-def install_auth(app, provider, session_store=None, tenant_config=None, public_patterns=None, protect_api=None):
+# ──────────────────────────────────────────────────
+# Install: middleware + 通用登录端点
+# ──────────────────────────────────────────────────
+
+def install_auth(app, registry: AuthRegistry, public_patterns=None, default_protect_api: bool = True):
     """
-    在 FastAPI app 上装好 auth 中间件 + 登录/登出/me 三个标准端点。
+    装中间件 + 全部登录端点。
+    所有端点都按请求里解析出的 tenant_id 取对应 provider，不依赖单例。
     """
     from fastapi.responses import JSONResponse, RedirectResponse
-
-    # 保护策略开关：tenant_config.auth.protect_api（默认 True；none provider 建议 False）
-    if protect_api is None:
-        tcfg = (tenant_config or {}).get("auth") or {}
-        protect_api = bool(tcfg.get("protect_api", provider.name != "none"))
+    from starlette.responses import HTMLResponse
+    from pathlib import Path as _P
 
     app.add_middleware(
         AuthMiddleware,
-        provider=provider,
-        session_store=session_store,
-        tenant_config=tenant_config,
+        registry=registry,
         public_patterns=public_patterns,
-        protect_api=protect_api,
+        default_protect_api=default_protect_api,
     )
+
+    def _prov(request: Request):
+        tid = resolve_tenant_id(request)
+        return tid, registry.get(tid)
+
+    def _set_session_cookie(resp, sid: str):
+        resp.set_cookie(
+            "ome365_sid", sid,
+            httponly=True, samesite="lax",
+            secure=os.environ.get("OME365_COOKIE_SECURE", "0") == "1",
+            path="/", max_age=60 * 60 * 24 * 30,
+        )
 
     @app.get("/auth/login")
     async def _login_page(request: Request):
-        """登录页（静态 HTML 通过根 static 挂载提供，这里转发）"""
-        from pathlib import Path as _P
         login_html = _P(__file__).parent.parent / "static" / "login.html"
         if not login_html.exists():
             return JSONResponse({"error": "login page missing"}, status_code=500)
-        from starlette.responses import HTMLResponse
         return HTMLResponse(login_html.read_text("utf-8"))
 
     @app.get("/api/auth/me")
     async def _me(request: Request):
+        tid, provider = _prov(request)
         u = await provider.authenticate(request)
         if not u:
-            return JSONResponse({"authenticated": False, "provider": provider.name}, status_code=200)
-        return {"authenticated": True, "provider": provider.name, "user": u.to_dict()}
+            return JSONResponse({"authenticated": False, "tenant": tid, "provider": provider.name}, status_code=200)
+        return {"authenticated": True, "tenant": tid, "provider": provider.name, "user": u.to_dict()}
 
     @app.post("/api/auth/logout")
     async def _logout(request: Request):
+        _, provider = _prov(request)
         sid = request.cookies.get("ome365_sid")
         if sid:
             await provider.logout(sid)
@@ -185,11 +189,12 @@ def install_auth(app, provider, session_store=None, tenant_config=None, public_p
         resp.delete_cookie("ome365_sid", path="/")
         return resp
 
-    # Basic provider 登录（表单或 JSON POST）
+    # ── basic ──
     @app.post("/api/auth/login")
     async def _login(request: Request):
+        tid, provider = _prov(request)
         if provider.name != "basic":
-            return JSONResponse({"error": f"{provider.name} 不支持密码登录"}, status_code=400)
+            return JSONResponse({"error": f"tenant '{tid}' uses {provider.name}, not basic", "provider": provider.name}, status_code=400)
         try:
             if request.headers.get("content-type", "").startswith("application/json"):
                 payload = await request.json()
@@ -207,23 +212,17 @@ def install_auth(app, provider, session_store=None, tenant_config=None, public_p
         user = await provider.verify_password(uid, password or "")
         if not user:
             return JSONResponse({"error": "invalid credentials"}, status_code=401)
-        if session_store is None:
-            return JSONResponse({"error": "session store not configured"}, status_code=500)
-        sess = session_store.create(user)
-        resp = JSONResponse({"ok": True, "user": user.to_dict(), "next": next_url})
-        resp.set_cookie(
-            "ome365_sid", sess.sid,
-            httponly=True, samesite="lax",
-            secure=os.environ.get("OME365_COOKIE_SECURE", "0") == "1",
-            path="/", max_age=60 * 60 * 24 * 30,
-        )
+        sess = registry.session_store.create(user)
+        resp = JSONResponse({"ok": True, "user": user.to_dict(), "next": next_url, "tenant": tid})
+        _set_session_cookie(resp, sess.sid)
         return resp
 
-    # Magic-link endpoints
+    # ── magic_link ──
     @app.post("/api/auth/magic/request")
     async def _magic_request(request: Request):
+        tid, provider = _prov(request)
         if provider.name != "magic_link":
-            return JSONResponse({"error": f"{provider.name} 不支持 magic link"}, status_code=400)
+            return JSONResponse({"error": f"tenant '{tid}' uses {provider.name}, not magic_link"}, status_code=400)
         try:
             if request.headers.get("content-type", "").startswith("application/json"):
                 payload = await request.json()
@@ -239,24 +238,93 @@ def install_auth(app, provider, session_store=None, tenant_config=None, public_p
             await provider.request_link(email, next_url=next_url, request=request)
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=400)
-        return {"ok": True, "message": "如果该邮箱在允许列表中，登录链接已发送；请查收邮件。"}
+        return {"ok": True, "tenant": tid, "message": "如邮箱在允许列表，登录链接已发送。"}
 
     @app.get("/auth/magic/verify")
     async def _magic_verify(request: Request):
+        tid, provider = _prov(request)
         if provider.name != "magic_link":
-            return JSONResponse({"error": f"{provider.name} 不支持 magic link"}, status_code=400)
+            return JSONResponse({"error": f"tenant '{tid}' uses {provider.name}, not magic_link"}, status_code=400)
         token = request.query_params.get("token", "")
         next_url = request.query_params.get("next") or "/"
         sess = await provider.verify_token(token)
         if not sess:
             return JSONResponse({"error": "invalid or expired token"}, status_code=401)
         resp = RedirectResponse(next_url)
-        resp.set_cookie(
-            "ome365_sid", sess.sid,
-            httponly=True, samesite="lax",
-            secure=os.environ.get("OME365_COOKIE_SECURE", "0") == "1",
-            path="/", max_age=60 * 60 * 24 * 30,
-        )
+        _set_session_cookie(resp, sess.sid)
         return resp
+
+    # ── OIDC ──
+    @app.get("/auth/oidc/start")
+    async def _oidc_start(request: Request):
+        tid, provider = _prov(request)
+        if provider.name != "oidc":
+            return JSONResponse({"error": f"tenant '{tid}' uses {provider.name}, not oidc"}, status_code=400)
+        next_url = request.query_params.get("next") or "/"
+        try:
+            url = provider.start_url(next_url)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+        return RedirectResponse(url)
+
+    @app.get("/auth/oidc/callback")
+    async def _oidc_callback(request: Request):
+        # 注意：state 里签了 tid；这里先看 pending store 解 tid，然后取对应 provider
+        state = request.query_params.get("state", "")
+        pending = registry.oidc_pending
+        # 窥视一下 state 里的 tid（不消费，provider.callback 会消费）
+        # 为避免窥视后再消费的 TOCTOU，改为：按当前 request 解析 tid 即可——
+        # 正常情况下 redirect_uri 就是租户专属 URL（不同 subdomain），自然回到对的租户。
+        tid, provider = _prov(request)
+        if provider.name != "oidc":
+            return JSONResponse({"error": f"callback for oidc but tenant '{tid}' uses {provider.name}"}, status_code=400)
+        try:
+            sess = await provider.callback(request)
+        except Exception as e:
+            return JSONResponse({"error": str(e), "tenant": tid}, status_code=401)
+        if not sess:
+            return JSONResponse({"error": "callback returned no session"}, status_code=401)
+        next_url = (sess.data or {}).get("_next_url", "/")
+        resp = RedirectResponse(next_url)
+        _set_session_cookie(resp, sess.sid)
+        return resp
+
+    # ── Wecom ──
+    @app.get("/auth/wecom/start")
+    async def _wecom_start(request: Request):
+        tid, provider = _prov(request)
+        if provider.name != "wecom":
+            return JSONResponse({"error": f"tenant '{tid}' uses {provider.name}, not wecom"}, status_code=400)
+        next_url = request.query_params.get("next") or "/"
+        try:
+            url = provider.start_url(next_url)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+        return RedirectResponse(url)
+
+    @app.get("/auth/wecom/callback")
+    async def _wecom_callback(request: Request):
+        tid, provider = _prov(request)
+        if provider.name != "wecom":
+            return JSONResponse({"error": f"callback for wecom but tenant '{tid}' uses {provider.name}"}, status_code=400)
+        try:
+            sess = await provider.callback(request)
+        except Exception as e:
+            return JSONResponse({"error": str(e), "tenant": tid}, status_code=401)
+        if not sess:
+            return JSONResponse({"error": "callback returned no session"}, status_code=401)
+        next_url = (sess.data or {}).get("_next_url", "/")
+        resp = RedirectResponse(next_url)
+        _set_session_cookie(resp, sess.sid)
+        return resp
+
+    # ── 健康检查 ──
+    @app.get("/api/auth/healthcheck")
+    async def _auth_hc(request: Request):
+        tid, provider = _prov(request)
+        hc = provider.healthcheck()
+        hc["tenant_id"] = tid
+        hc["sessions"] = registry.session_store.count()
+        return hc
 
     return app

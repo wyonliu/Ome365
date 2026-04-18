@@ -446,6 +446,194 @@ def suite_share_routes():
         _stop_server(proc, backup)
 
 
+# ── Phase 2c · 多租户 Registry & SSO ───────────
+
+def suite_tenant_router():
+    print("\n[tenant_router]")
+    from auth.tenant_router import resolve_tenant_id, strip_tenant_path
+
+    class _FakeReq:
+        def __init__(self, host="example.com", path="/", headers=None):
+            self.headers = headers or {}
+            class _U:
+                def __init__(self, h, p):
+                    self.hostname = h.split(":")[0]
+                    self.path = p
+            self.url = _U(host, path)
+
+    @test("header X-Ome-Tenant 优先级最高")
+    def t1():
+        r = _FakeReq(host="acme.ome.com", path="/", headers={"x-ome-tenant": "globex"})
+        assert resolve_tenant_id(r) == "globex"
+
+    @test("subdomain 解析 acme.ome.com → acme")
+    def t2():
+        r = _FakeReq(host="acme.ome.com", path="/")
+        assert resolve_tenant_id(r) == "acme"
+
+    @test("保留 subdomain www/api/static 跳过")
+    def t3():
+        r = _FakeReq(host="www.ome.com", path="/")
+        assert resolve_tenant_id(r) != "www"
+
+    @test("localhost / IP 不解析 subdomain")
+    def t4():
+        r1 = _FakeReq(host="localhost", path="/")
+        r2 = _FakeReq(host="127.0.0.1", path="/")
+        assert resolve_tenant_id(r1) == "default"
+        assert resolve_tenant_id(r2) == "default"
+
+    @test("path 前缀 /t/acme/foo → acme")
+    def t5():
+        r = _FakeReq(host="ome.com", path="/t/acme/foo")
+        assert resolve_tenant_id(r) == "acme"
+
+    @test("env OME365_DEFAULT_TENANT 兜底")
+    def t6():
+        os.environ["OME365_DEFAULT_TENANT"] = "internal"
+        try:
+            r = _FakeReq(host="ome.com", path="/")
+            assert resolve_tenant_id(r) == "internal"
+        finally:
+            os.environ.pop("OME365_DEFAULT_TENANT", None)
+
+    @test("strip_tenant_path 剥 /t/{tid}")
+    def t7():
+        assert strip_tenant_path("/t/acme/api/dashboard", "acme") == "/api/dashboard"
+        assert strip_tenant_path("/t/acme", "acme") == "/"
+        assert strip_tenant_path("/api/x", "acme") == "/api/x"
+
+    t1(); t2(); t3(); t4(); t5(); t6(); t7()
+
+
+def suite_registry():
+    print("\n[auth registry · 多租户 provider 工厂]")
+    from auth.registry import AuthRegistry
+    from auth.session_store import SessionStore
+
+    @test("registry 默认 tenant → NoneProvider")
+    def t1():
+        tmp = Path(tempfile.mkdtemp()) / "s.db"
+        os.environ.pop("OME365_AUTH_PROVIDER", None)
+        reg = AuthRegistry(SessionStore(tmp))
+        p = reg.get("default")
+        assert p.name == "none", f"expected none, got {p.name}"
+        shutil.rmtree(tmp.parent, ignore_errors=True)
+
+    @test("registry 缓存：两次 get 同 tenant 返回同一 provider")
+    def t2():
+        tmp = Path(tempfile.mkdtemp()) / "s.db"
+        reg = AuthRegistry(SessionStore(tmp))
+        a = reg.get("default")
+        b = reg.get("default")
+        assert a is b
+        shutil.rmtree(tmp.parent, ignore_errors=True)
+
+    @test("registry env 按租户覆盖 OME365_AUTH_PROVIDER_ACME")
+    def t3():
+        tmp = Path(tempfile.mkdtemp()) / "s.db"
+        os.environ["OME365_AUTH_PROVIDER_ACME"] = "basic"
+        try:
+            reg = AuthRegistry(SessionStore(tmp))
+            p = reg.get("acme")
+            assert p.name == "basic"
+        finally:
+            os.environ.pop("OME365_AUTH_PROVIDER_ACME", None)
+            shutil.rmtree(tmp.parent, ignore_errors=True)
+
+    @test("registry invalidate 清缓存重建")
+    def t4():
+        tmp = Path(tempfile.mkdtemp()) / "s.db"
+        reg = AuthRegistry(SessionStore(tmp))
+        a = reg.get("default")
+        reg.invalidate("default")
+        b = reg.get("default")
+        assert a is not b
+        shutil.rmtree(tmp.parent, ignore_errors=True)
+
+    t1(); t2(); t3(); t4()
+
+
+def suite_sso_providers():
+    print("\n[sso providers · OIDC / WeCom 单元契约]")
+    from auth.providers.oidc_provider import OIDCProvider, OIDCPendingStore
+    from auth.providers.wecom_provider import WecomProvider, WecomPendingStore
+    from auth.session_store import SessionStore
+
+    @test("OIDCPendingStore put/consume 单次消费")
+    def t1():
+        tmp = Path(tempfile.mkdtemp()) / "o.db"
+        st = OIDCPendingStore(tmp)
+        st.put("state-x", "globex", "nonce-x", "verifier-x", "/home")
+        d = st.consume("state-x")
+        assert d and d["tenant_id"] == "globex" and d["next_url"] == "/home"
+        # 再消费 None
+        assert st.consume("state-x") is None
+        shutil.rmtree(tmp.parent, ignore_errors=True)
+
+    @test("OIDCPendingStore 过期 TTL 不返回")
+    def t2():
+        tmp = Path(tempfile.mkdtemp()) / "o.db"
+        st = OIDCPendingStore(tmp)
+        st.put("s", "t", "n", "v", "/", ttl_seconds=0)
+        time.sleep(0.01)
+        assert st.consume("s") is None
+        shutil.rmtree(tmp.parent, ignore_errors=True)
+
+    @test("OIDCProvider healthcheck 未配完整 → issues 非空")
+    def t3():
+        p = OIDCProvider({}, tenant_id="globex")
+        hc = p.healthcheck()
+        assert hc["provider"] == "oidc"
+        assert hc["tenant_id"] == "globex"
+        assert not hc["ok"] and hc["issues"]
+
+    @test("WecomPendingStore put/consume + tenant 绑定")
+    def t4():
+        tmp = Path(tempfile.mkdtemp()) / "w.db"
+        st = WecomPendingStore(tmp)
+        st.put("s1", "acme", "/home")
+        d = st.consume("s1")
+        assert d and d["tenant_id"] == "acme"
+        assert st.consume("s1") is None
+        shutil.rmtree(tmp.parent, ignore_errors=True)
+
+    @test("WecomProvider healthcheck 未配 → issues 非空")
+    def t5():
+        p = WecomProvider({}, tenant_id="acme")
+        hc = p.healthcheck()
+        assert hc["provider"] == "wecom"
+        assert hc["tenant_id"] == "acme"
+        assert not hc["ok"]
+
+    @test("WecomProvider start_url 未配 → 抛 AuthConfigError")
+    def t6():
+        from auth.base import AuthConfigError
+        p = WecomProvider({}, tenant_id="acme")
+        try:
+            p.start_url("/")
+            assert False, "应抛"
+        except AuthConfigError:
+            pass
+
+    @test("跨租户 session 拒认：acme session 不能登进 globex")
+    def t7():
+        from auth.base import User
+        tmp = Path(tempfile.mkdtemp()) / "s.db"
+        ss = SessionStore(tmp)
+        u = User(user_id="wyon", tenant_id="acme", display_name="w", email="", roles=["user"], provider="wecom")
+        sess = ss.create(u)
+        # 模拟 globex 租户的 wecom provider 用同 session_store
+        p_globex = WecomProvider({"corp_id": "wwGlobex", "agent_id": "1", "redirect_uri": "https://x"}, session_store=ss, tenant_id="globex")
+        class _FakeReq:
+            cookies = {"ome365_sid": sess.sid}
+        u2 = asyncio.run(p_globex.authenticate(_FakeReq()))
+        assert u2 is None, "跨租户 session 必须拒认"
+        shutil.rmtree(tmp.parent, ignore_errors=True)
+
+    t1(); t2(); t3(); t4(); t5(); t6(); t7()
+
+
 # ── 主入口 ─────────────────────────────────────
 
 SUITES = {
@@ -456,6 +644,9 @@ SUITES = {
     "http_none": suite_http_none,
     "http_basic": suite_http_basic,
     "share": suite_share_routes,
+    "tenant_router": suite_tenant_router,
+    "registry": suite_registry,
+    "sso": suite_sso_providers,
 }
 
 
