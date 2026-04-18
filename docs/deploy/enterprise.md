@@ -147,7 +147,7 @@ $OME365_HOME/
 ```bash
 OME365_WECOM_ACME_SECRET=xxx
 OME365_OIDC_GLOBEX_SECRET=yyy
-OME365_COOKIE_SECURE=1
+# OME365_COOKIE_SECURE 默认 1；仅本地 http dev 需要设 0
 # 可选：按租户临时覆盖 provider
 # OME365_AUTH_PROVIDER_ACME=wecom
 ```
@@ -259,7 +259,7 @@ server {
 }
 ```
 
-别忘 `export OME365_COOKIE_SECURE=1`，否则 server 写出的 cookie 没带 `Secure`，现代浏览器会拒 HTTPS 站点发出的非 Secure cookie。
+Cookie `Secure` 标志默认 on，生产 HTTPS 无需额外配置。本地 `http://localhost` dev 如果遇到 "登录后 /api/auth/me 仍返回未登录"，设 `OME365_COOKIE_SECURE=0` 即可（浏览器不回传 Secure cookie 到明文连接）。
 
 ---
 
