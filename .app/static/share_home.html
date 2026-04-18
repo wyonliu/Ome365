@@ -276,8 +276,6 @@ const USER = '{{USER}}';
 let docs = [];
 let customFolders = JSON.parse(localStorage.getItem('sh-folders-' + USER) || '[]');
 let view = localStorage.getItem('sh-view') || 'grid';
-// Migrate legacy sh-theme value 'longfor' → 'light'
-if (localStorage.getItem('sh-theme') === 'longfor') localStorage.setItem('sh-theme', 'light');
 let theme = localStorage.getItem('sh-theme') || '';
 let collapsed = JSON.parse(localStorage.getItem('sh-collapsed') || '{}');
 let searchQ = '';

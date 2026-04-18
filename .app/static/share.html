@@ -522,8 +522,6 @@ function toggleTheme() {
     localStorage.setItem('sh-theme', legacy === 'light' ? 'light' : '');
     localStorage.removeItem('share-theme');
   }
-  // Migrate older value 'longfor' → 'light' (theme rename)
-  if (localStorage.getItem('sh-theme') === 'longfor') localStorage.setItem('sh-theme', 'light');
   const saved = localStorage.getItem('sh-theme');
   if (saved === 'light') {
     document.documentElement.setAttribute('data-theme', 'light');

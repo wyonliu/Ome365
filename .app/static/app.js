@@ -1296,7 +1296,8 @@ const app = createApp({
     const showContactForm = ref(false);
     const contactFilter = ref({category:'',tier:''});
     const contactView = ref('org');
-    const orgExpandedNodes = ref(new Set(['root','group-mgmt','c-channels','n-channels','qianding']));
+    // 默认只展开 root；分组节点 id 由 tenant 的 cockpit_config.orgTree 决定，不在代码里写死业务 id
+    const orgExpandedNodes = ref(new Set(['root']));
     const orgPersonExpanded = ref(new Set());
     function toggleOrgNode(key) {
       const s = orgExpandedNodes.value;
@@ -1609,11 +1610,6 @@ const app = createApp({
     }
 
     // Theme (dark / light) — default variant id comes from tenant, stored in localStorage
-    // Migrate legacy value 'longfor' → 'light' (user theme preserved across rename)
-    {
-      const _lt = localStorage.getItem('ome365_theme');
-      if (_lt === 'longfor') localStorage.setItem('ome365_theme', 'light');
-    }
     const theme = ref(localStorage.getItem('ome365_theme') || 'dark');
     function applyTheme(name) {
       document.documentElement.setAttribute('data-theme', name);
