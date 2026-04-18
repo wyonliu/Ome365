@@ -48,4 +48,31 @@ if [ -n "$scan_files" ]; then
   done
 fi
 
+# ── 3. 业务名扫描：禁止具体企业 / 产品 / 内部俗称写进 public 代码 ──
+# 原则：船长口头举例 ≠ 可写进 public 仓的素材。统一换 acme/globex/<tenant-slug> 占位。
+# blocklist 从 .githooks/business_name_blocklist.txt 读（每行一个，# 开头为注释）
+# 只扫代码/docs/测试/config 路径；memory 文件、sample 数据、历史迁移代码不扫。
+BIZ_BLOCKLIST_FILE=".githooks/business_name_blocklist.txt"
+if [ -f "$BIZ_BLOCKLIST_FILE" ] && [ -n "$scan_files" ]; then
+  biz_words=$(grep -vE '^\s*(#|$)' "$BIZ_BLOCKLIST_FILE" | tr '\n' '|' | sed 's/|$//')
+  if [ -n "$biz_words" ]; then
+    # 扫描范围限定：.app/ docs/ scripts/ README.md 顶层 md
+    biz_scan_files=$(echo "$scan_files" | grep -E '^(\.app/|docs/|scripts/|[^/]+\.md$|tenant_config\.sample\.json$)' || true)
+    # 排除历史迁移代码 / migrate 脚本 / sample 示例 / 本 hook 自身
+    biz_scan_files=$(echo "$biz_scan_files" | grep -vE '^(scripts/migrate_to_multiuser\.py|\.app/tenant_config\.sample\.json)$' || true)
+    if [ -n "$biz_scan_files" ]; then
+      hit=$(git diff --cached -- $biz_scan_files | grep -iE "^\+.*($biz_words)" || true)
+      if [ -n "$hit" ]; then
+        echo "✗ pre-commit: 检测到业务名泄露（代码 vs 数据分离原则）"
+        echo "$hit" | head -10
+        echo ""
+        echo "  规则：具体企业/产品/内部俗称不能写进 .app/ docs/ scripts/ 的 public 代码。"
+        echo "  替换成占位：acme / globex / example.com / <tenant-slug> / Alice / Bob"
+        echo "  blocklist: $BIZ_BLOCKLIST_FILE （需新增词直接编辑）"
+        exit 1
+      fi
+    fi
+  fi
+fi
+
 exit 0
