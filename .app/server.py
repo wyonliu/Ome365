@@ -89,54 +89,27 @@ async def api_ctx_healthcheck():
     return healthcheck()
 
 
-# ── Auth ──────────────────────────────────────────────
-# tenant_config.auth.provider 决定用哪个 provider:
-#   - "none": 不认证（legacy 单人 / dev / demo vault）
-#   - "basic": 密码登录（demo / 家庭小团队）
-#   - "magic_link": 邮件一次性链接（家庭小团队）
-#   - "oidc" / "wecom": Phase 2c 实现
-_AUTH_CFG = (TENANT.get("auth") or {})
-_AUTH_PROVIDER_NAME = os.environ.get("OME365_AUTH_PROVIDER") or _AUTH_CFG.get("provider") or "none"
-_AUTH_PROVIDER = None
+# ── Auth（Phase 2c · 多租户 Registry 模式）────────────
+# 一个部署服务多家企业：企业 A 装 wecom（自家 corp_id），企业 B 装 oidc（自建 SSO），
+# 默认租户装 none/basic。Registry 按请求解析的 tenant_id 取对应 provider。
+# 租户解析：subdomain → /t/{tid} → X-Ome-Tenant header → env OME365_DEFAULT_TENANT。
+_AUTH_REGISTRY = None
 _SESSION_STORE = None
 try:
     from auth.session_store import SessionStore as _SessionStore
+    from auth.registry import AuthRegistry as _AuthRegistry
     from ctx import ome365_home as _ome365_home
     _sessions_db = _ome365_home() / "sessions.db"
     _SESSION_STORE = _SessionStore(_sessions_db)
-
-    _pcfg = ((_AUTH_CFG.get("providers") or {}).get(_AUTH_PROVIDER_NAME) or {})
-    _pcfg = {**_pcfg, "tenant_id": TENANT.get("_tenant_id") or "default"}
-    if _AUTH_PROVIDER_NAME == "none":
-        from auth.providers.none_provider import NoneProvider as _P
-        _AUTH_PROVIDER = _P(_pcfg)
-    elif _AUTH_PROVIDER_NAME == "basic":
-        from auth.providers.basic_provider import BasicProvider as _P
-        _AUTH_PROVIDER = _P(_pcfg, session_store=_SESSION_STORE)
-    elif _AUTH_PROVIDER_NAME == "magic_link":
-        from auth.providers.magic_link_provider import MagicLinkProvider as _P
-        _AUTH_PROVIDER = _P(_pcfg, session_store=_SESSION_STORE, token_db_path=_ome365_home() / "magic_tokens.db")
-    else:
-        print(f"[auth] unknown provider '{_AUTH_PROVIDER_NAME}', falling back to none")
-        from auth.providers.none_provider import NoneProvider as _P
-        _AUTH_PROVIDER = _P(_pcfg)
-    print(f"[auth] provider={_AUTH_PROVIDER.name} health={_AUTH_PROVIDER.healthcheck()}")
+    _AUTH_REGISTRY = _AuthRegistry(_SESSION_STORE)
 
     from auth.middleware import install_auth
-    install_auth(app, _AUTH_PROVIDER, session_store=_SESSION_STORE, tenant_config=TENANT)
+    install_auth(app, _AUTH_REGISTRY)
+    print(f"[auth] registry installed; default tenant will lazy-build provider per request")
 except Exception as _e:
     import traceback
     traceback.print_exc()
     print(f"[auth] install failed, running without auth: {_e}")
-
-
-@app.get("/api/auth/healthcheck")
-async def api_auth_healthcheck():
-    if _AUTH_PROVIDER is None:
-        return {"ok": False, "provider": None, "error": "auth not installed"}
-    hc = _AUTH_PROVIDER.healthcheck()
-    hc["sessions"] = (_SESSION_STORE.count() if _SESSION_STORE else 0)
-    return hc
 
 
 # ── Settings ──────────────────────────────────────────

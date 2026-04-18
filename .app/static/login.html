@@ -88,9 +88,24 @@
     formMagic.classList.add('hide');
   } else if (provider === 'none') {
     location.replace(nextUrl); return;
+  } else if (provider === 'oidc' || provider === 'wecom') {
+    // SSO：前端直接带 next 跳到 /auth/{provider}/start，后端 302 去企业 IdP
+    formBasic.classList.add('hide');
+    formMagic.classList.add('hide');
+    tabs.style.display = 'none';
+    const ssoLabel = provider === 'wecom' ? '企业微信扫码登录' : '企业 SSO 登录';
+    document.getElementById('provider-info').innerHTML =
+      `<button id="btn-sso" style="margin-top:12px">${ssoLabel}</button>` +
+      `<div style="margin-top:10px;opacity:.8">跳转到 ${(tc.brand||{}).cockpit_title||'企业'} 的身份认证</div>`;
+    document.getElementById('btn-sso').addEventListener('click', () => {
+      location.href = `/auth/${provider}/start?next=${encodeURIComponent(nextUrl)}`;
+    });
+    // 自动跳转（2s 后）；留按钮允许用户手点
+    setTimeout(() => {
+      location.href = `/auth/${provider}/start?next=${encodeURIComponent(nextUrl)}`;
+    }, 1500);
   } else {
-    // OIDC / wecom 将来由后端直接 302；这里给个兜底
-    showMsg(`Provider "${provider}" 需要跳转登录，请联系管理员`, 'err');
+    showMsg(`Provider "${provider}" 未识别，请联系管理员`, 'err');
   }
 
   formBasic.addEventListener('submit', async (e) => {

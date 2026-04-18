@@ -23,13 +23,13 @@
 | `none` | 单人 / 内网 / 本地 dev | 无 |
 | `basic` | 公开 demo / 家庭 | `users[].password_hash`（argon2/bcrypt/sha256） |
 | `magic_link` | 家庭 / 小团队无需记密码 | SMTP 账号 |
-| `oidc` | 云图搜 / Okta / Azure AD / Auth0 等标准 OIDC | `issuer` / `client_id` / `client_secret` |
-| `wecom` | 企业微信 / 贝壳内部 | `corp_id` / `agent_id` / `secret` |
+| `oidc` | Okta / Azure AD / Auth0 / Keycloak / 企业自建 OIDC | `issuer` / `client_id` / `client_secret` |
+| `wecom` | 企业微信自建应用（任意企微生态企业） | `corp_id` / `agent_id` / `secret` |
 
 把选择写进 `$OME365_HOME/tenants/{tid}/tenant_config.json` 的 `auth.provider`。
 或用 env var `OME365_AUTH_PROVIDER=xxx` 临时覆盖（调试用）。
 
-### OIDC 示例（云图搜 / Okta / 自建 Keycloak）
+### OIDC 示例（Okta / Azure AD / Keycloak / 企业自建）
 
 ```json
 {
@@ -72,7 +72,91 @@
 }
 ```
 
-> **注**：Phase 2c 的 oidc / wecom provider 实现还未合入（卡在船长拍板 5 问）。当前企业部署可先跑 `basic` 过度，等 SSO provider 合入后直接改 `auth.provider` 即可。
+### 一套部署 · 多家企业并存（WeCom 租户 + OIDC 租户）
+
+Ome365 的 Auth 是 **Registry 模式**：一个部署内，每个租户挂自己的 provider，互不串门。HTTP 进来时按 `subdomain / /t/{tid} / X-Ome-Tenant header` 解租户，再取对应 provider 认证。
+
+下面用 `acme`（WeCom 企微扫码）和 `globex`（标准 OIDC）两个占位租户演示——替换成你自己的租户名即可。
+
+**部署拓扑**：
+```
+ome.acme.com     →  tenant_id=acme    →  WecomProvider(corp_id=wwAcme...)
+ome.globex.com   →  tenant_id=globex  →  OIDCProvider(issuer=https://sso.globex.com)
+ome.example.com  →  tenant_id=default →  BasicProvider / NoneProvider
+```
+
+**目录布局**：
+```
+$OME365_HOME/
+├── sessions.db            # 共享 session（每 session 绑 tenant_id，跨租户 cookie 拒认）
+├── oidc_pending.db        # OIDC state/verifier 表
+├── wecom_pending.db       # 企微 state 表
+└── tenants/
+    ├── acme/tenant_config.json      # auth.provider = wecom
+    ├── globex/tenant_config.json    # auth.provider = oidc
+    └── default/tenant_config.json   # auth.provider = basic
+```
+
+**各租户配置示例**（放各自 `tenants/{tid}/tenant_config.json`）：
+
+```jsonc
+// tenants/acme/tenant_config.json
+{
+  "_tenant_id": "acme",
+  "brand": { "cockpit_title": "Acme · AI Cockpit" },
+  "auth": {
+    "provider": "wecom",
+    "protect_api": true,
+    "providers": {
+      "wecom": {
+        "corp_id": "wwAcmeCorpId",
+        "agent_id": "1000002",
+        "secret_env": "OME365_WECOM_ACME_SECRET",
+        "redirect_uri": "https://ome.acme.com/auth/wecom/callback",
+        "allowlist_userids": ["alice", "bob"]
+      }
+    }
+  }
+}
+```
+
+```jsonc
+// tenants/globex/tenant_config.json
+{
+  "_tenant_id": "globex",
+  "brand": { "cockpit_title": "Globex · AI Navigator" },
+  "auth": {
+    "provider": "oidc",
+    "protect_api": true,
+    "providers": {
+      "oidc": {
+        "issuer": "https://sso.globex.com",
+        "client_id": "ome365",
+        "client_secret_env": "OME365_OIDC_GLOBEX_SECRET",
+        "redirect_uri": "https://ome.globex.com/auth/oidc/callback",
+        "scopes": ["openid", "profile", "email"],
+        "allowed_domains": ["globex.com"],
+        "uid_claim": "preferred_username"
+      }
+    }
+  }
+}
+```
+
+**env**（`.env` / docker secret / k8s secret）：
+```bash
+OME365_WECOM_ACME_SECRET=xxx
+OME365_OIDC_GLOBEX_SECRET=yyy
+OME365_COOKIE_SECURE=1
+# 可选：按租户临时覆盖 provider
+# OME365_AUTH_PROVIDER_ACME=wecom
+```
+
+**隔离保证**：
+- `acme` 企微扫出来的 userid 只会写进 acme session；中间件每请求都会 `user.tenant_id == ctx.tenant_id` 比对，不一致就拒认。
+- redirect_uri 按租户域名分开，企微/OIDC 回来天然落到对的租户。
+- `state/nonce/verifier` 单次消费 + 15 分钟 TTL，防 CSRF + 重放。
+- `acme` 员工把 cookie 手动复制到 `globex` 子域名，middleware 也会拒。
 
 ---
 
@@ -105,33 +189,33 @@
 每加一家公司 = 加一个 tenant dir：
 
 ```bash
-mkdir -p $OME365_HOME/tenants/longfor/users/wyon
-cat > $OME365_HOME/tenants/longfor/tenant_config.json <<EOF
+mkdir -p $OME365_HOME/tenants/acme/users/alice
+cat > $OME365_HOME/tenants/acme/tenant_config.json <<EOF
 {
-  "_tenant_id": "longfor",
+  "_tenant_id": "acme",
   "brand": {
-    "cockpit_title": "龙湖千丁 · AI Navigator",
+    "cockpit_title": "Acme · AI Navigator",
     "theme": "light",
-    "logo": "/brand/longfor.png"
+    "logo": "/brand/acme.png"
   },
   "auth": {
     "provider": "wecom",
     ...
   },
   "cockpit": {
-    "dir_name": "Cockpit-Longfor",
+    "dir_name": "Cockpit-Acme",
     "config_file": "cockpit_config.json"
   }
 }
 EOF
 
 # 用户 profile 指向各自 vault
-cat > $OME365_HOME/tenants/longfor/users/wyon/profile.json <<EOF
+cat > $OME365_HOME/tenants/acme/users/alice/profile.json <<EOF
 {
-  "uid": "wyon",
-  "email": "wyon@longfor.com",
-  "display_name": "船长",
-  "vault_path": "/data/vaults/longfor/wyon",
+  "uid": "alice",
+  "email": "alice@acme.com",
+  "display_name": "Alice",
+  "vault_path": "/data/vaults/acme/alice",
   "roles": ["admin"]
 }
 EOF
