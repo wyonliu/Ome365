@@ -26,11 +26,11 @@ from starlette.requests import Request  # 放模块级，FastAPI 通过 __global
 
 try:
     from ctx import RequestCtx, _ctx_var, load_tenant_config, user_vault, user_state_dir, user_settings_path, ome365_home, is_multi_user_mode
-    from auth.tenant_router import resolve_tenant_id
+    from auth.tenant_router import resolve_tenant_id, strip_tenant_path
     from auth.registry import AuthRegistry
 except ImportError:  # pragma: no cover
     from ..ctx import RequestCtx, _ctx_var, load_tenant_config, user_vault, user_state_dir, user_settings_path, ome365_home, is_multi_user_mode
-    from .tenant_router import resolve_tenant_id
+    from .tenant_router import resolve_tenant_id, strip_tenant_path
     from .registry import AuthRegistry
 
 
@@ -161,6 +161,25 @@ class AuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         tid = resolve_tenant_id(request)
         provider = self.registry.get(tid)
+
+        # path-prefix 部署（/t/{tid}/...）：把前缀从 scope 里剥掉，让 FastAPI 路由匹配
+        # 到真正的 /api/... 而不是 /t/{tid}/api/...。tid 已经解析好，后续逻辑不受影响。
+        stripped = strip_tenant_path(path, tid)
+        if stripped != path:
+            request.scope["path"] = stripped
+            # raw_path 供 starlette 内部使用（路由匹配 + URL 解析）
+            try:
+                request.scope["raw_path"] = stripped.encode("utf-8")
+            except Exception:
+                pass
+            path = stripped
+
+        # 让下游 handler / 再次调用 resolve_tenant_id 能拿到一致的 tid
+        # （path 前缀已经被剥了，不设 state 的话 handler 会误判为 default）
+        try:
+            request.state.tenant_id = tid
+        except Exception:
+            pass
 
         # 取当前租户的保护开关
         tcfg = load_tenant_config(tid) or {}

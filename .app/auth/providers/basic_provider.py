@@ -72,6 +72,7 @@ class BasicProvider:
     def __init__(self, config: dict | None = None, *, session_store=None):
         self.config = config or {}
         self.session_store = session_store
+        self.tenant_id = self.config.get("tenant_id", "default")
         self._users_by_uid: dict[str, dict] = {u["uid"]: u for u in self.config.get("users", [])}
         # 兜底：env 里的 demo 密码构造一个 demo 用户
         demo_env = self.config.get("demo_password_env") or "OME365_DEMO_PASSWORD"
@@ -92,7 +93,10 @@ class BasicProvider:
         sid = request.cookies.get("ome365_sid") if hasattr(request, "cookies") else None
         if not sid:
             return None
-        return self.session_store.get_user(sid)
+        u = self.session_store.get_user(sid)
+        if u and u.tenant_id != self.tenant_id:
+            return None  # 跨租户 session 不承认
+        return u
 
     async def login_url(self, redirect_to: str = "/") -> str:
         return f"/auth/login?next={redirect_to or '/'}"
