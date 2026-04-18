@@ -14,7 +14,9 @@ Ome365 · Auth 中间件（多租户 · registry 模式）
 from __future__ import annotations
 
 import os
+import time
 import fnmatch
+import threading
 from typing import Optional, Callable
 from urllib.parse import urlparse
 
@@ -58,6 +60,60 @@ def _path_matches(path: str, patterns: list[str]) -> bool:
         if fnmatch.fnmatch(path, p):
             return True
     return False
+
+
+class LoginRateLimiter:
+    """进程内登录限流：防 basic / magic_link 暴力破解。
+
+    规则：窗口 WINDOW 秒内失败 ≥ MAX_ATTEMPTS → 锁 LOCKOUT 秒。
+    Key = (tenant_id, uid 或 email 或 client_ip)。成功登录清零。
+    env：
+      OME365_LOGIN_MAX_ATTEMPTS (default 5)
+      OME365_LOGIN_WINDOW_SECONDS (default 300)
+      OME365_LOGIN_LOCKOUT_SECONDS (default 900)
+
+    注意：进程内 dict，多进程部署请用 Redis 替换（换 store 即可）。
+    """
+
+    def __init__(self, max_attempts: int | None = None, window: int | None = None, lockout: int | None = None):
+        self.max_attempts = int(max_attempts if max_attempts is not None else os.environ.get("OME365_LOGIN_MAX_ATTEMPTS", "5"))
+        self.window = int(window if window is not None else os.environ.get("OME365_LOGIN_WINDOW_SECONDS", "300"))
+        self.lockout = int(lockout if lockout is not None else os.environ.get("OME365_LOGIN_LOCKOUT_SECONDS", "900"))
+        self._attempts: dict[tuple, list[float]] = {}
+        self._lockout: dict[tuple, float] = {}
+        self._lock = threading.Lock()
+
+    def check(self, *keys) -> tuple[bool, int]:
+        """返回 (allowed, retry_after_seconds)。allowed=False 时 retry_after>0。"""
+        now = time.time()
+        key = tuple(keys)
+        with self._lock:
+            until = self._lockout.get(key, 0.0)
+            if now < until:
+                return False, max(1, int(until - now))
+        return True, 0
+
+    def record_fail(self, *keys) -> None:
+        now = time.time()
+        key = tuple(keys)
+        with self._lock:
+            lst = [t for t in self._attempts.get(key, []) if now - t < self.window]
+            lst.append(now)
+            self._attempts[key] = lst
+            if len(lst) >= self.max_attempts:
+                self._lockout[key] = now + self.lockout
+
+    def record_success(self, *keys) -> None:
+        key = tuple(keys)
+        with self._lock:
+            self._attempts.pop(key, None)
+            self._lockout.pop(key, None)
+
+    def reset(self) -> None:
+        """测试用。"""
+        with self._lock:
+            self._attempts.clear()
+            self._lockout.clear()
 
 
 def safe_next_url(next_url: str | None, default: str = "/") -> str:
@@ -163,14 +219,22 @@ class AuthMiddleware(BaseHTTPMiddleware):
 # Install: middleware + 通用登录端点
 # ──────────────────────────────────────────────────
 
-def install_auth(app, registry: AuthRegistry, public_patterns=None, default_protect_api: bool = True):
+def install_auth(app, registry: AuthRegistry, public_patterns=None, default_protect_api: bool = True, rate_limiter: LoginRateLimiter | None = None):
     """
     装中间件 + 全部登录端点。
     所有端点都按请求里解析出的 tenant_id 取对应 provider，不依赖单例。
+    rate_limiter 不传则用默认参数（5 次 / 5 分钟 / 锁 15 分钟）。
     """
     from fastapi.responses import JSONResponse, RedirectResponse
     from starlette.responses import HTMLResponse
     from pathlib import Path as _P
+
+    _rate = rate_limiter or LoginRateLimiter()
+    # 挂到 app.state 供外部（测试/管理端）访问
+    try:
+        app.state.login_rate_limiter = _rate
+    except Exception:
+        pass
 
     app.add_middleware(
         AuthMiddleware,
@@ -182,6 +246,13 @@ def install_auth(app, registry: AuthRegistry, public_patterns=None, default_prot
     def _prov(request: Request):
         tid = resolve_tenant_id(request)
         return tid, registry.get(tid)
+
+    def _client_ip(request: Request) -> str:
+        # 反代下优先 X-Forwarded-For 首个
+        xff = request.headers.get("x-forwarded-for", "")
+        if xff:
+            return xff.split(",")[0].strip()
+        return (request.client.host if request.client else "") or ""
 
     def _cookie_secure() -> bool:
         """默认 secure=true（生产 HTTPS）。仅 OME365_COOKIE_SECURE=0 时关（本地 http dev）。"""
@@ -254,9 +325,21 @@ def install_auth(app, registry: AuthRegistry, public_patterns=None, default_prot
         except Exception:
             return JSONResponse({"error": "bad request"}, status_code=400)
 
+        # 限流：(tid, uid, client_ip) —— 按 uid 锁定也按 ip 锁定，防撒网
+        ip = _client_ip(request)
+        ok, retry = _rate.check(tid, "basic", str(uid or "").lower(), ip)
+        if not ok:
+            return JSONResponse(
+                {"error": "too many attempts, temporarily locked", "retry_after": retry},
+                status_code=429,
+                headers={"Retry-After": str(retry)},
+            )
+
         user = await provider.verify_password(uid, password or "")
         if not user:
+            _rate.record_fail(tid, "basic", str(uid or "").lower(), ip)
             return JSONResponse({"error": "invalid credentials"}, status_code=401)
+        _rate.record_success(tid, "basic", str(uid or "").lower(), ip)
         sess = registry.session_store.create(user)
         resp = JSONResponse({"ok": True, "user": user.to_dict(), "next": next_url, "tenant": tid})
         _rotate_and_set(request, resp, sess.sid)
@@ -279,10 +362,22 @@ def install_auth(app, registry: AuthRegistry, public_patterns=None, default_prot
                 next_url = safe_next_url(form.get("next"))
         except Exception:
             return JSONResponse({"error": "bad request"}, status_code=400)
+        # 限流：防邮件枚举 + SMTP 轰炸
+        ip = _client_ip(request)
+        ok, retry = _rate.check(tid, "magic", str(email or "").lower(), ip)
+        if not ok:
+            return JSONResponse(
+                {"error": "too many requests, please try later", "retry_after": retry},
+                status_code=429,
+                headers={"Retry-After": str(retry)},
+            )
         try:
             await provider.request_link(email, next_url=next_url, request=request)
         except Exception as e:
+            _rate.record_fail(tid, "magic", str(email or "").lower(), ip)
             return JSONResponse({"error": str(e)}, status_code=400)
+        # 成功触发了邮件发送也算一次 request（防同一 email 无限请求）；但不直接锁死
+        _rate.record_fail(tid, "magic", str(email or "").lower(), ip)
         return {"ok": True, "tenant": tid, "message": "如邮箱在允许列表，登录链接已发送。"}
 
     @app.get("/auth/magic/verify")
