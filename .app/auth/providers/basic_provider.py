@@ -26,8 +26,13 @@ from typing import Optional
 from ..base import User, Session, AuthError, AuthConfigError
 
 
-def _verify_password(password: str, password_hash: str) -> bool:
-    """支持多种格式：argon2 / bcrypt / sha256$salt$hex / 明文 (警告)"""
+def _verify_password(password: str, password_hash: str, *, allow_plaintext: bool = False) -> bool:
+    """支持多种格式：argon2 / bcrypt / sha256$salt$hex。
+
+    明文（不带 $argon2 / $2 / sha256$ 前缀的哈希）默认 **运行时拒绝**，
+    只有 allow_plaintext=True 才放行——目前仅 OME365_DEMO_PASSWORD 注入的
+    "_from_env" demo 用户允许。健康检查会把明文用户列入 issues。
+    """
     if not password_hash:
         return False
     if password_hash.startswith("$argon2"):
@@ -49,8 +54,10 @@ def _verify_password(password: str, password_hash: str) -> bool:
             return hmac.compare_digest(actual, expected)
         except Exception:
             return False
-    # 明文兜底（demo only — 启动时警告）
-    return hmac.compare_digest(password_hash, password)
+    # 未知前缀 → 视为明文
+    if allow_plaintext:
+        return hmac.compare_digest(password_hash, password)
+    return False  # 拒绝明文，保护 tenant_config 误配置场景
 
 
 def hash_sha256(password: str, salt: str | None = None) -> str:
@@ -91,11 +98,16 @@ class BasicProvider:
         return f"/auth/login?next={redirect_to or '/'}"
 
     async def verify_password(self, uid: str, password: str) -> Optional[User]:
-        """核心登录入口；/auth/login 表单 handler 会调它。"""
+        """核心登录入口；/auth/login 表单 handler 会调它。
+
+        明文密码仅 OME365_DEMO_PASSWORD 注入的 demo 用户允许（_from_env=True），
+        或用户显式标注 allow_plaintext=True（不推荐，仅兼容历史配置）。
+        """
         u = self._users_by_uid.get(uid)
         if not u:
             return None
-        if not _verify_password(password, u.get("password_hash", "")):
+        allow_pt = bool(u.get("_from_env")) or bool(u.get("allow_plaintext"))
+        if not _verify_password(password, u.get("password_hash", ""), allow_plaintext=allow_pt):
             return None
         return User(
             user_id=u["uid"],
@@ -117,10 +129,24 @@ class BasicProvider:
 
     def healthcheck(self) -> dict:
         issues = []
+        plaintext_blocked = []
         if not self._users_by_uid:
             issues.append("no users configured; set tenant_config.auth.providers.basic.users or OME365_DEMO_PASSWORD")
         for uid, u in self._users_by_uid.items():
             ph = u.get("password_hash", "")
-            if not ph.startswith(("$argon2", "$2", "sha256$")):
-                issues.append(f"user {uid}: password stored in plaintext (use argon2/bcrypt/sha256$ in prod)")
-        return {"ok": not issues or all("plaintext" in i for i in issues), "provider": "basic", "users": list(self._users_by_uid.keys()), "issues": issues}
+            if ph.startswith(("$argon2", "$2", "sha256$")):
+                continue
+            allow_pt = bool(u.get("_from_env")) or bool(u.get("allow_plaintext"))
+            if allow_pt:
+                issues.append(f"user {uid}: plaintext password allowed (_from_env demo or allow_plaintext=true) — DO NOT use in prod")
+            else:
+                # 运行时拒绝：verify_password 会返回 False
+                plaintext_blocked.append(uid)
+                issues.append(f"user {uid}: plaintext password REJECTED at runtime (use argon2/bcrypt/sha256$)")
+        return {
+            "ok": not issues or all(("plaintext password allowed" in i) for i in issues),
+            "provider": "basic",
+            "users": list(self._users_by_uid.keys()),
+            "plaintext_blocked": plaintext_blocked,
+            "issues": issues,
+        }
