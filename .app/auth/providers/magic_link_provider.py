@@ -107,6 +107,7 @@ class MagicLinkProvider:
     def __init__(self, config: dict | None = None, *, session_store=None, token_db_path: Path | None = None):
         self.config = config or {}
         self.session_store = session_store
+        self.tenant_id = self.config.get("tenant_id", "default")
         self.allowlist = set(e.lower() for e in self.config.get("allowlist", []))
         self.users_overrides = {
             k.lower(): v for k, v in (self.config.get("users") or {}).items()
@@ -125,7 +126,10 @@ class MagicLinkProvider:
         sid = request.cookies.get("ome365_sid") if hasattr(request, "cookies") else None
         if not sid:
             return None
-        return self.session_store.get_user(sid)
+        u = self.session_store.get_user(sid)
+        if u and u.tenant_id != self.tenant_id:
+            return None  # 跨租户 session 不承认
+        return u
 
     async def login_url(self, redirect_to: str = "/") -> str:
         return f"/auth/magic?next={redirect_to or '/'}"
@@ -203,6 +207,15 @@ class MagicLinkProvider:
     # ---------- SMTP ----------
 
     def _send_email(self, to_email: str, link: str) -> None:
+        # 测试兜底：OME365_MAGIC_LINK_SINK_FILE 把邮件内容 append 成 JSONL 到文件，
+        # 绕开真实 SMTP。仅供 E2E / 本地调试，切勿在生产设置这个变量。
+        sink = os.environ.get("OME365_MAGIC_LINK_SINK_FILE")
+        if sink:
+            import json as _json
+            with open(sink, "a", encoding="utf-8") as fh:
+                fh.write(_json.dumps({"to": to_email, "link": link}, ensure_ascii=False) + "\n")
+            return
+
         cfg = self.smtp_cfg
         host = cfg.get("host")
         if not host:
