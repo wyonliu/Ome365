@@ -12,6 +12,10 @@ uvicorn[standard]>=0.24
 python-multipart>=0.0.6    # FastAPI UploadFile 需要
 pyyaml>=6.0                # entity_registry frontmatter 解析
 
+# ── OIDC SSO 验签（多租户 Auth 必装）──
+requests>=2.31             # discovery / token / userinfo / JWKS HTTP
+PyJWT[crypto]>=2.8         # id_token 验签（JWKS/RS256/ES256）；[crypto] extras 带 cryptography
+
 # ── Optional: 语音转写（TicNote / 访谈）──
 # faster-whisper>=1.0      # GPU 友好，推荐
 # openai-whisper>=20231117 # 纯 CPU 备选
@@ -22,4 +26,3 @@ pyyaml>=6.0                # entity_registry frontmatter 解析
 
 # ── Optional: AI 对话与养成（完整体验）──
 # omnity-ome>=0.7          # AI 记忆/养成 SDK
-# requests>=2.31           # HTTP AI API 调用
