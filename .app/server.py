@@ -4979,10 +4979,33 @@ def _format_inline(s: str) -> str:
     s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
     return s
 
+def _cockpit_candidate_hints() -> list[str]:
+    """扫 vault 根下常见 cockpit.md 候选路径，帮助用户发现迁移场景。
+    命中场景：config 指向的路径不存在，但 vault 里别的地方存在 cockpit.md —— 大概率用户搬过目录。"""
+    hints: list[str] = []
+    try:
+        for p in VAULT.rglob("cockpit.md"):
+            rel = p.relative_to(VAULT)
+            # 限制深度 <= 3，避免扫整个 reports 子树
+            if len(rel.parts) <= 3 and p != COCKPIT_FILE:
+                hints.append(str(rel))
+        return hints[:5]
+    except Exception:
+        return []
+
+
 @app.get("/api/cockpit")
 async def cockpit_get():
     if not COCKPIT_FILE.exists():
-        return {"ok": False, "error": "cockpit.md not found", "path": str(COCKPIT_FILE)}
+        payload = {"ok": False, "error": "cockpit.md not found", "path": str(COCKPIT_FILE)}
+        hints = _cockpit_candidate_hints()
+        if hints:
+            payload["migration_hint"] = (
+                f"在 vault 里发现了 cockpit.md 候选路径：{hints}。"
+                f"如果最近搬过目录，请把 .app/tenant_config.json 的 cockpit.dir_name 改成上面的父目录。"
+            )
+            payload["candidates"] = hints
+        return payload
     try:
         md = COCKPIT_FILE.read_text(encoding="utf-8")
         parsed = _parse_cockpit_md(md)
