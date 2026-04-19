@@ -46,9 +46,11 @@ Turn the working cleaners / exporters into distributable skills.
 - **#14 · `journal-weekly-summary` skill** — Sunday consolidation
 - **#15 · Harness engine adoption** — migrate our server-side agent calls to depend on `mindos.harness` (via `packages/mindos` or pypi pin) — see [Ome / Mindos dev guidance](../Projects/Ome/architecture-2026-04-19.md) for the shared kernel contract.
 
-### Track 4 · Sleep-time consolidation
+### Track 4 · Nightly consolidation (Overnight Soul Sync · downstream)
 
-Nightly jobs that keep the vault healthy without the user doing anything.
+Nightly jobs that keep the vault healthy without the user doing anything. Core reranking/scoring/merging lives in **Mindos EvoLog (Overnight Soul Sync)** — Ome365 runs its tenant-side equivalent on top of that contract.
+
+> **Naming note (2026-04-19):** we previously called this "Sleep-time consolidation". That collides with Letta's "Sleep-time Compute" brand, so upstream Mindos renamed its nightly pass to **Overnight Soul Sync** (a sub-feature of EvoLog, not a new subsystem). Ome365 follows the upstream name.
 
 - **#16 · Scheduler** — cron-like dispatcher inside `.app/sleep_scheduler.py`
 - **#17 · Weekly summary job** — Journal/Notes → `Insights/weekly-<YYYY-Www>.md`
@@ -88,15 +90,17 @@ Full contract in [Projects/Ome/architecture-2026-04-19.md](../Projects/Ome/archi
 
 ## Sequencing proposal (6-week sprints)
 
-| Sprint | Weeks | Focus |
-|---|---|---|
-| v0.10 | W1–W2 (04-20 → 05-03) | `ticnote-clean` skill publish · MCP server skeleton · Track 3 #11 / Track 2 #7 |
-| v0.11 | W3–W4 (05-04 → 05-17) | `scribe` sub-agent + workspace convention · Track 1 #1 / #6 |
-| v0.12 | W5–W6 (05-18 → 05-31) | MCP Apps renderer + `@ome365 today` / `cockpit` · Track 2 #8 / #9 |
-| v0.13 | W7–W8 (06-01 → 06-14) | Sleep-time scheduler + weekly summary · Track 4 #16 / #17 |
-| v0.14 | W9–W10 (06-15 → 06-28) | `analyst` + `scout` sub-agents · Track 1 #2 / #3 |
-| v0.15 | W11–W12 (06-29 → 07-12) | Harness engine adoption (consume upstream) · Track 3 #15 |
-| v1.0 GA | Q4 | Polish, docs, enterprise onboarding playbook, case study |
+**Alignment with upstream (Omnity/Mindos W1-W6):** the Mindos side owns the shared kernel (Harness runtime / Skills registry / MCP Apps core / Overnight Soul Sync / OmeBench); Ome365 owns the enterprise shell (connectors / multi-tenant / Agent Studio / audit / SSO / on-prem). Full split in `NOTICE_FOR_OME365_W1_HARNESS_2026-04-19.md`.
+
+| Sprint | Weeks | Ome365 focus | Mindos counterpart |
+|---|---|---|---|
+| v0.10 | W1–W2 (04-20 → 05-03) | **A 档**：`FsContextLoader` + `nightly.py` + `bench_cli.py`（详见 `REVIEW_OMNITY_W2-W6_2026-04-19.md` §3）· `ticnote-clean` published to skills.sh · MCP server skeleton | Skills Registry + first skills.sh publish |
+| v0.11 | W3–W4 (05-04 → 05-17) | **B 档**：驾舱加 Overnight + Bench 卡片 · `scribe` sub-agent on `/agent-workspace/`（本地文件夹约定，不起 Agent Studio UI）| MCP Apps (SEP-1865) · Agent Teams unlock (W4) |
+| v0.12 | W5–W6 (05-18 → 05-31) | **SSO/LDAP/OIDC hardening**（需商业化触发）· MCP Apps renderer (@ome365 today / cockpit) | Overnight Soul Sync (EvoLog nightly rerank/score/merge) |
+| v0.13 | W7–W8 (06-01 → 06-14) | **Pilot-customer 端到端部署**（端到端联调 HarnessEngine 进 tenant 管线，需商业化触发）| OmeBench 公开榜（tenant-owner 语料样本） |
+| v0.14 | W9–W10 (06-15 → 06-28) | **私有化部署包**（央企/金融，需商业化触发）· `analyst` + `scout` sub-agents | Kimi K2 Thinking real transport · Qwen3 backend |
+| v0.15 | W11–W12 (06-29 → 07-12) | Harness engine adoption — depend on `mindos.harness` (pypi/submodule pin) | API 稳定化，SemVer 1.0 |
+| v1.0 GA | Q4 | Polish, docs, enterprise onboarding playbook, case study | — |
 
 ---
 
@@ -119,3 +123,4 @@ Full contract in [Projects/Ome/architecture-2026-04-19.md](../Projects/Ome/archi
 - [Google DeepMind — Context Repositories (Apr 2026)](https://deepmind.com/research)
 - Companion doc: [`Projects/Ome/architecture-2026-04-19.md`](../Projects/Ome/architecture-2026-04-19.md) (in the data vault)
 - Omnity dev guidance: `~/root/code-ai/omnity/OME_MINDOS_HARDCORE_DEV_GUIDANCE_2026-04-19.md`
+- Omnity W1 notice (consumer contract): `~/root/code-ai/omnity/NOTICE_FOR_OME365_W1_HARNESS_2026-04-19.md`
