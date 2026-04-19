@@ -45,6 +45,7 @@
 .app/reminders.json
 .app/media/
 .app/cache/
+.app/audit/                 # Per-tenant Claude/model audit ndjson (cost + TTL + tokens)
 
 # ── Cockpit live config（含真实人名/组织/战略，用户私有 · 仅保留 .sample.json）──
 .app/cockpit_config.json
