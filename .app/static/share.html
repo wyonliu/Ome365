@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ome365</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/style.css?v=20260417">
 <style>
   /* ══ 核心：杀掉 style.css 的驾舱布局规则 ══ */
@@ -117,6 +118,7 @@ function esc(s) { const d = document.createElement('div'); d.textContent = s; re
 const BOLD_HEADLINE_RE = /^\*\*([^*\n]{2,40}?)\*\*\s*[：:、]?\s*([\s\S]*)$/;
 const ACCENTS = ['indigo', 'amber', 'teal', 'rose', 'violet'];
 const ROMAN = {I:1,II:2,III:3,IV:4,V:5,VI:6,VII:7,VIII:8,IX:9,X:10,XI:11,XII:12,XIII:13,XIV:14,XV:15};
+const CNNUM = {'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10,'十一':11,'十二':12,'十三':13,'十四':14,'十五':15,'十六':16,'十七':17,'十八':18,'十九':19,'二十':20};
 
 function badgifyDoc(html) {
   if (!html) return html;
@@ -205,6 +207,86 @@ function hydrateChunks(chunks) {
   });
 }
 
+// ── JD-specific augment: extract `**级别**：X · **部门**：Y · **地点**：Z` chips ──
+function extractJobMetaChips(bodyLines) {
+  const chips = [];
+  let metaLineIdx = -1;
+  for (let i = 0; i < Math.min(bodyLines.length, 6); i++) {
+    const l = (bodyLines[i] || '').trim();
+    if (!l) continue;
+    if (/^#/.test(l) || /^[-*+]\s/.test(l) || /^\d+\.\s/.test(l) || /^>/.test(l)) break;
+    if (l.includes('**') && /\*\*[^*]+\*\*\s*[：:]/.test(l)) {
+      const re = /\*\*([^*]+)\*\*\s*[：:]\s*([^·\n]+?)(?=\s*·\s*\*\*|$)/g;
+      let m;
+      while ((m = re.exec(l)) !== null) chips.push({ k: m[1].trim(), v: m[2].trim() });
+      if (chips.length) { metaLineIdx = i; break; }
+    }
+    break;
+  }
+  if (metaLineIdx < 0) return { chips: [], rest: bodyLines };
+  const rest = bodyLines.slice();
+  rest.splice(metaLineIdx, 1);
+  while (rest.length && !rest[0].trim()) rest.shift();
+  return { chips, rest };
+}
+function extractJobKeywords(bodyText, chipKeys) {
+  const kws = [];
+  const seen = new Set((chipKeys||[]).map(x => x.trim()));
+  for (const rawLine of bodyText.split('\n')) {
+    const l = rawLine.trim();
+    if (!l) continue;
+    const m = l.match(/^\d+\.\s*\*\*([^*：:]+?)\*\*\s*[：:]/);
+    if (!m) continue;
+    const kw = m[1].trim();
+    if (!kw || seen.has(kw)) continue;
+    seen.add(kw);
+    kws.push(kw);
+    if (kws.length >= 8) break;
+  }
+  return kws;
+}
+function augmentJobSections(parsed) {
+  if (!parsed || !parsed.sections) return parsed;
+  let anyChips = false;
+  for (const s of parsed.sections) {
+    if (!s || !s.chunks || !s.chunks.length) continue;
+    const firstIdx = s.chunks.findIndex(c => c.kind === 'prose' || c.kind === 'long-prose');
+    if (firstIdx < 0) continue;
+    const firstChunk = s.chunks[firstIdx];
+    const raw = firstChunk.md || (firstChunk.bodyParas ? firstChunk.bodyParas.join('\n\n') : '');
+    if (!raw) continue;
+    const lines = raw.split('\n');
+    const { chips, rest } = extractJobMetaChips(lines);
+    if (!chips.length) continue;
+    anyChips = true;
+    s.jobChips = chips;
+    const restText = rest.join('\n').trim();
+    // Keyword extraction scans the whole remaining body (across all following chunks too)
+    const tailBody = s.chunks.slice(firstIdx + 1).map(c => c.md || (c.bodyParas ? c.bodyParas.join('\n\n') : '')).filter(Boolean).join('\n');
+    s.jobKeywords = extractJobKeywords(restText + '\n' + tailBody, chips.map(c => c.k));
+    if (restText) {
+      try {
+        const newChunks = hydrateChunks(buildSmartChunks(restText));
+        s.chunks.splice(firstIdx, 1, ...newChunks);
+      } catch (e) {
+        s.chunks.splice(firstIdx, 1);
+      }
+    } else {
+      s.chunks.splice(firstIdx, 1);
+    }
+  }
+  parsed._isJD = anyChips;
+  return parsed;
+}
+// Global toggler for JD cards (used by inline onclick in rendered HTML)
+window.toggleJdCard = function(secId) {
+  const sec = document.getElementById(secId);
+  if (!sec) return;
+  const collapsed = sec.classList.toggle('is-collapsed');
+  const btn = sec.querySelector('.jd-card-head');
+  if (btn) btn.setAttribute('aria-expanded', String(!collapsed));
+};
+
 function parseReport(raw) {
   let fmTitle = '', fmSubtitle = '', fmEyebrow = '', fmMeta = {};
   if (/^---\s*\n/.test(raw)) {
@@ -228,7 +310,15 @@ function parseReport(raw) {
   const preface = [];
   let i = 0;
   while (i < lines.length && !lines[i].trim()) i++;
-  if (!title && i < lines.length && /^#\s+/.test(lines[i])) { title = lines[i].replace(/^#\s+/, '').trim(); i++; }
+  if (i < lines.length && /^#\s+/.test(lines[i])) {
+    const h1 = lines[i].replace(/^#\s+/, '').trim();
+    if (!title) title = h1;
+    else if (!fmSubtitle) {
+      const mm = h1.match(/^\s*(.+?)\s*[·・]\s*(.+?)\s*$/);
+      if (mm && (mm[1] === title || title.startsWith(mm[1]) || mm[1].startsWith(title))) fmSubtitle = mm[2];
+    }
+    i++;
+  }
   if (fmSubtitle) metaPills.push({ key: '副标题', val: fmSubtitle });
   while (i < lines.length && !lines[i].trim()) i++;
   const quoteLines = [];
@@ -252,9 +342,16 @@ function parseReport(raw) {
     if (/^##\s+/.test(l)) {
       if (cur) sections.push(cur);
       const rawTitle = l.replace(/^##\s+/, '').trim();
-      const m = rawTitle.match(/^(\d{1,2})[\s·.、）)]+(.*)$/) || rawTitle.match(/^((?:X{0,2}(?:IX|IV|V?I{1,3}|V)))[\s·.、）)]+(.*)$/);
+      const m = rawTitle.match(/^(\d{1,2})[\s·.、）)]+(.*)$/)
+             || rawTitle.match(/^((?:X{0,2}(?:IX|IV|V?I{1,3}|V)))[\s·.、）)]+(.*)$/)
+             || rawTitle.match(/^(二十|十[一二三四五六七八九]?|[一二三四五六七八九])[\s·.、）)]+(.*)$/);
       let numStr = '';
-      if (m && m[1]) { const r = m[1]; numStr = ROMAN[r] !== undefined ? String(ROMAN[r]).padStart(2, '0') : r.padStart(2, '0'); }
+      if (m && m[1]) {
+        const r = m[1];
+        if (ROMAN[r] !== undefined) numStr = String(ROMAN[r]).padStart(2, '0');
+        else if (CNNUM[r] !== undefined) numStr = String(CNNUM[r]).padStart(2, '0');
+        else numStr = r.padStart(2, '0');
+      }
       cur = { id: 'rv-sec-' + sections.length, num: numStr, hasExplicitNum: !!m, title: m ? m[2].trim() : rawTitle, body: [] };
     } else if (cur) { cur.body.push(l); } else { preface.push(l); }
     i++;
@@ -273,14 +370,14 @@ function parseReport(raw) {
 
 // ══ Render functions ══
 
-function renderChunks(chunks) {
+function renderChunks(chunks, isJD) {
   return chunks.map((c, ci) => {
     if (c.kind === 'headline-card') return `<div class="rv-chunk rv-chunk-headline" data-accent="${c.accent}"><div class="rv-chunk-headline-bar"></div><div class="rv-chunk-headline-body"><h3 class="rv-chunk-headline-title">${esc(c.title)}</h3><div class="rv-chunk-headline-text">${badgifyDoc(c.bodyHtml)}</div></div></div>`;
     if (c.kind === 'long-prose') return `<div class="rv-chunk rv-chunk-prose">${badgifyDoc(c.html)}</div>`;
-    if (c.kind === 'h-sub' && c.level === 3) return `<h3 class="rv-chunk rv-chunk-h3">${esc(c.title)}</h3>`;
+    if (c.kind === 'h-sub' && c.level === 3) return `<h3 class="rv-chunk rv-chunk-h3${isJD ? ' jd-subhead' : ''}">${esc(c.title)}</h3>`;
     if (c.kind === 'h-sub' && c.level === 4) return `<h4 class="rv-chunk rv-chunk-h4">${esc(c.title)}</h4>`;
     if (c.kind === 'h-sub') return `<h5 class="rv-chunk rv-chunk-h5">${esc(c.title)}</h5>`;
-    if (c.kind === 'list-card') return `<div class="rv-chunk rv-chunk-list">${badgifyDoc(c.html)}</div>`;
+    if (c.kind === 'list-card') return `<div class="rv-chunk rv-chunk-list${isJD ? ' jd-list' : ''}">${badgifyDoc(c.html)}</div>`;
     if (c.kind === 'table-card') return `<div class="rv-chunk rv-chunk-table">${badgifyDoc(c.html)}</div>`;
     if (c.kind === 'quote-card') return `<div class="rv-chunk rv-chunk-quote">${badgifyDoc(c.html)}</div>`;
     if (c.kind === 'code-card') return `<div class="rv-chunk rv-chunk-code">${c.html}</div>`;
@@ -292,6 +389,8 @@ function renderChunks(chunks) {
 
 function renderReportPage(parsed) {
   let html = '';
+  const jdClass = parsed._isJD ? ' jd-wrap' : '';
+  if (parsed._isJD) html += `<div class="${jdClass.trim()}">`;
   // Hero
   html += `<section class="rv-hero">`;
   if (parsed.eyebrow) html += `<div class="rv-hero-eyebrow">${esc(parsed.eyebrow)}</div>`;
@@ -324,16 +423,41 @@ function renderReportPage(parsed) {
   html += `<div class="rv-main">`;
   if (parsed.prefaceHtml) html += `<div class="rv-preface">${parsed.prefaceHtml}</div>`;
   for (const s of parsed.sections) {
-    html += `<section id="${s.id}" class="rv-section">`;
-    html += `<div class="rv-sec-head">`;
-    if (s.hasExplicitNum) html += `<div class="rv-sec-num">${s.num}</div>`;
-    else html += `<div class="rv-sec-num rv-sec-num-dot">&#9670;</div>`;
-    html += `<div class="rv-sec-title-wrap"><div class="rv-sec-title">${esc(s.title)}</div><div class="rv-sec-rule"></div></div></div>`;
-    if (s.chunks && s.chunks.length) html += `<div class="rv-sec-body rv-sec-chunked">${renderChunks(s.chunks)}</div>`;
-    else html += `<div class="rv-sec-body">${s.html}</div>`;
-    html += `</section>`;
+    if (parsed._isJD) {
+      const hasChips = (s.jobChips||[]).length ? ' has-chips' : '';
+      html += `<section id="${s.id}" class="rv-section jd-section jd-card${hasChips}">`;
+      html += `<button class="jd-card-head" onclick="toggleJdCard('${s.id}')" aria-expanded="true">`;
+      if (s.hasExplicitNum) html += `<span class="jd-card-num">${s.num}</span>`;
+      else html += `<span class="jd-card-num jd-card-num-dot">&#9670;</span>`;
+      html += `<span class="jd-card-title">${esc(s.title)}</span>`;
+      if ((s.jobKeywords||[]).length) {
+        html += `<span class="jd-card-keywords">`;
+        for (const kw of s.jobKeywords) html += `<span class="jd-kw">${esc(kw)}</span>`;
+        html += `</span>`;
+      }
+      html += `<span class="jd-card-caret">&#9662;</span></button>`;
+      html += `<div class="jd-card-body">`;
+      if ((s.jobChips||[]).length) {
+        html += `<div class="jd-chips">`;
+        for (const c of s.jobChips) html += `<span class="jd-chip" data-kind="${esc(c.k)}"><span class="jd-chip-k">${esc(c.k)}</span><span class="jd-chip-v">${esc(c.v)}</span></span>`;
+        html += `</div>`;
+      }
+      if (s.chunks && s.chunks.length) html += `<div class="rv-sec-body rv-sec-chunked">${renderChunks(s.chunks, true)}</div>`;
+      else html += `<div class="rv-sec-body">${s.html}</div>`;
+      html += `</div></section>`;
+    } else {
+      html += `<section id="${s.id}" class="rv-section">`;
+      html += `<div class="rv-sec-head">`;
+      if (s.hasExplicitNum) html += `<div class="rv-sec-num">${s.num}</div>`;
+      else html += `<div class="rv-sec-num rv-sec-num-dot">&#9670;</div>`;
+      html += `<div class="rv-sec-title-wrap"><div class="rv-sec-title">${esc(s.title)}</div><div class="rv-sec-rule"></div></div></div>`;
+      if (s.chunks && s.chunks.length) html += `<div class="rv-sec-body rv-sec-chunked">${renderChunks(s.chunks, false)}</div>`;
+      else html += `<div class="rv-sec-body">${s.html}</div>`;
+      html += `</section>`;
+    }
   }
   html += `</div></div>`;
+  if (parsed._isJD) html += `</div>`;
   html += `<div class="sh-footer">${esc(footerText())}</div>`;
   return html;
 }
@@ -450,11 +574,11 @@ async function init() {
       const result = R.processDocument(raw, data.name || '');
       content.innerHTML = renderTicNotePage(title, result);
     } else {
-      const parsed = parseReport(raw);
+      const parsed = augmentJobSections(parseReport(raw));
       if (!parsed.title) parsed.title = title;
       if (!parsed.eyebrow && meta.eyebrow) parsed.eyebrow = meta.eyebrow;
       if (!parsed.eyebrow && meta.category) parsed.eyebrow = meta.category;
-      if (!parsed.eyebrow) parsed.eyebrow = '战略文档';
+      if (!parsed.eyebrow) parsed.eyebrow = (parsed._isJD ? '招聘 JD' : '战略文档');
       // Add frontmatter pills not already captured
       if (meta.date && !parsed.metaPills.find(p => p.key === '日期')) parsed.metaPills.push({ key: '日期', val: meta.date });
       if (meta.version && !parsed.metaPills.find(p => p.key === '版本')) parsed.metaPills.push({ key: '版本', val: meta.version });
