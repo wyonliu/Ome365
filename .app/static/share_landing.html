@@ -181,7 +181,9 @@ async function applyTenantBrand(){
     if(!r.ok) return;
     const cfg = await r.json();
     const brand = cfg.brand || {};
-    if (!localStorage.getItem('sh-theme') && brand.theme_variant_id === 'light'){
+    // 只在用户从未选过主题（key 不存在）时才跟随租户默认；
+    // localStorage.getItem 返回 '' 也代表"用户选过 dark"，不要覆盖。
+    if (localStorage.getItem('sh-theme') === null && brand.theme_variant_id === 'light'){
       document.documentElement.setAttribute('data-theme','light');
       theme = 'light';
     }
