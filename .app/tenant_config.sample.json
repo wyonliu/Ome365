@@ -27,6 +27,8 @@
     "management_prefixes": ["Management", "Exec"],
     "channel_prefix_patterns": ["^C\\d", "^N\\d"],
     "bu_prefix_root": "BU",
+    "_doc_org_stem_prefix": "Single ORG token. If a report filename starts with '<ORG>CEO-…' or '<ORG>Finance-…' etc., set this to '<ORG>' to strip it cleanly in person display names.",
+    "org_stem_prefix": "",
     "bu_suffix_keywords": [],
     "interview_keywords": ["interview", "面试", "终面"],
     "external_prefix": "External",
@@ -34,5 +36,11 @@
   },
   "entities": {
     "default_tenant": "default"
+  },
+  "share": {
+    "_doc": "分享站隐私层 T1。hide_listings=true（安全默认）时隐藏用户与 slug 清单，只允许已知完整 URL 访问。开发调试想要列表就改 false。",
+    "hide_listings": true,
+    "_doc_default_user": "shareDialog 的默认 user namespace（分享链接 URL 的 /{user}/{slug} 段）。留空则需要操作者在 UI 上自填。",
+    "default_user": ""
   }
 }

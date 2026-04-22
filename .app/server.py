@@ -6,7 +6,7 @@ Ome365 v0.6 — 个人超级助手 + Ome 智能体
 import os, re, json, glob, socket, subprocess, shutil, uuid, threading, logging, asyncio
 from datetime import datetime, date, timedelta
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -47,6 +47,39 @@ app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
+# ── T1 Privacy headers · 仅作用于 /s 前缀（share 路由）──
+# 主站驾舱走 AuthProvider 自己的门禁，头部要保持干净；
+# share 是面向公网只读分享站，要 noindex + DENY iframe + no-referrer。
+_T1_SHARE_HEADERS = {
+    "X-Robots-Tag": "noindex, nofollow, noarchive, nosnippet",
+    "Referrer-Policy": "no-referrer",
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Permissions-Policy": "interest-cohort=(), browsing-topics=()",
+    "Content-Security-Policy": (
+        "default-src 'self' data: blob:; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob: https:; "
+        "font-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'"
+    ),
+}
+
+
+@app.middleware("http")
+async def add_share_privacy_headers(request: Request, call_next):
+    resp = await call_next(request)
+    path = request.url.path or ""
+    # /s/* 是 share 路由；/robots.txt 和 /reports-static/* 在主站也要带（图片被外链抓风险）
+    if path.startswith("/s/") or path == "/s" or path == "/robots.txt" or path.startswith("/reports-static/"):
+        for k, v in _T1_SHARE_HEADERS.items():
+            resp.headers.setdefault(k, v)
+    return resp
+
+
 # ── Tenant config（品牌 / 驾舱路径 / 分类规则 / 提示词 bio）──────────
 # live (tenant_config.json, gitignored) 不存在则降级到 sample。
 # 前端通过 /api/tenant/config 取值；server 内部用 TENANT 字典。
@@ -80,6 +113,19 @@ def _tb(path, default=""):
 async def api_tenant_config():
     """返回当前租户品牌 / 驾舱 / 分类配置。前端启动时拉一次，做品牌替换。"""
     return TENANT
+
+
+@app.post("/api/tenant/reload")
+async def api_tenant_reload():
+    """热重载 tenant_config.json（磁盘上的值进内存），不重启进程。
+    用途：改了 remote.base_url / token / brand 之后，不用重启驾舱就能生效。"""
+    global TENANT
+    TENANT = _load_tenant_config()
+    return {
+        "ok": True,
+        "source": TENANT.get("_source"),
+        "remote_base_url": (TENANT.get("remote") or {}).get("base_url"),
+    }
 
 
 @app.get("/api/_ctx/healthcheck")
@@ -2675,19 +2721,39 @@ async def get_reports():
             if m:
                 doc_date = m.group(1)
         # Infer "person" anchor for grouping inside an entity.
-        # Priority: explicit frontmatter → filename prefix before "·" → empty
+        # Priority: explicit frontmatter → filename stem split by "·" + "-".
+        #
+        # Rules live in tenant_config.categories:
+        #   bu_prefix_root:   segs[0] that equals this is a BU shell prefix to drop
+        #                     when there are ≥3 segments (e.g. "<bu_prefix_root>-<dept>-<person>"
+        #                     → "<dept>·<person>").
+        #   org_stem_prefix:  single ORG token. If segs[0] starts with it (and is not
+        #                     bu_prefix_root), strip exactly that prefix from seg0 and
+        #                     re-glue with following segments.
+        # Anything else falls through to generic "X-Y" → "X·Y" or stem verbatim.
         if not person:
             stem = fp.stem
-            # Patterns like "C1-—·xxx" or "—-CHO·xxx" or "—团队·xxx"
-            # Take text before the first "·" and strip any trailing "-ROLE"
             anchor = stem.split("·")[0] if "·" in stem else stem
-            # For航道 files: "C1-—" → keep "C1 —"
-            m2 = re.match(r"^([CN]\d)[\-\s](.+)$", anchor)
-            if m2:
-                person = f"{m2.group(1)} {m2.group(2)}"
+            bu_root = _tb("categories.bu_prefix_root", "")
+            org_prefix = _tb("categories.org_stem_prefix", "")
+            if "-" in anchor:
+                segs = anchor.split("-")
+                seg0 = segs[0]
+                if bu_root and len(segs) >= 3 and seg0 == bu_root:
+                    person = f"{segs[1]}·{'-'.join(segs[2:])}"
+                elif (
+                    org_prefix and len(segs) >= 2
+                    and seg0.startswith(org_prefix) and seg0 != bu_root
+                ):
+                    tail = seg0[len(org_prefix):]
+                    if len(segs) >= 3:
+                        person = f"{tail}{segs[1]}·{'-'.join(segs[2:])}"
+                    else:
+                        person = f"{tail}·{'-'.join(segs[1:])}"
+                else:
+                    person = "·".join(segs)
             else:
-                # For BU/管理层: "—-CHO" → "—"; "—团队" → "—团队"
-                person = anchor.split("-")[0].strip() if "-" in anchor else anchor.strip()
+                person = anchor.strip()
         results.append({
             "name": fp.stem,
             "title": title or fp.stem,
@@ -5489,6 +5555,13 @@ try:
 except Exception as _e:
     print(f"[warn] share routes not mounted: {_e}")
 
+# ── Life Plan: 年度人生规划只读阅读器（auth-gated via middleware 自动门禁）──
+try:
+    from life_plan_routes import build_router as _build_life_plan_router
+    app.include_router(_build_life_plan_router())
+except Exception as _e:
+    print(f"[warn] life_plan routes not mounted: {_e}")
+
 def _build_share_map():
     smap = {}
     tn = VAULT / "TicNote"
@@ -5567,6 +5640,33 @@ def _load_share_registry():
 def _save_share_registry(data):
     SHARE_REGISTRY.write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
 
+@app.get("/api/share/registry")
+async def share_registry(user: str = ""):
+    """已注册的分享文档（真正有 slug 的），供设置页「分享管理」用。
+    与 /api/share/list 的区别：/list 是扫 TicNote 自动生成的 8 位 code，
+    /registry 是用户显式注册的 slug（支持自定义）。"""
+    if not user:
+        user = SHARE_USERS[0] if SHARE_USERS else "user"
+    reg = _load_share_registry()
+    ns = reg.get(user, {})
+    base = SHARE_SERVER_BASE.rstrip("/")
+    remote_cfg = (TENANT.get("remote") or {}) if isinstance(TENANT, dict) else {}
+    remote_base = (remote_cfg.get("base_url") or "").rstrip("/")
+    items = []
+    for slug, entry in ns.items():
+        items.append({
+            "slug": slug,
+            "path": entry.get("path", ""),
+            "title": entry.get("title", slug),
+            "created": entry.get("created", ""),
+            "folder": entry.get("folder", ""),
+            "local_url": f"{base}/{user}/{slug}",
+            "remote_url": f"{remote_base}/{user}/{slug}" if remote_base else "",
+            "url": (f"{remote_base}/{user}/{slug}" if remote_base else f"{base}/{user}/{slug}"),
+        })
+    items.sort(key=lambda x: x.get("created", ""), reverse=True)
+    return items
+
 @app.get("/api/share/by-path")
 async def share_by_path(path: str, user: str = ""):
     if not user:
@@ -5611,7 +5711,42 @@ async def share_register(slug: str, path: str, title: str = "", user: str = ""):
     ns[slug] = {"path": path, "title": title, "created": date.today().isoformat()}
     _save_share_registry(reg)
     base = SHARE_SERVER_BASE.rstrip("/")
-    return {"url": f"{base}/{user}/{slug}", "slug": slug, "user": user, "title": title}
+    local_url = f"{base}/{user}/{slug}"
+
+    # ── 远端发布（HTTPS 推文件，SSH 被锁时的通道）──
+    # 触发条件：tenant_config 配了 remote.base_url + remote.token。
+    # 未配则 no-op；失败不阻塞本地注册。
+    # 动态重读 tenant_config（避免 server 启动后 token 在磁盘被改但内存仍是旧值，
+    # 导致远端 401 bad or missing X-Publish-Token）。
+    _live_tenant = _load_tenant_config()
+    remote_cfg = (_live_tenant.get("remote") or {}) if isinstance(_live_tenant, dict) else {}
+    remote_base = remote_cfg.get("base_url") or ""
+    remote_token = remote_cfg.get("token") or ""
+    remote_status = None
+    remote_url = None
+    if remote_base and remote_token:
+        try:
+            import sys as _sys
+            _sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+            from publish_to_remote import publish as _remote_publish
+            pub_res = _remote_publish(
+                VAULT, user=user, slug=slug,
+                remote_base=remote_base, token=remote_token,
+                timeout=60.0,
+            )
+            remote_url = pub_res.get("url")
+            remote_status = "ok"
+        except Exception as _e:
+            remote_status = f"fail: {_e}"
+            remote_url = None
+
+    return {
+        "url": remote_url or local_url,
+        "local_url": local_url,
+        "remote_url": remote_url,
+        "remote_status": remote_status,
+        "slug": slug, "user": user, "title": title,
+    }
 
 def _extract_title_from_file(fp):
     try:
@@ -5627,6 +5762,92 @@ def _extract_title_from_file(fp):
     except Exception:
         pass
     return fp.stem
+
+
+# ── T2 · 密码保护管理 API（cockpit → 远端分享站的薄代理）──
+# cockpit UI 改动发到这里；server.py 用 tenant_config.remote.{base_url,token}
+# 通过 HTTPS 把意图转给远端 share 服务（share_routes.py 里的实现）。
+def _remote_share_conf():
+    _live_tenant = _load_tenant_config()
+    remote_cfg = (_live_tenant.get("remote") or {}) if isinstance(_live_tenant, dict) else {}
+    base = (remote_cfg.get("base_url") or "").rstrip("/")
+    token = remote_cfg.get("token") or ""
+    use_proxy = remote_cfg.get("use_proxy") is True
+    return base, token, use_proxy
+
+
+def _share_admin_proxy(method: str, path: str, json_body=None, params=None):
+    import requests
+    base, token, use_proxy = _remote_share_conf()
+    if not base or not token:
+        raise HTTPException(501, "remote share not configured (tenant_config.remote.base_url/token)")
+    url = base + path
+    proxies = None if use_proxy else {"http": None, "https": None}
+    try:
+        resp = requests.request(
+            method, url,
+            headers={"X-Publish-Token": token,
+                     "Content-Type": "application/json"} if json_body is not None else {"X-Publish-Token": token},
+            json=json_body, params=params,
+            timeout=30.0, proxies=proxies,
+        )
+    except Exception as e:
+        raise HTTPException(502, f"remote unreachable: {e}")
+    if resp.status_code >= 400:
+        try:
+            detail = resp.json()
+        except Exception:
+            detail = resp.text[:500]
+        raise HTTPException(resp.status_code, detail)
+    try:
+        return resp.json()
+    except Exception:
+        return {"raw": resp.text}
+
+
+@app.get("/api/share/password/info")
+async def share_password_info(user: str, slug: str):
+    return _share_admin_proxy("GET", f"/api/share/{user}/{slug}/password/info")
+
+
+@app.post("/api/share/password/enable")
+async def share_password_enable(user: str, slug: str):
+    return _share_admin_proxy("POST", f"/api/share/{user}/{slug}/password/enable")
+
+
+@app.post("/api/share/password/rotate")
+async def share_password_rotate(user: str, slug: str):
+    return _share_admin_proxy("POST", f"/api/share/{user}/{slug}/password/rotate")
+
+
+@app.post("/api/share/password/disable")
+async def share_password_disable(user: str, slug: str):
+    return _share_admin_proxy("POST", f"/api/share/{user}/{slug}/password/disable")
+
+
+@app.get("/api/share/sessions")
+async def share_sessions_list(user: str, slug: str):
+    return _share_admin_proxy("GET", f"/api/share/{user}/{slug}/sessions")
+
+
+@app.post("/api/share/sessions/revoke")
+async def share_sessions_revoke(user: str, slug: str, request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    return _share_admin_proxy("POST", f"/api/share/{user}/{slug}/sessions/revoke", json_body=body)
+
+
+@app.get("/api/share/audit")
+async def share_audit(user: str, slug: str, limit: int = 20):
+    return _share_admin_proxy("GET", f"/api/share/{user}/{slug}/audit", params={"limit": limit})
+
+
+@app.get("/api/share/info_batch")
+async def share_info_batch(user: str):
+    """远端拉取 user 所有 doc 的 policy 状态 · 供设置页列表渲染 🔒 icon。"""
+    return _share_admin_proxy("GET", "/api/share/info_batch", params={"user": user})
 
 @app.delete("/api/share/register")
 async def share_unregister(slug: str, user: str = ""):

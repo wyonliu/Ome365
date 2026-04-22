@@ -97,6 +97,49 @@
     .share-wrap { padding: 16px 14px 60px; }
     .sh-theme-toggle { top: 10px; right: 10px; width: 32px; height: 32px; font-size: 14px; }
   }
+
+  /* ══ T2 · 访客密码锁屏卡 ══ */
+  .sh-lock { max-width: 440px; margin: 72px auto 0; padding: 36px 32px 32px; background: linear-gradient(180deg, rgba(19,19,31,0.96), rgba(14,14,24,0.96)); border: 1px solid rgba(200,169,110,0.22); border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,0.45), 0 0 0 1px rgba(200,169,110,0.08); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); animation: shFadeIn 0.35s ease; }
+  .sh-lock-icon { font-size: 36px; text-align: center; margin-bottom: 14px; filter: drop-shadow(0 0 16px rgba(200,169,110,0.35)); }
+  .sh-lock-title { margin: 0 0 6px; font-size: 18px; font-weight: 700; color: var(--text); text-align: center; letter-spacing: 0.3px; }
+  .sh-lock-sub { margin: 0 0 22px; font-size: 12.5px; color: var(--text2); text-align: center; line-height: 1.55; }
+  .sh-lock-sub code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--gold); background: rgba(200,169,110,0.08); padding: 1px 7px; border-radius: 4px; font-size: 11.5px; }
+  .sh-lock-form { display: flex; flex-direction: column; gap: 12px; }
+  .sh-lock-input { width: 100%; padding: 13px 14px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 15px; font-weight: 600; color: var(--gold); letter-spacing: 0.6px; background: rgba(0,0,0,0.32); border: 1.5px solid rgba(200,169,110,0.22); border-radius: 10px; outline: none; transition: all 0.2s; box-sizing: border-box; }
+  .sh-lock-input::placeholder { color: rgba(200,169,110,0.28); font-weight: 400; letter-spacing: 1px; }
+  .sh-lock-input:focus { border-color: var(--gold); box-shadow: 0 0 0 4px rgba(200,169,110,0.1); background: rgba(0,0,0,0.4); }
+  .sh-lock-input.err { border-color: #f87171; box-shadow: 0 0 0 4px rgba(248,113,113,0.12); animation: shShake 0.35s; }
+  @keyframes shShake { 0%,100% { transform: translateX(0); } 20%,60% { transform: translateX(-6px); } 40%,80% { transform: translateX(6px); } }
+  .sh-lock-submit { padding: 12px; font-family: inherit; font-size: 13.5px; font-weight: 600; color: var(--gold); background: linear-gradient(180deg, rgba(200,169,110,0.24), rgba(200,169,110,0.12)); border: 1px solid rgba(200,169,110,0.42); border-radius: 10px; cursor: pointer; transition: all 0.15s; letter-spacing: 0.5px; }
+  .sh-lock-submit:hover:not(:disabled) { background: linear-gradient(180deg, rgba(200,169,110,0.34), rgba(200,169,110,0.2)); box-shadow: 0 0 0 1px rgba(200,169,110,0.3), 0 6px 16px rgba(200,169,110,0.18); }
+  .sh-lock-submit:disabled { opacity: 0.4; cursor: not-allowed; }
+  .sh-lock-submit.loading { color: transparent; position: relative; }
+  .sh-lock-submit.loading::after { content: ''; position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border: 2px solid rgba(200,169,110,0.3); border-top-color: var(--gold); border-radius: 50%; animation: shSpin 0.7s linear infinite; }
+  @keyframes shSpin { to { transform: rotate(360deg); } }
+  .sh-lock-msg { font-size: 12px; color: var(--text3); text-align: center; min-height: 16px; line-height: 1.5; }
+  .sh-lock-msg.err { color: #f87171; }
+  .sh-lock-msg.warn { color: #fbbf24; }
+  .sh-lock-msg.ok { color: #86efac; }
+  .sh-lock-foot { margin-top: 22px; padding-top: 16px; border-top: 1px dashed rgba(200,169,110,0.12); font-size: 11px; color: var(--text3); text-align: center; line-height: 1.6; }
+
+  [data-theme="light"] .sh-lock { background: linear-gradient(180deg, #ffffff, #f8fafc); border-color: #e2e8f0; box-shadow: 0 24px 60px rgba(15,31,56,0.1), 0 0 0 1px rgba(79,70,229,0.06); }
+  [data-theme="light"] .sh-lock-title { color: #1e293b; }
+  [data-theme="light"] .sh-lock-sub { color: #64748b; }
+  [data-theme="light"] .sh-lock-sub code { color: #4f46e5; background: #eef2ff; }
+  [data-theme="light"] .sh-lock-input { color: #4f46e5; background: #fff; border-color: #cbd5e1; }
+  [data-theme="light"] .sh-lock-input::placeholder { color: #cbd5e1; }
+  [data-theme="light"] .sh-lock-input:focus { border-color: #4f46e5; box-shadow: 0 0 0 4px rgba(79,70,229,0.1); }
+  [data-theme="light"] .sh-lock-input.err { border-color: #dc2626; box-shadow: 0 0 0 4px rgba(220,38,38,0.1); }
+  [data-theme="light"] .sh-lock-submit { color: #3730a3; background: linear-gradient(180deg, #e0e7ff, #c7d2fe); border-color: #a5b4fc; }
+  [data-theme="light"] .sh-lock-submit:hover:not(:disabled) { background: linear-gradient(180deg, #c7d2fe, #a5b4fc); box-shadow: 0 0 0 1px rgba(79,70,229,0.2), 0 6px 16px rgba(79,70,229,0.15); }
+  [data-theme="light"] .sh-lock-msg.err { color: #dc2626; }
+  [data-theme="light"] .sh-lock-msg.warn { color: #b45309; }
+  [data-theme="light"] .sh-lock-msg.ok { color: #15803d; }
+  [data-theme="light"] .sh-lock-foot { border-top-color: #e2e8f0; color: #94a3b8; }
+
+  @media (max-width: 640px) {
+    .sh-lock { margin: 40px 12px 0; padding: 28px 22px 24px; }
+  }
 </style>
 </head>
 <body>
@@ -105,6 +148,19 @@
   <div class="share-loading" id="loading">加载中...</div>
   <div class="share-error" id="error" style="display:none"></div>
   <div id="share-content" style="display:none"></div>
+  <div id="lock-card" class="sh-lock" style="display:none">
+    <div class="sh-lock-icon">🔒</div>
+    <h2 class="sh-lock-title">此内容需要密码解锁</h2>
+    <p class="sh-lock-sub">已加密保护 · <code id="lock-slug"></code></p>
+    <form class="sh-lock-form" id="lock-form" autocomplete="off" onsubmit="return submitLock(event)">
+      <input class="sh-lock-input" id="lock-input" type="text" inputmode="text"
+             autocomplete="one-time-code" spellcheck="false"
+             placeholder="word-word-word-NN" autofocus>
+      <button class="sh-lock-submit" id="lock-submit" type="submit" disabled>解锁</button>
+      <div class="sh-lock-msg" id="lock-msg">粘贴三词密码 · 自动提交 · 解锁后 30 天内免重输</div>
+    </form>
+    <div class="sh-lock-foot">⏱ 30 天内免重输｜请勿转发此条消息</div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -559,6 +615,14 @@ async function init() {
   try {
     let res = await fetch(`/api/doc/${user}/${slug}`);
     let data, raw, title, meta;
+    if (res.status === 401) {
+      let body = {};
+      try { body = await res.json(); } catch(_) {}
+      if ((body && body.error === 'password_required') || body.detail === 'password_required') {
+        showLockCard(user, slug);
+        return;
+      }
+    }
     if (res.ok) {
       data = await res.json();
       raw = data.raw; title = data.title || data.meta?.title || slug; meta = data.meta || {};
@@ -598,6 +662,128 @@ function showError(msg) {
   document.getElementById('loading').style.display = 'none';
   const el = document.getElementById('error');
   el.textContent = msg; el.style.display = '';
+}
+
+// ══ T2 · 访客锁屏卡 ══
+const _lockState = { user: '', slug: '', fails: 0, lockedUntil: 0, countdownTimer: null };
+
+function showLockCard(user, slug) {
+  _lockState.user = user; _lockState.slug = slug;
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('error').style.display = 'none';
+  document.getElementById('share-content').style.display = 'none';
+  const card = document.getElementById('lock-card');
+  card.style.display = '';
+  document.getElementById('lock-slug').textContent = `/${user}/${slug}`;
+  document.title = '🔒 需要密码 · Ome365';
+  const input = document.getElementById('lock-input');
+  const submit = document.getElementById('lock-submit');
+  input.value = '';
+  input.addEventListener('input', () => {
+    input.classList.remove('err');
+    submit.disabled = !input.value.trim();
+    // auto-submit on paste-like full passphrase (word-word-word-NN, min 12 chars incl. 3 dashes)
+    const v = input.value.trim();
+    if (/^[a-z]{3,12}-[a-z]{3,12}-[a-z]{3,12}-\d{2}$/.test(v)) {
+      if (!submit.classList.contains('loading')) submitLock();
+    }
+  });
+  input.addEventListener('paste', () => {
+    setTimeout(() => {
+      const v = input.value.trim();
+      if (/^[a-z]{3,12}-[a-z]{3,12}-[a-z]{3,12}-\d{2}$/.test(v)) submitLock();
+    }, 10);
+  });
+  setTimeout(() => input.focus(), 50);
+}
+
+function _setLockMsg(text, kind) {
+  const m = document.getElementById('lock-msg');
+  m.textContent = text;
+  m.classList.remove('err', 'warn', 'ok');
+  if (kind) m.classList.add(kind);
+}
+
+function _startCountdown(untilTs) {
+  const submit = document.getElementById('lock-submit');
+  const input = document.getElementById('lock-input');
+  _lockState.lockedUntil = untilTs;
+  if (_lockState.countdownTimer) clearInterval(_lockState.countdownTimer);
+  const tick = () => {
+    const left = Math.max(0, Math.round((untilTs - Date.now()) / 1000));
+    if (left <= 0) {
+      clearInterval(_lockState.countdownTimer);
+      _lockState.countdownTimer = null;
+      _lockState.lockedUntil = 0;
+      _lockState.fails = 0;
+      input.disabled = false;
+      submit.disabled = !input.value.trim();
+      _setLockMsg('可以重试了', null);
+      input.focus();
+    } else {
+      const m = left >= 60 ? `${Math.ceil(left/60)} 分钟` : `${left} 秒`;
+      _setLockMsg(`🚫 错误过多，请 ${m} 后再试`, 'err');
+    }
+  };
+  input.disabled = true; submit.disabled = true;
+  tick();
+  _lockState.countdownTimer = setInterval(tick, 1000);
+}
+
+function _applyLock(reason) {
+  // backend 返回的三种锁 → 秒数
+  const secs = { ip_locked: 600, doc_cooldown: 3600, doc_locked: 86400 }[reason] || 600;
+  _startCountdown(Date.now() + secs * 1000);
+}
+
+async function submitLock(ev) {
+  if (ev) ev.preventDefault();
+  const input = document.getElementById('lock-input');
+  const submit = document.getElementById('lock-submit');
+  const password = input.value.trim();
+  if (!password) return false;
+  if (_lockState.lockedUntil && Date.now() < _lockState.lockedUntil) return false;
+  submit.classList.add('loading'); submit.disabled = true;
+  _setLockMsg('验证中…', null);
+  try {
+    const res = await fetch(`/unlock/${_lockState.user}/${_lockState.slug}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+      credentials: 'same-origin',
+    });
+    let body = {};
+    try { body = await res.json(); } catch(_) {}
+    if (res.ok && body.ok) {
+      _setLockMsg('✓ 解锁成功，加载中…', 'ok');
+      submit.classList.remove('loading');
+      setTimeout(() => location.reload(), 280);
+      return false;
+    }
+    submit.classList.remove('loading'); submit.disabled = false;
+    input.classList.add('err');
+    // 429 → 速率限制
+    if (res.status === 429 || body.error === 'rate_limited') {
+      _applyLock(body.reason || 'ip_locked');
+      return false;
+    }
+    // 401 → 密码错；若附带 locked 字段说明这一击触发了锁
+    if (body.error === 'invalid_password') {
+      if (body.locked) { _applyLock(body.locked); return false; }
+      _lockState.fails = Number(body.fails_ip_10min) || (_lockState.fails + 1);
+      const remain = Math.max(0, 5 - _lockState.fails);
+      if (_lockState.fails === 1) _setLockMsg('✗ 密码错误，请重试', 'err');
+      else if (remain > 0) _setLockMsg(`✗ 密码错误 · 还剩 ${remain} 次`, 'err');
+      else _setLockMsg('✗ 密码错误', 'err');
+      input.select();
+      return false;
+    }
+    _setLockMsg('✗ 验证失败（HTTP ' + res.status + '）', 'err');
+  } catch (e) {
+    submit.classList.remove('loading'); submit.disabled = !input.value.trim();
+    _setLockMsg('网络错误：' + (e.message || e), 'err');
+  }
+  return false;
 }
 
 let _tocMode = 'full'; // 'full' | 'slim' | 'hidden'

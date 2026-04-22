@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+<title>{{USER}} · Ome365</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f8fd; --text:#1a2b45; --text2:#5b6b82; --text3:#9aa6b8;
+  --accent:#0055a6; --border:rgba(0,85,166,0.12);
+  --card:rgba(255,255,255,0.96);
+  --shadow:0 8px 32px rgba(17,34,64,0.08), 0 4px 12px rgba(17,34,64,0.04);
+}
+[data-theme="dark"]{
+  --bg:#08080d; --text:#e8e8f0; --text2:#7c7c96; --text3:#484860;
+  --accent:#d4b07a; --border:rgba(255,255,255,0.08);
+  --card:rgba(18,18,30,0.85);
+  --shadow:0 8px 32px rgba(0,0,0,0.35);
+}
+html,body{background:var(--bg);color:var(--text);min-height:100vh}
+body{font:15px/1.6 'Inter','Noto Sans SC',-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased;display:grid;place-items:center;padding:40px 20px}
+body::before{content:'';position:fixed;inset:-20% 0 0 0;background:radial-gradient(ellipse 900px 520px at 50% 0%, rgba(0,85,166,0.07), transparent 60%);pointer-events:none;z-index:0}
+.card{position:relative;z-index:1;max-width:480px;width:100%;padding:52px 40px;border-radius:24px;border:1px solid var(--border);background:var(--card);box-shadow:var(--shadow);text-align:center;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.logo-r{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;border:3px solid var(--accent);border-radius:50%;background:radial-gradient(circle at 30% 30%, rgba(0,85,166,0.15), transparent 70%);box-shadow:0 0 14px rgba(0,85,166,0.2);margin-bottom:22px}
+.brand{font:600 14px/1 -apple-system;color:var(--text3);letter-spacing:0.04em;margin-bottom:18px}
+.brand b{color:var(--accent);font-weight:600}
+.user{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;background:rgba(0,85,166,0.08);color:var(--accent);font:600 13px/1 -apple-system;letter-spacing:0.02em;margin-bottom:18px}
+h1{font-size:24px;font-weight:700;letter-spacing:-0.02em;margin-bottom:14px;color:var(--text)}
+p{font-size:14.5px;color:var(--text2);line-height:1.7;margin-bottom:10px}
+.hint{margin-top:22px;padding:14px 18px;border-radius:12px;background:rgba(0,85,166,0.05);border:1px solid rgba(0,85,166,0.1);font-size:13px;color:var(--text2);text-align:left}
+.hint b{color:var(--accent)}
+.footer{margin-top:28px;font-size:12px;color:var(--text3);letter-spacing:0.02em}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo-r"></div>
+  <div class="brand"><b>Ome365</b> · 共享工作台</div>
+  <div class="user">作者：{{USER}}</div>
+  <h1>文档清单不公开</h1>
+  <p>本作者的共享文档列表不提供目录浏览。</p>
+  <p>请使用已授权的完整文档链接访问。</p>
+  <div class="hint">
+    你已知该作者存在，但具体文档需要通过邮件 / 即时消息中<br>
+    收到的原始 <b>完整链接</b> 打开：<code>/{{USER}}/&lt;slug&gt;</code>
+  </div>
+  <div class="footer">© Ome365 · 共享知识库</div>
+</div>
+<script>
+(function(){ try { var t = localStorage.getItem('theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch(e){} })();
+</script>
+</body>
+</html>
