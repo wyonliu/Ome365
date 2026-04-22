@@ -5879,6 +5879,12 @@ async def share_get(code: str):
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 MEDIA.mkdir(parents=True, exist_ok=True)
 app.mount("/reports-static", StaticFiles(directory=str(REPORTS_DIR)), name="reports-static")
+# Also mount static assets under /static/ for share.html compatibility:
+# share_server.py serves /static/<path> natively; when share routes run inside the
+# cockpit process (/s prefix), the same asset URLs must resolve — otherwise
+# share.html's `<link href="/static/style.css">` / `<script src="/static/vendor/marked.min.js">`
+# hit 404 and the page dies with `marked is not defined`.
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static_alias")
 app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 
 
