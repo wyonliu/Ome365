@@ -58,10 +58,10 @@ _T1_SHARE_HEADERS = {
     "Permissions-Policy": "interest-cohort=(), browsing-topics=()",
     "Content-Security-Policy": (
         "default-src 'self' data: blob:; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-        "style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "img-src 'self' data: blob: https:; "
-        "font-src 'self' data:; "
+        "font-src 'self' data: https://cdn.jsdelivr.net; "
         "connect-src 'self'; "
         "frame-ancestors 'none'; "
         "base-uri 'self'"
