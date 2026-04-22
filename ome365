@@ -238,11 +238,32 @@ def cmd_doctor() -> int:
     return 0 if ok else 1
 
 
+# ── publish CLI 派发 ────────────────────────
+def _dispatch_publish(argv: list) -> int:
+    """
+    把 argv 转给 .app/publish/cli.py。
+
+    做 subprocess 避免污染 launcher 自身的 sys.path；如果以后要 inline
+    只需：from publish.cli import main; return main(argv)
+    """
+    app = APP
+    if not (app / "publish" / "cli.py").exists():
+        die("publish 模块缺失（.app/publish/cli.py）。是否拉到了最新版？")
+    env = os.environ.copy()
+    env.setdefault("PYTHONPATH", str(app))
+    r = subprocess.run(
+        [sys.executable, "-m", "publish.cli", *argv],
+        cwd=str(app),
+        env=env,
+    )
+    return r.returncode
+
+
 # ── 主入口 ───────────────────────────────────
 def main() -> int:
     # 支持两种用法：./ome365 [flags] | ./ome365 <subcommand>
     argv = sys.argv[1:]
-    if argv and argv[0] in ("setup", "doctor", "help", "--help", "-h"):
+    if argv and argv[0] in ("setup", "doctor", "help", "--help", "-h", "publish", "share"):
         sub = argv[0]
         if sub in ("help", "--help", "-h"):
             print(__doc__)
@@ -254,6 +275,20 @@ def main() -> int:
             os.execv("/bin/bash", ["bash", str(setup_sh), *argv[1:]])
         if sub == "doctor":
             return cmd_doctor()
+        if sub == "publish":
+            # 派发到 publish.cli 的 publish 子命令
+            return _dispatch_publish(["publish", *argv[1:]])
+        if sub == "share":
+            # share list / share revoke / share policies → 直接透传给 publish.cli
+            if len(argv) < 2:
+                print(
+                    "用法：\n"
+                    "  ./ome365 share list [--all]           列出快照\n"
+                    "  ./ome365 share revoke <snapshot-id>   撤销快照\n"
+                    "  ./ome365 share policies               显示 policy 列表"
+                )
+                return 2
+            return _dispatch_publish(argv[1:])
 
     p = argparse.ArgumentParser(
         prog="ome365",

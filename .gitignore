@@ -56,6 +56,12 @@
 # ── Tenant config live（含真实租户品牌/分类/提示 · 仅保留 .sample.json）──
 .app/tenant_config.json
 
+# ── Life Plan config live（指向私人 plan_dir · 仅保留 .sample.json + demo 占位）──
+.app/life_plan_config.json
+# 私人 plan_dir 即使被链接到仓内也不推
+/life-plan/
+/.life-plan/
+
 # ── TicNote export archived versions（保留最新 ticnote_export.py/ticnote_clean.py/ticnote_rename.py）──
 .app/ticnote_export_0414.py
 .app/ticnote_export_0415.py

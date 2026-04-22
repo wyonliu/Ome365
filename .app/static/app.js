@@ -338,7 +338,28 @@ const app = createApp({
     const interviewSpeakerMap = ref({});  // { SPEAKER_00: '—', ... } — editable
     const interviewTags = ref([]);
     const shareToast = ref('');
-    const shareDialog = reactive({ show: false, slug: '', user: 'wyon', docTitle: '', docPath: '', available: false, conflict: false, conflictTitle: '', url: '', copied: false, autoSlug: true, existing: false, pos: {}, message: '' });
+    const shareDialog = reactive({
+      show: false, slug: '', user: '', docTitle: '', docPath: '',
+      available: false, conflict: false, conflictTitle: '',
+      url: '', localUrl: '', remoteUrl: '', copied: false,
+      autoSlug: true, existing: false, pos: {}, message: '',
+      editingSlug: false, newSlug: '',
+      preferRemote: localStorage.getItem('share-prefer-remote') !== '0',
+      // T2 · 密码保护
+      pwdLoading: false,           // 正在查 info / enable / rotate / disable
+      pwdProtected: false,         // 当前是否加密
+      pwdSetAt: '',                // 加密时间 ISO
+      pwdActiveSessions: 0,        // 活跃 session 数
+      pwdPlain: '',                // 本次刚生成/轮换的明文（仅前端内存，刷新即丢）
+      pwdShow: false,              // 是否展开密码区块（existing 状态下）
+      pwdCopied: '',               // '' | 'combo' | 'pwd'  —— 哪个按钮刚复制
+      pwdError: '',                // 提示文案
+      pwdConfirm: null,            // null | 'rotate' | 'disable'  —— 二次确认 banner
+    });
+    const shareList = ref([]);
+    const shareMgrEditing = ref(null);
+    const shareMgrNewSlug = ref('');
+    const shareMgrMsg = ref('');
     const currentFile = ref(null);
     const currentFilePath = ref('');
     const noteText = ref('');
@@ -433,6 +454,47 @@ const app = createApp({
     const lifeNewMoment = ref({category:'高光', text:''});
     const lifeShowMomentForm = ref(false);
 
+    // ═══ Life Plan（年度人生规划 · /api/life/plan/*）═══
+    const lifePlanConfig = ref(null);   // {enabled, plan_dir_exists, plan_start, plan_days, label, quarter_themes}
+    const lifePlanHero = ref(null);     // {day_num, progress_pct, plan_days, quarter, quarter_theme, most_important, today_rel, week_rel}
+    const lifePlanTree = ref(null);     // {enabled, groups:{today:[], week:[], core:[], archive:[]}}
+    const lifePlanActive = ref(null);   // {rel, raw, title, meta}
+    const lifePlanLoading = ref(false);
+    const lifePlanParsed = computed(() => parseMdReport(lifePlanActive.value?.raw || ''));
+    // ── Dashboard mode（看板模式·默认打开）──
+    const lifePlanView = ref('dashboard');            // 'dashboard' | 'reader'
+    const lifePlanDashboard = ref(null);              // {date, day_num, core_three, blocks, redlines, penalties, theme, source_rel, fallback}
+    const lifePlanProgress = ref(null);               // {date, checks, counters, review}
+    const lifePlanDate = ref('');                     // YYYY-MM-DD（默认今天）
+    const lifePlanSubmitting = ref(false);
+    const lifePlanNowTick = ref(Date.now());          // 每分钟刷新一次驱动 "现在" 横线
+    // 现在的 HH:MM（分钟粒度）
+    const nowHHMM = computed(() => {
+      const d = new Date(lifePlanNowTick.value);
+      return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    });
+    // 块状态标注：past / now / future（now 指"现在正在这一块或下一块"的分界）
+    const lifePlanBlocksAnnotated = computed(() => {
+      const d = lifePlanDashboard.value;
+      const p = lifePlanProgress.value;
+      if(!d || !Array.isArray(d.blocks)) return [];
+      const toMin = s => {
+        const m = /^(\d{1,2}):(\d{2})/.exec(s||'');
+        return m ? (+m[1])*60 + (+m[2]) : -1;
+      };
+      const nowMin = toMin(nowHHMM.value);
+      const checks = p?.checks || {};
+      return d.blocks.map((b, i) => {
+        const startMin = toMin(b.time);
+        const next = d.blocks[i+1];
+        const endMin = next ? toMin(next.time) : startMin + 30;
+        let status = 'future';
+        if (nowMin >= endMin) status = 'past';
+        else if (nowMin >= startMin) status = 'now';
+        return { ...b, status, checked: !!checks[b.key] };
+      });
+    });
+
     // ═══ Cockpit (strategy dashboard) ═══
     const cockpitData = ref(null);
     const cockpitLoading = ref(false);
@@ -444,8 +506,11 @@ const app = createApp({
     // happens in-page (no overlay/drawer), mirroring reports-view's pattern.
     const cockpitActiveBlockKey = ref('');          // '01-diagnosis' | '02-research' | ... | ''
     const cockpitDrillPerson = ref(null);           // { entityKey, personKey, personLabel } | null
-    const cockpitOpenReport = ref(null);            // selected report doc (in-page reader) | null
+    const cockpitOpenReport = ref(null);            // selected report doc (modal overlay) | null
+    const cockpitOverlayDocs = ref([]);             // array of report items currently in modal overlay
+    const cockpitOverlayIdx = ref(0);               // index of currently displayed doc
     const cockpitBloomLoading = ref(false);         // loading master doc for bloom sections
+    const cockpitBloomMasterIdx = ref(0);           // which master doc is active (bloom sections with multiple 00· docs, e.g. A4S)
     const forecastSelectedTrack = ref(null);        // clicked track key in forecast chart, e.g. 't1'
     function toggleForecastTrack(trackKey) {
       forecastSelectedTrack.value = forecastSelectedTrack.value === trackKey ? null : trackKey;
@@ -467,21 +532,16 @@ const app = createApp({
       // content so we can parse it into chapter tiles.
       const sec = (reportsBySection.value || []).find(s => s.key === key);
       if (sec && sec.bloom && (sec.masters || []).length) {
-        const master = sec.masters[0];
-        cockpitBloomLoading.value = true;
-        try {
-          const res = await api('/reports/file?path=' + encodeURIComponent(master.path));
-          // Temporarily stash master doc in reportContent so reportParsed computes
-          // chapter structure. We do NOT set selectedReport/cockpitOpenReport, so
-          // the reader does not open — only chapter tiles render.
-          reportContent.value = res?.raw || '';
-          selectedReport.value = master; // needed for reportParsed title fallback
-        } catch (e) {
-          console.error('load bloom master', e);
-        } finally {
-          cockpitBloomLoading.value = false;
-        }
+        // Pick a sensible default master:
+        //   · A4S has two 00· masters (组织方案 + 诊断) — prefer 方案 as default
+        //   · Otherwise fall back to first
+        const masters = sec.masters;
+        let idx = masters.findIndex(m => /方案/.test(m.title || ''));
+        if (idx < 0) idx = 0;
+        cockpitBloomMasterIdx.value = idx;
+        await loadBloomMaster(sec, idx);
       } else {
+        cockpitBloomMasterIdx.value = 0;
         reportContent.value = '';
         selectedReport.value = null;
       }
@@ -508,18 +568,46 @@ const app = createApp({
     }
     async function cockpitOpenDoc(r, opts={}) {
       if (!r) return;
-      cockpitOpenReport.value = r;
-      selectedReport.value = r;
+      // Single-doc overlay: just open the one doc.
+      await cockpitOpenOverlay([r], 0, opts);
+    }
+    async function cockpitOpenOverlay(items, startIdx = 0, opts={}) {
+      const arr = (Array.isArray(items) ? items : [items]).filter(Boolean);
+      if (!arr.length) return;
+      cockpitOverlayDocs.value = arr;
+      cockpitOverlayIdx.value = Math.max(0, Math.min(startIdx, arr.length - 1));
+      document.body.classList.add('cp-overlay-open');
+      await cockpitLoadOverlayDoc(opts);
+    }
+    async function cockpitLoadOverlayDoc(opts={}) {
+      const docs = cockpitOverlayDocs.value;
+      const idx = cockpitOverlayIdx.value;
+      const doc = docs[idx];
+      if (!doc) return;
+      cockpitOpenReport.value = doc;
+      selectedReport.value = doc;
       reportEditing.value = false;
-      if(!opts.skipNav) pushNav({view:'cockpit', detail:'doc:'+shortId(r.path), _path:r.path});
+      if(!opts.skipNav) pushNav({view:'cockpit', detail:'doc:'+shortId(doc.path), _path:doc.path});
       try {
-        const res = await api('/reports/file?path=' + encodeURIComponent(r.path));
+        const res = await api('/reports/file?path=' + encodeURIComponent(doc.path));
         reportContent.value = res?.raw || '';
-      } catch (e) { console.error('load report', e); }
-      nextTick(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+      } catch (e) { console.error('load overlay doc', e); }
+      nextTick(() => {
+        const body = document.querySelector('.cp-doc-modal-body');
+        if (body) body.scrollTop = 0;
+      });
+    }
+    async function cockpitSwitchOverlayDoc(idx) {
+      if (idx < 0 || idx >= cockpitOverlayDocs.value.length) return;
+      if (idx === cockpitOverlayIdx.value) return;
+      cockpitOverlayIdx.value = idx;
+      await cockpitLoadOverlayDoc();
     }
     function cockpitCloseReport(opts={}) {
       cockpitOpenReport.value = null;
+      cockpitOverlayDocs.value = [];
+      cockpitOverlayIdx.value = 0;
+      document.body.classList.remove('cp-overlay-open');
       // Push nav back to block level (or cockpit home)
       if(!opts.skipNav) {
         if(cockpitActiveBlockKey.value) pushNav({view:'cockpit', detail:'block:'+cockpitActiveBlockKey.value});
@@ -534,17 +622,35 @@ const app = createApp({
         selectedReport.value = null;
         reportContent.value = '';
       }
-      nextTick(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); });
     }
     async function cockpitSelectBlockReload(key) {
       const sec = (reportsBySection.value || []).find(s => s.key === key);
       if (!sec || !sec.bloom || !(sec.masters || []).length) return;
-      const master = sec.masters[0];
+      const idx = Math.min(cockpitBloomMasterIdx.value || 0, sec.masters.length - 1);
+      await loadBloomMaster(sec, idx);
+    }
+    async function loadBloomMaster(sec, idx) {
+      const master = (sec.masters || [])[idx];
+      if (!master) return;
+      cockpitBloomLoading.value = true;
       try {
         const res = await api('/reports/file?path=' + encodeURIComponent(master.path));
         reportContent.value = res?.raw || '';
         selectedReport.value = master;
-      } catch (e) { console.error('reload bloom', e); }
+      } catch (e) {
+        console.error('load bloom master', e);
+      } finally {
+        cockpitBloomLoading.value = false;
+      }
+    }
+    async function cockpitSwitchBloomMaster(idx) {
+      const sec = cockpitActiveBlockData.value;
+      if (!sec || !sec.bloom) return;
+      if (idx < 0 || idx >= (sec.masters || []).length) return;
+      if (idx === cockpitBloomMasterIdx.value) return;
+      cockpitBloomMasterIdx.value = idx;
+      cockpitOpenReport.value = null;
+      await loadBloomMaster(sec, idx);
     }
     async function cockpitOpenChapter(ch) {
       // The master doc is already in reportContent (loaded by cockpitSelectBlock).
@@ -601,11 +707,20 @@ const app = createApp({
       if (!p) return null;
       return { section: sec, entity: sg, person: p };
     });
-    // Bloom master doc (for A4S / 北极星)
+    // Bloom master doc (for A4S / 北极星) — A4S has 2 masters (组织方案 + 诊断)
+    // so we track which master is currently active via cockpitBloomMasterIdx.
     const cockpitBloomMaster = computed(() => {
       const sec = cockpitActiveBlockData.value;
       if (!sec || !sec.bloom) return null;
-      return (sec.masters || [])[0] || null;
+      const masters = sec.masters || [];
+      if (!masters.length) return null;
+      const idx = Math.min(Math.max(0, cockpitBloomMasterIdx.value || 0), masters.length - 1);
+      return masters[idx] || masters[0];
+    });
+    const cockpitBloomMasters = computed(() => {
+      const sec = cockpitActiveBlockData.value;
+      if (!sec || !sec.bloom) return [];
+      return sec.masters || [];
     });
     // Bloom chapter tiles: parse master doc into h2 chapters
     // Uses reportParsed (which reads reportContent) — cockpitSelectBlock loads
@@ -1093,8 +1208,8 @@ const app = createApp({
     }
 
     // ══ Report parser · split markdown into hero + sections for cockpit-grade rendering ══
-    const reportParsed = computed(() => {
-      let raw = reportContent.value || '';
+    // ── Shared MD-doc parser (used by cockpit reportParsed + life plan lifePlanParsed) ──
+    function parseMdReport(raw) {
       if (!raw) return null;
       // ── Strip YAML frontmatter, capturing title/subtitle/eyebrow ──
       let fmTitle = '', fmSubtitle = '', fmEyebrow = '';
@@ -1119,10 +1234,17 @@ const app = createApp({
       const metaPills = [];
       const preface = [];
       let i = 0;
-      // First h1 → title (only if not set by frontmatter)
+      // First h1 → title. If frontmatter already set title, still consume the H1 (prevents dup echo in preface).
+      // If the H1 contains extra suffix after " · " (e.g., version/date), stash as subtitle.
       while (i < lines.length && !lines[i].trim()) i++;
-      if (!title && i < lines.length && /^#\s+/.test(lines[i])) {
-        title = lines[i].replace(/^#\s+/, '').trim();
+      if (i < lines.length && /^#\s+/.test(lines[i])) {
+        const h1 = lines[i].replace(/^#\s+/, '').trim();
+        if (!title) {
+          title = h1;
+        } else if (!fmSubtitle) {
+          const m = h1.match(/^\s*(.+?)\s*[·・]\s*(.+?)\s*$/);
+          if (m && (m[1] === title || title.startsWith(m[1]) || m[1].startsWith(title))) fmSubtitle = m[2];
+        }
         i++;
       }
       // If frontmatter had subtitle, inject as first meta pill
@@ -1178,12 +1300,16 @@ const app = createApp({
           const rawTitle = l.replace(/^##\s+/, '').trim();
           // Try to extract leading number (01, 02, ...) or Roman numeral (I, II, III, ...)
           const romanMap = {I:1,II:2,III:3,IV:4,V:5,VI:6,VII:7,VIII:8,IX:9,X:10,XI:11,XII:12,XIII:13,XIV:14,XV:15,XVI:16,XVII:17,XVIII:18,XIX:19,XX:20};
+          const cnMap = {'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10,'十一':11,'十二':12,'十三':13,'十四':14,'十五':15,'十六':16,'十七':17,'十八':18,'十九':19,'二十':20};
           const m = rawTitle.match(/^(\d{1,2})[\s·.、）)]+(.*)$/)
-                 || rawTitle.match(/^((?:X{0,2}(?:IX|IV|V?I{1,3}|V)))[\s·.、）)]+(.*)$/);
+                 || rawTitle.match(/^((?:X{0,2}(?:IX|IV|V?I{1,3}|V)))[\s·.、）)]+(.*)$/)
+                 || rawTitle.match(/^(二十|十[一二三四五六七八九]?|[一二三四五六七八九])[\s·.、）)]+(.*)$/);
           let numStr = '';
           if (m && m[1]) {
             const raw = m[1];
-            numStr = romanMap[raw] !== undefined ? String(romanMap[raw]).padStart(2, '0') : raw.padStart(2, '0');
+            if (romanMap[raw] !== undefined) numStr = String(romanMap[raw]).padStart(2, '0');
+            else if (cnMap[raw] !== undefined) numStr = String(cnMap[raw]).padStart(2, '0');
+            else numStr = raw.padStart(2, '0');
           }
           cur = {
             id: 'rv-sec-' + sections.length,
@@ -1214,7 +1340,8 @@ const app = createApp({
           return { ...s, html: md(bodyText), chunks };
         }),
       };
-    });
+    }
+    const reportParsed = computed(() => parseMdReport(reportContent.value || ''));
 
     function scrollToReportSection(id) {
       const el = document.getElementById(id);
@@ -1295,7 +1422,155 @@ const app = createApp({
     const selectedContact = ref(null);
     const showContactForm = ref(false);
     const contactFilter = ref({category:'',tier:''});
-    const contactView = ref('org');
+    const contactView = ref(localStorage.getItem('ome365_contact_view') || 'org');
+    const recruitingContent = ref('');
+    const recruitingDocMeta = ref({path:'', title:'', subtitle:'', date:'', version:''});
+    const recruitingLoading = ref(false);
+    const recruitingError = ref('');
+    const RECRUITING_SECTION = '06-recruiting';
+    // Extract `**级别**：Principal · **部门**：空间BU · **地点**：成都` → [{k:'级别',v:'Principal'},...]
+    // Returns {chips, rest} — `rest` is the section body with the meta line removed.
+    function extractJobMetaChips(bodyLines) {
+      const chips = [];
+      let metaLineIdx = -1;
+      for (let i = 0; i < Math.min(bodyLines.length, 6); i++) {
+        const l = (bodyLines[i] || '').trim();
+        if (!l) continue;
+        if (/^#/.test(l) || /^[-*+]\s/.test(l) || /^\d+\.\s/.test(l) || /^>/.test(l)) break;
+        if (l.includes('**') && /\*\*[^*]+\*\*\s*[：:]/.test(l)) {
+          const re = /\*\*([^*]+)\*\*\s*[：:]\s*([^·\n]+?)(?=\s*·\s*\*\*|$)/g;
+          let m;
+          while ((m = re.exec(l)) !== null) {
+            chips.push({ k: m[1].trim(), v: m[2].trim() });
+          }
+          if (chips.length) { metaLineIdx = i; break; }
+        }
+        break; // first non-blank non-heading line must match or we bail
+      }
+      if (metaLineIdx < 0) return { chips: [], rest: bodyLines };
+      const rest = bodyLines.slice();
+      rest.splice(metaLineIdx, 1);
+      // Trim leading blanks
+      while (rest.length && !rest[0].trim()) rest.shift();
+      return { chips, rest };
+    }
+    // Pull the leading **bold-term** of each numbered list item as keyword chips.
+    // Dedup, cap at 8 per section, skip chip values already used (e.g., "级别"/"部门"/"地点").
+    function extractJobKeywords(bodyLines, chipKeys) {
+      const kws = [];
+      const seen = new Set((chipKeys || []).map(x => x.trim()));
+      for (const raw of bodyLines) {
+        const l = (raw || '').trim();
+        if (!l) continue;
+        const m = l.match(/^\d+\.\s*\*\*([^*：:]+?)\*\*\s*[：:]/);
+        if (!m) continue;
+        const kw = m[1].trim();
+        if (!kw || seen.has(kw)) continue;
+        seen.add(kw);
+        kws.push(kw);
+        if (kws.length >= 8) break;
+      }
+      return kws;
+    }
+    // Augment parseMdReport output with JD-specific meta chips + keyword extraction.
+    function augmentJobSections(parsed) {
+      if (!parsed || !parsed.sections) return parsed;
+      for (const s of parsed.sections) {
+        if (!s || !s.body) continue;
+        const { chips, rest } = extractJobMetaChips(s.body);
+        s.jobChips = chips;
+        if (chips.length) {
+          s.jobKeywords = extractJobKeywords(rest, chips.map(c => c.k));
+          const bodyText = rest.join('\n').trim();
+          try {
+            const rawChunks = buildSmartChunks(bodyText);
+            const chunks = hydrateChunks(rawChunks);
+            const mdf = (txt) => (typeof marked !== 'undefined' && txt) ? badgifyDoc(marked.parse(txt, {gfm:true, breaks:true})) : '';
+            s.html = mdf(bodyText);
+            s.chunks = chunks;
+          } catch (e) { /* keep originals on failure */ }
+        }
+      }
+      return parsed;
+    }
+    // Reactive: which JD sections are collapsed (Set of section id). Default: all expanded.
+    const jdCollapsed = reactive({});
+    function toggleJdSection(id) { jdCollapsed[id] = !jdCollapsed[id]; }
+    const recruitingParsed = computed(() => {
+      if (!recruitingContent.value) return null;
+      return augmentJobSections(parseMdReport(recruitingContent.value));
+    });
+    async function loadRecruitingDoc(force=false) {
+      if (recruitingContent.value && !force) return;
+      recruitingLoading.value = true;
+      recruitingError.value = '';
+      try {
+        if (!reportsList.value || !reportsList.value.length) await loadReports();
+        const docs = (reportsList.value || [])
+          .filter(r => (r.section || '') === RECRUITING_SECTION)
+          .sort((a,b) => (b.date||'').localeCompare(a.date||''));
+        if (!docs.length) {
+          recruitingError.value = '暂无招聘文档（' + RECRUITING_SECTION + '）';
+          return;
+        }
+        const top = docs[0];
+        const res = await api('/reports/file?path=' + encodeURIComponent(top.path));
+        recruitingContent.value = (res && (res.raw || res.content)) || '';
+        recruitingDocMeta.value = {
+          path: top.path,
+          title: top.title || res?.name || '',
+          subtitle: top.subtitle || '',
+          date: top.date || '',
+          version: top.version || '',
+        };
+        if (!recruitingContent.value) recruitingError.value = '文档为空';
+      } catch (e) {
+        recruitingError.value = String(e && e.message || e);
+      } finally {
+        recruitingLoading.value = false;
+      }
+    }
+    function shareRecruitingDoc(ev) {
+      const path = recruitingDocMeta.value.path;
+      if (!path) return;
+      openShareDialog(ev, { path, title: recruitingDocMeta.value.title || '招聘JD' });
+    }
+    const recruitingEditOpen = ref(false);
+    const recruitingEditContent = ref('');
+    const recruitingEditDirty = ref(false);
+    const recruitingEditSaving = ref(false);
+    async function editRecruitingDoc() {
+      const path = recruitingDocMeta.value.path;
+      if (!path) return;
+      try {
+        const res = await api('/reports/file?path=' + encodeURIComponent(path));
+        recruitingEditContent.value = res?.raw || '';
+        recruitingEditDirty.value = false;
+        recruitingEditOpen.value = true;
+      } catch(e) { showToast('打开编辑器失败：' + e.message, 'error'); }
+    }
+    async function saveRecruitingEdit() {
+      if (!recruitingEditDirty.value || recruitingEditSaving.value) return;
+      recruitingEditSaving.value = true;
+      try {
+        const res = await api('/reports/file', {
+          method: 'PUT',
+          body: JSON.stringify({ path: recruitingDocMeta.value.path, content: recruitingEditContent.value }),
+        });
+        if (!res?.ok) throw new Error(res?.error || '保存失败');
+        recruitingEditDirty.value = false;
+        showToast('已保存');
+        await loadRecruitingDoc(true);
+      } catch(e) {
+        showToast('保存失败：' + e.message, 'error');
+      } finally {
+        recruitingEditSaving.value = false;
+      }
+    }
+    function closeRecruitingEdit() {
+      if (recruitingEditDirty.value && !confirm('有未保存的修改，确定关闭吗？')) return;
+      recruitingEditOpen.value = false;
+    }
     // 默认只展开 root；分组节点 id 由 tenant 的 cockpit_config.orgTree 决定，不在代码里写死业务 id
     const orgExpandedNodes = ref(new Set(['root']));
     const orgPersonExpanded = ref(new Set());
@@ -1309,11 +1584,37 @@ const app = createApp({
       if (s.has(key)) s.delete(key); else s.add(key);
       orgPersonExpanded.value = new Set(s);
     }
+    function expandOrgRefAndScroll(refKey) {
+      if (!refKey) return;
+      const s = orgExpandedNodes.value;
+      s.add('root');
+      s.add(refKey);
+      orgExpandedNodes.value = new Set(s);
+      nextTick(() => {
+        const el = document.querySelector('[data-orgkey="' + refKey + '"]');
+        if (el && el.scrollIntoView) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          el.classList.add('org-branch-flash');
+          setTimeout(() => el.classList.remove('org-branch-flash'), 1200);
+        }
+      });
+    }
     const orgTree = reactive([]);  // loaded at init from /api/cockpit/config
 
     // 动态从联系人按 matchKeys 挂载成员：返回 [...pinned(原 persons), ...matched(联系人 tags/title/company 命中)]
+    // pinned 若能按 name 在 contacts 中查到，自动挂 slug + _contact=true 使卡片可点击
     function orgPersonsFor(node) {
-      const pinned = (node.persons || []).filter(p => p && p.name && p.name !== '—').map(p => ({ ...p, pinned: true }));
+      const contactByName = new Map();
+      if (contacts.value && contacts.value.length) {
+        for (const c of contacts.value) if (c && c.name) contactByName.set(c.name, c);
+      }
+      const pinned = (node.persons || [])
+        .filter(p => p && p.name && p.name !== '—')
+        .map(p => {
+          const c = contactByName.get(p.name);
+          if (c) return { ...p, pinned: true, _contact: true, slug: c.slug };
+          return { ...p, pinned: true };
+        });
       const pinnedNames = new Set(pinned.map(p => p.name));
       const keys = node.matchKeys || [];
       if (!keys.length || !contacts.value || !contacts.value.length) return pinned.length ? pinned : (node.persons || []);
@@ -1605,7 +1906,13 @@ const app = createApp({
     async function loadTenantConfig() {
       try {
         const r = await fetch('/api/tenant/config');
-        if (r.ok) tenantConfig.value = await r.json();
+        if (r.ok) {
+          tenantConfig.value = await r.json();
+          // seed shareDialog.user from tenant config (namespace owner),
+          // unless the user already typed something / switched identity
+          const du = tenantConfig.value?.share?.default_user || '';
+          if (du && !shareDialog.user) shareDialog.user = du;
+        }
       } catch (e) { /* keep defaults */ }
     }
 
@@ -2106,14 +2413,56 @@ const app = createApp({
     async function loadFileTree(){fileTree.value = await api('/tree')||[];}
 
     // ── Interviews (TicNote) ──
+    // Default-open rule: within last 30 days OR among the first 3 in current filter
+    function isRecentDate(dateStr){
+      if(!dateStr) return false;
+      const d = new Date(dateStr);
+      if(isNaN(d)) return false;
+      const days = (Date.now() - d.getTime()) / 86400000;
+      return days <= 30;
+    }
     async function loadInterviews(){
       const data = await api('/interviews')||[];
-      // Preserve _open state from previous groups
-      const prevOpen = {};
-      for(const g of interviewGroups.value) if(g._open) prevOpen[g.date] = true;
-      interviewGroups.value = data.map((g,i) => ({...g, _open: prevOpen[g.date] || (Object.keys(prevOpen).length === 0 && i===0)}));
+      // Preserve user-toggled state; default new groups open by recency
+      const prev = {};
+      for(const g of interviewGroups.value){
+        if(g._touched) prev[g.date] = { touched: true, open: !!g._open };
+      }
+      interviewGroups.value = data.map(g => {
+        const p = prev[g.date];
+        if(p && p.touched) return {...g, _open: p.open, _touched: true};
+        return {...g, _open: isRecentDate(g.date), _touched: false};
+      });
+      // If nothing opens by recency, fall back to first 3
+      const anyOpen = interviewGroups.value.some(g => g._open);
+      if(!anyOpen){
+        interviewGroups.value.slice(0,3).forEach(g => { g._open = true; });
+      }
       // Also load hiring candidates
       hiringList.value = await api('/hiring')||[];
+    }
+    // Reapply default-open rule within currently filtered groups (keeps user-touched)
+    function applyFilterDefaultOpen(){
+      const groups = filteredInterviewGroups.value;
+      let recentOpened = 0;
+      for(const g of groups){
+        if(g._touched) continue;
+        const open = isRecentDate(g.date);
+        g._open = open;
+        if(open) recentOpened++;
+      }
+      // Fallback — if no recent in this filter, open top N to fill ~one screen
+      if(recentOpened === 0){
+        const cap = Math.min(3, groups.length);
+        for(let i=0;i<groups.length;i++){
+          if(groups[i]._touched) continue;
+          groups[i]._open = i < cap;
+        }
+      }
+    }
+    function toggleInterviewGroup(g){
+      g._open = !g._open;
+      g._touched = true;
     }
     // Interview category list (derived from data)
     const interviewCats = computed(() => {
@@ -2481,7 +2830,15 @@ const app = createApp({
         if (cfg.PERSON_DISPLAY_MAP && typeof cfg.PERSON_DISPLAY_MAP === "object") Object.assign(PERSON_DISPLAY_MAP, cfg.PERSON_DISPLAY_MAP);
         if (Array.isArray(cfg.orgTree))            orgTree.splice(0, orgTree.length, ...cfg.orgTree);
         if (Array.isArray(cfg.ASR_FIXES)) {
-          const fixes = cfg.ASR_FIXES.map(f => [new RegExp(f.pattern, f.flags || "g"), f.replacement]);
+          const fixes = cfg.ASR_FIXES.map(f => {
+            // Accept both formats:
+            //   "pattern": "/龙珠/g"   (delimited, flags in pattern)
+            //   "pattern": "龙珠"      (plain, flags in f.flags)
+            let src = f.pattern, flags = f.flags || "g";
+            const m = /^\/(.*)\/([gimsuy]*)$/s.exec(src);
+            if (m) { src = m[1]; flags = m[2] || flags; }
+            return [new RegExp(src, flags), f.replacement];
+          });
           ASR_FIXES.splice(0, ASR_FIXES.length, ...fixes);
         }
         if (cfg.KNOWN_SPEAKER_MAPS && typeof cfg.KNOWN_SPEAKER_MAPS === "object") Object.assign(KNOWN_SPEAKER_MAPS, cfg.KNOWN_SPEAKER_MAPS);
@@ -2654,19 +3011,30 @@ const app = createApp({
       interviewTags.value = tagLines.slice(0,5).map(l => l.trim());
     }
 
+    // ── Share URL helpers ──
+    function _shareRemoteBase() {
+      const b = tenantConfig.value?.remote?.base_url;
+      return b ? b.replace(/\/$/, '') : '';
+    }
+    function _shareLocalBase() {
+      // 分享站独立进程跑在 3651；若主进程接管，也挂 /s/ 前缀。默认走 3651。
+      return `${location.protocol}//${location.hostname}:3651`;
+    }
+    function _buildShareUrls(user, slug) {
+      const local = `${_shareLocalBase()}/${user}/${slug}`;
+      const remote = _shareRemoteBase() ? `${_shareRemoteBase()}/${user}/${slug}` : '';
+      return { local, remote };
+    }
+    function _activeShareUrl(urls) {
+      if (shareDialog.preferRemote && urls.remote) return urls.remote;
+      return urls.local;
+    }
     async function shareInterview(file) {
+      // 兼容旧入口：直接转发到统一弹窗
       if (!file || !file.path) return;
-      try {
-        const res = await api('/share/code?path=' + encodeURIComponent(file.path));
-        if (res && res.url) {
-          await navigator.clipboard.writeText(res.url);
-          shareToast.value = '✓ 已复制';
-          setTimeout(() => { shareToast.value = ''; }, 2000);
-        }
-      } catch (e) {
-        shareToast.value = '✗ 失败';
-        setTimeout(() => { shareToast.value = ''; }, 2000);
-      }
+      const btn = document.querySelector('.iv-actionbar .share-btn-anchor');
+      const fakeEvent = btn ? { target: btn } : null;
+      await openShareDialog(fakeEvent, file);
     }
 
     function autoSlugFromPath(path) {
@@ -2674,16 +3042,16 @@ const app = createApp({
     }
     let _slugCheckTimer = null;
     let _shareClickAway = null;
-    async function openShareDialog(e) {
+    async function openShareDialog(e, explicitDoc) {
       if (shareDialog.show) { shareDialog.show = false; return; }
-      const rpt = cockpitOpenReport.value || selectedReport.value;
-      if (!rpt) return;
+      const rpt = explicitDoc || cockpitOpenReport.value || selectedReport.value;
+      if (!rpt || !rpt.path) return;
       const btn = e?.target?.closest('.share-btn-anchor');
       if (btn) {
         const r = btn.getBoundingClientRect();
         shareDialog.pos = { position: 'fixed', top: (r.bottom + 6) + 'px', right: (window.innerWidth - r.right) + 'px' };
       }
-      const title = reportParsed.value?.title || rpt.title || rpt.name || '';
+      const title = (explicitDoc ? rpt.title : reportParsed.value?.title) || rpt.title || rpt.name || '';
       shareDialog.show = true;
       shareDialog.docTitle = title;
       shareDialog.docPath = rpt.path;
@@ -2691,9 +3059,21 @@ const app = createApp({
       shareDialog.conflict = false;
       shareDialog.conflictTitle = '';
       shareDialog.url = '';
+      shareDialog.localUrl = '';
+      shareDialog.remoteUrl = '';
       shareDialog.copied = false;
       shareDialog.existing = false;
       shareDialog.message = '';
+      shareDialog.editingSlug = false;
+      shareDialog.newSlug = '';
+      shareDialog.pwdProtected = false;
+      shareDialog.pwdSetAt = '';
+      shareDialog.pwdActiveSessions = 0;
+      shareDialog.pwdPlain = '';
+      shareDialog.pwdShow = false;
+      shareDialog.pwdCopied = '';
+      shareDialog.pwdError = '';
+      shareDialog.pwdConfirm = null;
       // Query by path first — detect existing share with any slug (including custom)
       try {
         const res = await api('/share/by-path?path=' + encodeURIComponent(rpt.path) + '&user=' + encodeURIComponent(shareDialog.user));
@@ -2702,7 +3082,12 @@ const app = createApp({
           shareDialog.autoSlug = false;
           shareDialog.existing = true;
           shareDialog.available = true;
-          shareDialog.url = res.url;
+          const urls = _buildShareUrls(shareDialog.user, res.slug);
+          shareDialog.localUrl = urls.local;
+          shareDialog.remoteUrl = urls.remote;
+          shareDialog.url = _activeShareUrl(urls);
+          // 已存在分享 → 静默拉一次密码状态（不阻塞渲染）
+          loadSharePasswordInfo();
         } else {
           shareDialog.autoSlug = true;
           shareDialog.slug = autoSlugFromPath(rpt.path);
@@ -2745,7 +3130,10 @@ const app = createApp({
           } else if (res.existing?.path === shareDialog.docPath) {
             shareDialog.existing = true;
             shareDialog.available = true;
-            shareDialog.url = `${location.protocol}//${location.hostname}:3651/${shareDialog.user}/${slug}`;
+            const urls = _buildShareUrls(shareDialog.user, slug);
+            shareDialog.localUrl = urls.local;
+            shareDialog.remoteUrl = urls.remote;
+            shareDialog.url = _activeShareUrl(urls);
           } else {
             shareDialog.conflict = true;
             shareDialog.conflictTitle = res.existing?.title || '';
@@ -2753,13 +3141,27 @@ const app = createApp({
         } catch(e) {}
       }, 300);
     }
+    function _absorbRegisterResp(res) {
+      if (!res) return;
+      shareDialog.localUrl = res.local_url || '';
+      shareDialog.remoteUrl = res.remote_url || '';
+      shareDialog.url = _activeShareUrl({ local: shareDialog.localUrl, remote: shareDialog.remoteUrl });
+      shareDialog.existing = true;
+      // 新建/更新后拉一次密码状态（基本总是 public，但尊重真实响应）
+      loadSharePasswordInfo();
+    }
     async function registerShareSlug() {
       const slug = shareDialog.slug.trim();
       if (!slug || !shareDialog.available) return;
       try {
         const res = await api('/share/register?slug=' + encodeURIComponent(slug) + '&path=' + encodeURIComponent(shareDialog.docPath) + '&title=' + encodeURIComponent(shareDialog.docTitle) + '&user=' + encodeURIComponent(shareDialog.user), { method: 'POST' });
         if (res && res.url) {
-          shareDialog.url = res.url;
+          _absorbRegisterResp(res);
+          if (res.remote_status && res.remote_status !== 'ok') {
+            showToast('本地已注册，远端推送失败：' + res.remote_status, 'warn');
+          } else if (res.remote_url) {
+            showToast('✓ 已发布到远端分享站', 'success');
+          }
         }
       } catch(e) { showToast('注册失败: ' + (e.message||''), 'error'); }
     }
@@ -2775,9 +3177,512 @@ const app = createApp({
       if (!slug) return;
       try {
         const res = await api('/share/register?slug=' + encodeURIComponent(slug) + '&path=' + encodeURIComponent(shareDialog.docPath) + '&title=' + encodeURIComponent(shareDialog.docTitle) + '&user=' + encodeURIComponent(shareDialog.user), { method: 'POST' });
-        if (res && res.url) { shareDialog.url = res.url; shareDialog.message = '✓ 已更新'; setTimeout(() => { shareDialog.message = ''; }, 2000); }
+        if (res && res.url) {
+          _absorbRegisterResp(res);
+          if (res.remote_status && res.remote_status !== 'ok') {
+            shareDialog.message = '✓ 已更新（远端推送失败）';
+          } else if (res.remote_url) {
+            shareDialog.message = '✓ 已更新并同步远端';
+          } else {
+            shareDialog.message = '✓ 已更新';
+          }
+          setTimeout(() => { shareDialog.message = ''; }, 2500);
+        }
       } catch(e) { shareDialog.message = '✗ 更新失败'; setTimeout(() => { shareDialog.message = ''; }, 3000); }
     }
+
+    // ── Rename slug (for existing share) ──
+    function startSlugRename() {
+      shareDialog.editingSlug = true;
+      shareDialog.newSlug = shareDialog.slug;
+    }
+    function cancelSlugRename() {
+      shareDialog.editingSlug = false;
+      shareDialog.newSlug = '';
+    }
+    async function commitSlugRename() {
+      const newSlug = (shareDialog.newSlug || '').trim();
+      const oldSlug = shareDialog.slug.trim();
+      if (!newSlug) return;
+      if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(newSlug)) {
+        shareDialog.message = '✗ 只允许字母数字-_，开头字母/数字';
+        setTimeout(() => { shareDialog.message = ''; }, 3000);
+        return;
+      }
+      if (newSlug === oldSlug) {
+        cancelSlugRename();
+        return;
+      }
+      try {
+        // Check availability first (register 本来也会 409，但先给清晰提示)
+        const chk = await api('/share/check-slug?slug=' + encodeURIComponent(newSlug) + '&user=' + encodeURIComponent(shareDialog.user));
+        if (chk && !chk.available && chk.existing?.path !== shareDialog.docPath) {
+          shareDialog.message = '✗ 已被占用：' + (chk.existing?.title || '');
+          setTimeout(() => { shareDialog.message = ''; }, 3000);
+          return;
+        }
+        // Register with new slug — server dedupes old slug pointing to same path
+        const res = await api('/share/register?slug=' + encodeURIComponent(newSlug) + '&path=' + encodeURIComponent(shareDialog.docPath) + '&title=' + encodeURIComponent(shareDialog.docTitle) + '&user=' + encodeURIComponent(shareDialog.user), { method: 'POST' });
+        if (res && res.url) {
+          shareDialog.slug = newSlug;
+          shareDialog.autoSlug = false;
+          _absorbRegisterResp(res);
+          shareDialog.editingSlug = false;
+          shareDialog.newSlug = '';
+          if (res.remote_status && res.remote_status !== 'ok') {
+            shareDialog.message = '⚠ 本地已改，远端未同步：' + String(res.remote_status).slice(0, 80);
+            setTimeout(() => { shareDialog.message = ''; }, 6000);
+          } else if (res.remote_url) {
+            shareDialog.message = '✓ 本地 + 远端已同步';
+            setTimeout(() => { shareDialog.message = ''; }, 2500);
+          } else {
+            shareDialog.message = '✓ 已改（仅本地，未配远端）';
+            setTimeout(() => { shareDialog.message = ''; }, 2500);
+          }
+        }
+      } catch(e) {
+        shareDialog.message = '✗ 改链接失败：' + (e.message || '');
+        setTimeout(() => { shareDialog.message = ''; }, 3000);
+      }
+    }
+
+    function toggleShareBasePref() {
+      shareDialog.preferRemote = !shareDialog.preferRemote;
+      localStorage.setItem('share-prefer-remote', shareDialog.preferRemote ? '1' : '0');
+      shareDialog.url = _activeShareUrl({ local: shareDialog.localUrl, remote: shareDialog.remoteUrl });
+    }
+
+    // ── T2 · 密码保护 ──────────────────────────────────────
+    function _shareItemCtx(item) {
+      if (item && item.slug) return { user: item.user || shareDialog.user, slug: item.slug, title: item.title || item.slug, url: item.url || '' };
+      return { user: shareDialog.user, slug: shareDialog.slug, title: shareDialog.docTitle, url: shareDialog.remoteUrl || shareDialog.localUrl || shareDialog.url };
+    }
+    async function _shareApi(path, opts) {
+      // 原生 fetch：拿到 error detail（api() helper 会把 non-2xx 吞成 null）
+      opts = opts || {};
+      const res = await fetch('/api' + path, {
+        headers: { 'Content-Type': 'application/json' },
+        ...opts,
+      });
+      if (!res.ok) {
+        let detail = '';
+        try { const j = await res.json(); detail = (typeof j.detail === 'string') ? j.detail : JSON.stringify(j.detail || j); }
+        catch (_) { detail = await res.text(); }
+        const e = new Error(`HTTP ${res.status}: ${detail.slice(0, 200)}`);
+        e.status = res.status;
+        throw e;
+      }
+      return await res.json();
+    }
+    async function loadSharePasswordInfo(item) {
+      const c = _shareItemCtx(item);
+      if (!c.slug) return null;
+      if (!item) shareDialog.pwdLoading = true;
+      try {
+        const res = await _shareApi(`/share/password/info?user=${encodeURIComponent(c.user)}&slug=${encodeURIComponent(c.slug)}`);
+        if (!item) {
+          shareDialog.pwdProtected = !!res.protected;
+          shareDialog.pwdSetAt = res.password_set_at || '';
+          shareDialog.pwdActiveSessions = res.active_sessions || 0;
+          shareDialog.pwdError = '';
+        }
+        return res;
+      } catch (e) {
+        if (!item) shareDialog.pwdError = '读取状态失败：' + (e.message || '');
+        return null;
+      } finally {
+        if (!item) shareDialog.pwdLoading = false;
+      }
+    }
+    async function enableSharePassword(item) {
+      const c = _shareItemCtx(item);
+      if (!c.slug) return null;
+      if (!item) shareDialog.pwdLoading = true;
+      try {
+        const res = await _shareApi(`/share/password/enable?user=${encodeURIComponent(c.user)}&slug=${encodeURIComponent(c.slug)}`, { method: 'POST' });
+        if (!item) {
+          shareDialog.pwdProtected = true;
+          shareDialog.pwdSetAt = res.password_set_at || '';
+          shareDialog.pwdPlain = res.password || '';
+          shareDialog.pwdShow = true;
+          shareDialog.pwdActiveSessions = 0;
+          shareDialog.pwdError = '';
+          shareDialog.pwdConfirm = null;
+        }
+        showToast('✓ 密码已生成', 'success');
+        return res;
+      } catch (e) {
+        if (!item) shareDialog.pwdError = '开启失败：' + (e.message || '');
+        showToast('开启失败：' + (e.message || ''), 'error');
+        return null;
+      } finally {
+        if (!item) shareDialog.pwdLoading = false;
+      }
+    }
+    function confirmRotateSharePassword() { shareDialog.pwdConfirm = 'rotate'; }
+    function confirmDisableSharePassword() { shareDialog.pwdConfirm = 'disable'; }
+    function cancelShareConfirm() { shareDialog.pwdConfirm = null; }
+    async function rotateSharePassword(item) {
+      const c = _shareItemCtx(item);
+      if (!c.slug) return null;
+      if (!item) shareDialog.pwdLoading = true;
+      try {
+        const res = await _shareApi(`/share/password/rotate?user=${encodeURIComponent(c.user)}&slug=${encodeURIComponent(c.slug)}`, { method: 'POST' });
+        if (!item) {
+          shareDialog.pwdPlain = res.password || '';
+          shareDialog.pwdSetAt = res.password_set_at || '';
+          shareDialog.pwdActiveSessions = 0;
+          shareDialog.pwdShow = true;
+          shareDialog.pwdError = '';
+          shareDialog.pwdConfirm = null;
+        }
+        showToast(`✓ 已换密码，踢出 ${res.revoked_sessions || 0} 个登录`, 'success');
+        return res;
+      } catch (e) {
+        if (!item) shareDialog.pwdError = '换密码失败：' + (e.message || '');
+        showToast('换密码失败：' + (e.message || ''), 'error');
+        return null;
+      } finally {
+        if (!item) shareDialog.pwdLoading = false;
+      }
+    }
+    async function disableSharePassword(item) {
+      const c = _shareItemCtx(item);
+      if (!c.slug) return null;
+      if (!item) shareDialog.pwdLoading = true;
+      try {
+        const res = await _shareApi(`/share/password/disable?user=${encodeURIComponent(c.user)}&slug=${encodeURIComponent(c.slug)}`, { method: 'POST' });
+        if (!item) {
+          shareDialog.pwdProtected = false;
+          shareDialog.pwdPlain = '';
+          shareDialog.pwdSetAt = '';
+          shareDialog.pwdShow = false;
+          shareDialog.pwdActiveSessions = 0;
+          shareDialog.pwdError = '';
+          shareDialog.pwdConfirm = null;
+        }
+        showToast('✓ 已关闭密码保护', 'success');
+        return res;
+      } catch (e) {
+        if (!item) shareDialog.pwdError = '关闭失败：' + (e.message || '');
+        showToast('关闭失败：' + (e.message || ''), 'error');
+        return null;
+      } finally {
+        if (!item) shareDialog.pwdLoading = false;
+      }
+    }
+    function _shareCopyCombo(url, password, title) {
+      const lines = [
+        `📄 ${title || '文档'}`,
+        `🔗 ${url}`,
+        `🔑 ${password}`,
+        `⏱ 30 天内免重输｜请勿转发此条消息`,
+      ];
+      return lines.join('\n');
+    }
+    async function copyShareWithPassword() {
+      if (!shareDialog.pwdPlain) return;
+      const url = shareDialog.remoteUrl || shareDialog.localUrl || shareDialog.url;
+      const text = _shareCopyCombo(url, shareDialog.pwdPlain, shareDialog.docTitle);
+      try {
+        await navigator.clipboard.writeText(text);
+        shareDialog.pwdCopied = 'combo';
+        setTimeout(() => { if (shareDialog.pwdCopied === 'combo') shareDialog.pwdCopied = ''; }, 2000);
+      } catch (e) {
+        showToast('复制失败', 'error');
+      }
+    }
+    async function copySharePasswordOnly() {
+      if (!shareDialog.pwdPlain) return;
+      try {
+        await navigator.clipboard.writeText(shareDialog.pwdPlain);
+        shareDialog.pwdCopied = 'pwd';
+        setTimeout(() => { if (shareDialog.pwdCopied === 'pwd') shareDialog.pwdCopied = ''; }, 2000);
+      } catch (e) {
+        showToast('复制失败', 'error');
+      }
+    }
+    function setSharePreferRemote(v) {
+      shareDialog.preferRemote = !!v;
+      localStorage.setItem('share-prefer-remote', v ? '1' : '0');
+      shareDialog.url = _activeShareUrl({ local: shareDialog.localUrl, remote: shareDialog.remoteUrl });
+    }
+
+    // ── 分享管理（设置页）──
+    async function loadShareList() {
+      try {
+        const res = await api('/share/registry?user=' + encodeURIComponent(shareDialog.user));
+        shareList.value = Array.isArray(res) ? res : [];
+      } catch(e) {
+        shareList.value = [];
+      }
+      // 拉一次 T2 密码状态 batch（远端未配则静默失败，列表仍显示）
+      try {
+        const info = await _shareApi('/share/info_batch?user=' + encodeURIComponent(shareDialog.user));
+        const map = (info && info.items) || {};
+        shareList.value = shareList.value.map(it => {
+          const s = map[it.slug] || {};
+          return {
+            ...it,
+            pwdProtected: !!s.protected,
+            pwdSetAt: s.password_set_at || '',
+            pwdActiveSessions: s.active_sessions || 0,
+          };
+        });
+      } catch (_) { /* 远端无 T2 → 静默 */ }
+    }
+    // ── T2 · 设置页抽屉 ──
+    const shareMgrDrawer = reactive({
+      show: false, item: null,
+      loading: false,
+      info: null,
+      sessions: [],
+      audit: [],
+      confirm: null,       // null | 'rotate' | 'disable'
+      newPlain: '',        // 新近换/开的明文
+      copied: '',
+      error: '',
+    });
+    async function openShareMgrDrawer(item) {
+      shareMgrDrawer.item = item;
+      shareMgrDrawer.show = true;
+      shareMgrDrawer.loading = true;
+      shareMgrDrawer.info = null;
+      shareMgrDrawer.sessions = [];
+      shareMgrDrawer.audit = [];
+      shareMgrDrawer.newPlain = '';
+      shareMgrDrawer.confirm = null;
+      shareMgrDrawer.copied = '';
+      shareMgrDrawer.error = '';
+      await refreshShareMgrDrawer();
+    }
+    async function refreshShareMgrDrawer() {
+      const it = shareMgrDrawer.item;
+      if (!it) return;
+      const u = shareDialog.user, s = it.slug;
+      shareMgrDrawer.loading = true;
+      try {
+        const [info, ses, aud] = await Promise.all([
+          _shareApi(`/share/password/info?user=${encodeURIComponent(u)}&slug=${encodeURIComponent(s)}`),
+          _shareApi(`/share/sessions?user=${encodeURIComponent(u)}&slug=${encodeURIComponent(s)}`).catch(()=>({sessions:[]})),
+          _shareApi(`/share/audit?user=${encodeURIComponent(u)}&slug=${encodeURIComponent(s)}&limit=20`).catch(()=>({audit:[]})),
+        ]);
+        shareMgrDrawer.info = info;
+        shareMgrDrawer.sessions = (ses && ses.sessions) || [];
+        shareMgrDrawer.audit = (aud && aud.audit) || [];
+      } catch (e) {
+        shareMgrDrawer.error = '读取失败：' + (e.message || '');
+      } finally {
+        shareMgrDrawer.loading = false;
+      }
+    }
+    function closeShareMgrDrawer() {
+      shareMgrDrawer.show = false;
+      shareMgrDrawer.item = null;
+      shareMgrDrawer.newPlain = '';
+    }
+    async function drawerEnablePassword() {
+      const it = shareMgrDrawer.item;
+      if (!it) return;
+      shareMgrDrawer.loading = true;
+      try {
+        const res = await _shareApi(`/share/password/enable?user=${encodeURIComponent(shareDialog.user)}&slug=${encodeURIComponent(it.slug)}`, { method: 'POST' });
+        shareMgrDrawer.newPlain = res.password || '';
+        showToast('✓ 已开启并生成密码', 'success');
+        await refreshShareMgrDrawer();
+        await loadShareList();
+      } catch (e) {
+        shareMgrDrawer.error = '开启失败：' + (e.message || '');
+      } finally {
+        shareMgrDrawer.loading = false;
+      }
+    }
+    async function drawerRotatePassword() {
+      const it = shareMgrDrawer.item;
+      if (!it) return;
+      shareMgrDrawer.loading = true;
+      try {
+        const res = await _shareApi(`/share/password/rotate?user=${encodeURIComponent(shareDialog.user)}&slug=${encodeURIComponent(it.slug)}`, { method: 'POST' });
+        shareMgrDrawer.newPlain = res.password || '';
+        shareMgrDrawer.confirm = null;
+        showToast(`✓ 已换密码，踢出 ${res.revoked_sessions || 0} 个登录`, 'success');
+        await refreshShareMgrDrawer();
+        await loadShareList();
+      } catch (e) {
+        shareMgrDrawer.error = '换密码失败：' + (e.message || '');
+      } finally {
+        shareMgrDrawer.loading = false;
+      }
+    }
+    async function drawerDisablePassword() {
+      const it = shareMgrDrawer.item;
+      if (!it) return;
+      shareMgrDrawer.loading = true;
+      try {
+        await _shareApi(`/share/password/disable?user=${encodeURIComponent(shareDialog.user)}&slug=${encodeURIComponent(it.slug)}`, { method: 'POST' });
+        shareMgrDrawer.confirm = null;
+        shareMgrDrawer.newPlain = '';
+        showToast('✓ 已关闭密码保护', 'success');
+        await refreshShareMgrDrawer();
+        await loadShareList();
+      } catch (e) {
+        shareMgrDrawer.error = '关闭失败：' + (e.message || '');
+      } finally {
+        shareMgrDrawer.loading = false;
+      }
+    }
+    async function drawerRevokeSession(sid) {
+      const it = shareMgrDrawer.item;
+      if (!it || !sid) return;
+      shareMgrDrawer.loading = true;
+      try {
+        await _shareApi(`/share/sessions/revoke?user=${encodeURIComponent(shareDialog.user)}&slug=${encodeURIComponent(it.slug)}`, {
+          method: 'POST', body: JSON.stringify({ sid }),
+        });
+        showToast('✓ 已踢出', 'success');
+        await refreshShareMgrDrawer();
+      } catch (e) {
+        shareMgrDrawer.error = '踢出失败：' + (e.message || '');
+      } finally {
+        shareMgrDrawer.loading = false;
+      }
+    }
+    async function drawerRevokeAllSessions() {
+      const it = shareMgrDrawer.item;
+      if (!it) return;
+      if (!(shareMgrDrawer.sessions || []).length) return;
+      shareMgrDrawer.loading = true;
+      try {
+        const res = await _shareApi(`/share/sessions/revoke?user=${encodeURIComponent(shareDialog.user)}&slug=${encodeURIComponent(it.slug)}`, {
+          method: 'POST', body: JSON.stringify({ all: true }),
+        });
+        showToast(`✓ 已踢出 ${res.revoked || 0} 个`, 'success');
+        await refreshShareMgrDrawer();
+      } catch (e) {
+        shareMgrDrawer.error = '踢出失败：' + (e.message || '');
+      } finally {
+        shareMgrDrawer.loading = false;
+      }
+    }
+    async function drawerCopyCombo() {
+      if (!shareMgrDrawer.newPlain || !shareMgrDrawer.item) return;
+      const it = shareMgrDrawer.item;
+      const url = it.remote_url || it.url || it.local_url || '';
+      const txt = _shareCopyCombo(url, shareMgrDrawer.newPlain, it.title || it.slug);
+      try {
+        await navigator.clipboard.writeText(txt);
+        shareMgrDrawer.copied = 'combo';
+        setTimeout(() => { if (shareMgrDrawer.copied === 'combo') shareMgrDrawer.copied = ''; }, 2000);
+      } catch (e) { showToast('复制失败', 'error'); }
+    }
+    async function drawerCopyPassword() {
+      if (!shareMgrDrawer.newPlain) return;
+      try {
+        await navigator.clipboard.writeText(shareMgrDrawer.newPlain);
+        shareMgrDrawer.copied = 'pwd';
+        setTimeout(() => { if (shareMgrDrawer.copied === 'pwd') shareMgrDrawer.copied = ''; }, 2000);
+      } catch (e) { showToast('复制失败', 'error'); }
+    }
+    function shareItemUrl(item) {
+      const user = shareDialog.user;
+      const slug = item.slug || item.code;
+      if (!slug) return '';
+      const urls = _buildShareUrls(user, slug);
+      return _activeShareUrl(urls);
+    }
+    async function copyShareItemUrl(item) {
+      const u = shareItemUrl(item);
+      if (!u) return;
+      try { await navigator.clipboard.writeText(u); shareMgrMsg.value = '✓ 已复制 · ' + u; setTimeout(()=>shareMgrMsg.value='', 2000); }
+      catch(e) { shareMgrMsg.value = '✗ 复制失败'; setTimeout(()=>shareMgrMsg.value='', 2000); }
+    }
+    function openRenameShare(item) {
+      shareMgrEditing.value = { ...item, slug: item.slug || item.code };
+      shareMgrNewSlug.value = item.slug || item.code || '';
+    }
+    async function commitRenameShare() {
+      if (!shareMgrEditing.value) return;
+      const newSlug = (shareMgrNewSlug.value || '').trim();
+      const oldSlug = shareMgrEditing.value.slug;
+      if (!newSlug) return;
+      if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(newSlug)) {
+        shareMgrMsg.value = '✗ 只允许字母数字-_，开头字母/数字';
+        setTimeout(()=>shareMgrMsg.value='', 3000);
+        return;
+      }
+      if (newSlug === oldSlug) { shareMgrEditing.value = null; return; }
+      const item = shareMgrEditing.value;
+      const path = item.path;
+      const title = item.title || '';
+      const user = shareDialog.user;
+      try {
+        const chk = await api('/share/check-slug?slug=' + encodeURIComponent(newSlug) + '&user=' + encodeURIComponent(user));
+        if (chk && !chk.available && chk.existing?.path !== path) {
+          shareMgrMsg.value = '✗ 已被占用：' + (chk.existing?.title || '');
+          setTimeout(()=>shareMgrMsg.value='', 3000);
+          return;
+        }
+        const res = await api('/share/register?slug=' + encodeURIComponent(newSlug) + '&path=' + encodeURIComponent(path) + '&title=' + encodeURIComponent(title) + '&user=' + encodeURIComponent(user), { method: 'POST' });
+        if (res && res.remote_status && res.remote_status !== 'ok') {
+          shareMgrMsg.value = '⚠ 本地已改 · 远端未同步：' + String(res.remote_status).slice(0, 100) + '（去 VPN 后点「重推远端」）';
+          setTimeout(()=>shareMgrMsg.value='', 7000);
+        } else if (res && res.remote_url) {
+          shareMgrMsg.value = '✓ 本地 + 远端已同步';
+          setTimeout(()=>shareMgrMsg.value='', 2500);
+        } else {
+          shareMgrMsg.value = '✓ 已改（仅本地）';
+          setTimeout(()=>shareMgrMsg.value='', 2500);
+        }
+        shareMgrEditing.value = null;
+        await loadShareList();
+      } catch(e) {
+        shareMgrMsg.value = '✗ 失败：' + (e.message || '');
+        setTimeout(()=>shareMgrMsg.value='', 3000);
+      }
+    }
+    function cancelRenameShare() {
+      shareMgrEditing.value = null;
+      shareMgrNewSlug.value = '';
+    }
+    async function republishShareItem(item) {
+      const slug = item.slug || item.code;
+      const path = item.path;
+      const title = item.title || '';
+      if (!slug || !path) return;
+      shareMgrMsg.value = '⏳ 推送中…';
+      try {
+        const res = await api('/share/register?slug=' + encodeURIComponent(slug) + '&path=' + encodeURIComponent(path) + '&title=' + encodeURIComponent(title) + '&user=' + encodeURIComponent(shareDialog.user), { method: 'POST' });
+        if (res && res.remote_status && res.remote_status !== 'ok') {
+          shareMgrMsg.value = '⚠ 远端仍失败：' + String(res.remote_status).slice(0, 120);
+          setTimeout(()=>shareMgrMsg.value='', 7000);
+        } else if (res && res.remote_url) {
+          shareMgrMsg.value = '✓ 远端已同步 · ' + res.remote_url;
+          setTimeout(()=>shareMgrMsg.value='', 3000);
+        } else {
+          shareMgrMsg.value = '✓ 已处理（未配远端）';
+          setTimeout(()=>shareMgrMsg.value='', 2500);
+        }
+      } catch(e) {
+        shareMgrMsg.value = '✗ 推送失败：' + (e.message || '');
+        setTimeout(()=>shareMgrMsg.value='', 4000);
+      }
+    }
+    async function unshareItem(item) {
+      const slug = item.slug || item.code;
+      if (!slug) return;
+      if (!confirm('确定取消分享「' + (item.title || slug) + '」吗？链接立即失效，不可恢复。')) return;
+      try {
+        await api('/share/register?slug=' + encodeURIComponent(slug) + '&user=' + encodeURIComponent(shareDialog.user), { method: 'DELETE' });
+        shareMgrMsg.value = '✓ 已取消分享';
+        setTimeout(()=>shareMgrMsg.value='', 2000);
+        await loadShareList();
+      } catch(e) {
+        shareMgrMsg.value = '✗ 失败：' + (e.message || '');
+        setTimeout(()=>shareMgrMsg.value='', 3000);
+      }
+    }
+    const shareBaseLocalDisplay = computed(() => _shareLocalBase());
+    const shareBaseRemoteDisplay = computed(() => _shareRemoteBase());
     async function unregisterShare() {
       const slug = shareDialog.slug.trim();
       if (!slug) return;
@@ -3344,7 +4249,164 @@ const app = createApp({
         // Sync daughter edit form
         lifeDaughterEdit.value = {...(r.daughter || {name:'', birth_date:'', college_age:18})};
       }
+      // 年度规划（独立端点，失败不影响主 life view）
+      loadLifePlan();
     }
+
+    // ═══ Life Plan（年度人生规划）═══
+    async function loadLifePlan(){
+      try {
+        const [cfg, hero, tree] = await Promise.all([
+          api('/life/plan/config'),
+          api('/life/plan/hero'),
+          api('/life/plan/tree'),
+        ]);
+        lifePlanConfig.value = cfg || null;
+        lifePlanHero.value = hero || null;
+        lifePlanTree.value = tree || null;
+        // 顺带拉今日看板（失败也静默，不阻塞）
+        if (cfg?.enabled && cfg?.plan_dir_exists) {
+          loadLifePlanDashboard(todayISO());
+        }
+      } catch(e) {
+        console.warn('[life-plan] load failed', e);
+      }
+    }
+    async function openLifePlanDoc(rel){
+      if(!rel) return;
+      lifePlanLoading.value = true;
+      try {
+        const d = await api('/life/plan/doc?rel=' + encodeURIComponent(rel));
+        if(d && !d.error) lifePlanActive.value = d;
+        // scroll reader into view
+        nextTick(() => {
+          const el = document.querySelector('.life-plan-reader');
+          if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+        });
+      } catch(e) {
+        showToast('打开失败：' + (e?.message||e), 'error');
+      } finally {
+        lifePlanLoading.value = false;
+      }
+    }
+    async function openLifePlanToday(){
+      lifePlanLoading.value = true;
+      try {
+        const d = await api('/life/plan/today');
+        if(d && !d.error) lifePlanActive.value = d;
+      } catch(e) {
+        showToast('今日一页未找到', 'error');
+      } finally {
+        lifePlanLoading.value = false;
+      }
+    }
+    async function openLifePlanWeek(){
+      lifePlanLoading.value = true;
+      try {
+        const d = await api('/life/plan/week');
+        if(d && !d.error) lifePlanActive.value = d;
+      } catch(e) {
+        showToast('本周一页未找到', 'error');
+      } finally {
+        lifePlanLoading.value = false;
+      }
+    }
+    function closeLifePlanDoc(){ lifePlanActive.value = null; }
+
+    // ── Dashboard（看板模式·勾选/计数/复盘全在这里）──
+    function todayISO(){
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+    async function loadLifePlanDashboard(date){
+      const d = date || lifePlanDate.value || todayISO();
+      lifePlanDate.value = d;
+      lifePlanLoading.value = true;
+      try {
+        const [dash, prog] = await Promise.all([
+          api('/life/plan/dashboard?date=' + encodeURIComponent(d)),
+          api('/life/plan/progress?date=' + encodeURIComponent(d)),
+        ]);
+        lifePlanDashboard.value = dash || null;
+        lifePlanProgress.value = prog || null;
+      } catch(e) {
+        console.warn('[life-plan dashboard] load failed', e);
+      } finally {
+        lifePlanLoading.value = false;
+      }
+    }
+    // debounced flush for rapid check/counter updates
+    let _lpFlushTimer = null;
+    let _lpPendingPatch = null;
+    function scheduleLifePlanFlush(patch){
+      if(!_lpPendingPatch) _lpPendingPatch = {date: lifePlanDate.value, checks:{}, counters:{}};
+      // merge patch into pending
+      if(patch.checks) Object.assign(_lpPendingPatch.checks, patch.checks);
+      if(patch.counters) Object.assign(_lpPendingPatch.counters, patch.counters);
+      clearTimeout(_lpFlushTimer);
+      _lpFlushTimer = setTimeout(async () => {
+        const body = _lpPendingPatch;
+        _lpPendingPatch = null;
+        try {
+          const r = await api('/life/plan/progress', {method:'POST', body: JSON.stringify(body)});
+          if(r?.ok) lifePlanProgress.value = r.data;
+        } catch(e) {
+          showToast('保存失败，已留本地：' + (e?.message||e), 'error');
+        }
+      }, 400);
+    }
+    function toggleLifePlanCheck(key){
+      if(!lifePlanProgress.value) lifePlanProgress.value = {date: lifePlanDate.value, checks:{}, counters:{scan_am:0,scan_pm:0,scan_eve:0,active:0,touch_head:0}};
+      const cur = !!lifePlanProgress.value.checks?.[key];
+      if(!lifePlanProgress.value.checks) lifePlanProgress.value.checks = {};
+      lifePlanProgress.value.checks[key] = !cur;
+      scheduleLifePlanFlush({ checks: { [key]: !cur } });
+    }
+    function bumpLifePlanCounter(name, delta){
+      if(!lifePlanProgress.value) lifePlanProgress.value = {date: lifePlanDate.value, checks:{}, counters:{scan_am:0,scan_pm:0,scan_eve:0,active:0,touch_head:0}};
+      const c = lifePlanProgress.value.counters = lifePlanProgress.value.counters || {};
+      const cur = Math.max(0, (c[name]||0) + delta);
+      c[name] = cur;
+      scheduleLifePlanFlush({ counters: { [name]: cur } });
+    }
+    async function submitLifePlanReview(){
+      if(!lifePlanProgress.value) return;
+      const rv = lifePlanProgress.value.review || {};
+      // 至少得填一个维度打分或一个答案，否则提醒
+      const hasScore = Object.values(rv.scores||{}).some(v => v !== null && v !== undefined);
+      const hasAns = Object.values(rv.answers||{}).some(v => (v||'').trim().length > 0);
+      if(!hasScore && !hasAns){
+        showToast('先打一个分或写一行答案再提交', 'warn');
+        return;
+      }
+      lifePlanSubmitting.value = true;
+      try {
+        const r = await api('/life/plan/review/submit', {method:'POST', body: JSON.stringify({
+          date: lifePlanDate.value,
+          review: {
+            scores: rv.scores || {},
+            answers: rv.answers || {},
+          },
+        })});
+        if(r?.ok){
+          lifePlanProgress.value = r.data;
+          const msg = r.journal_appended ? '已写入 Journal' : '已保存（Journal 追加失败）';
+          showToast('日复盘已提交 · ' + msg, 'success');
+          // 如果明日 md 存在，切换看板到明日；否则留在今日
+          if(r.tomorrow_md_exists && r.tomorrow_date){
+            await loadLifePlanDashboard(r.tomorrow_date);
+          }
+        }
+      } catch(e) {
+        showToast('提交失败：' + (e?.message||e), 'error');
+      } finally {
+        lifePlanSubmitting.value = false;
+      }
+    }
+    function setLifePlanView(mode){ lifePlanView.value = mode; }
+    // 每分钟更新 nowTick（为时间 rail 的"现在"横线驱动）
+    setInterval(() => { lifePlanNowTick.value = Date.now(); }, 60*1000);
+
     async function saveDaughter(){
       const r = await api('/life/daughter', {method:'POST', body: JSON.stringify(lifeDaughterEdit.value)});
       if(r?.ok){ lifeEditDaughter.value=false; await loadLife(); showToast('已更新'); }
@@ -3499,7 +4561,7 @@ const app = createApp({
         case 'interviews': if(!interviewGroups.value.length) await loadInterviews(); if(!reportsList.value.length) loadReports(); if(!opts.skipNav){ selectedInterview.value=null; interviewContent.value=''; selectedCandidate.value=null; candidateData.value=null; } break;
         case 'reports': if(!reportsList.value.length) await loadReports(); if(!opts.skipNav){ selectedReport.value=null; reportContent.value=''; } break;
         case 'files': await loadFileTree(); break;
-        case 'settings': await loadSettings(); break;
+        case 'settings': await loadSettings(); loadShareList(); break;
       }
       loading.value = false;
     }
@@ -4439,11 +5501,15 @@ const app = createApp({
         if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();showSearchPanel.value=!showSearchPanel.value;if(showSearchPanel.value)nextTick(()=>{const el=document.getElementById('search-input');if(el)el.focus();});}
         if((e.metaKey||e.ctrlKey)&&e.key==='j'){e.preventDefault();goSmartNotes();}
         if(e.key==='Escape'&&showSearchPanel.value){showSearchPanel.value=false;}
+        if(e.key==='Escape'&&cockpitOpenReport.value){cockpitCloseReport();}
       });
     });
 
     // Watch for graph view
-    watch(contactView, async (v) => {
+    watch(contactView, async (v, oldV) => {
+      localStorage.setItem('ome365_contact_view', v);
+      // Skip data loading when contacts view isn't active (avoids loading JD before 组织 tab mounted)
+      if (view.value !== 'contacts' && oldV !== undefined) return;
       if(v === 'graph'){
         await loadContactGraph();
         await nextTick();
@@ -4451,13 +5517,17 @@ const app = createApp({
       } else if(v === 'cold'){
         await loadColdContacts();
       } else if(v === 'org'){
-        // 确保 orgPersonsFor 能读到 contacts.value
         if(!contacts.value || !contacts.value.length) await loadContacts();
+      } else if(v === 'recruiting'){
+        await loadRecruitingDoc();
       }
-    });
+    }, { immediate: true });
 
     // Watch note filter
     watch(noteCategoryFilter, () => loadNotes());
+
+    // Reapply default-open rule when switching 访谈 filter (全部/BU/...)
+    watch(interviewCatFilter, () => { applyFilterDefaultOpen(); });
 
     return {
       renderMd,
@@ -4489,7 +5559,11 @@ const app = createApp({
       categories, noteCategory, noteCategoryFilter, showCategoryForm, newCategory,
       contacts, contactGraph, coldContacts, selectedContact, contactDetailHtml,
       showContactForm, contactFilter, contactView, showInteractionForm,
-      orgTree, orgExpandedNodes, toggleOrgNode, orgPersonExpanded, toggleOrgPersons, orgPersonsFor,
+      recruitingContent, recruitingDocMeta, recruitingLoading, recruitingError, recruitingParsed,
+      loadRecruitingDoc, shareRecruitingDoc,
+      editRecruitingDoc, recruitingEditOpen, recruitingEditContent, recruitingEditDirty, recruitingEditSaving, saveRecruitingEdit, closeRecruitingEdit,
+      jdCollapsed, toggleJdSection,
+      orgTree, orgExpandedNodes, toggleOrgNode, orgPersonExpanded, toggleOrgPersons, orgPersonsFor, expandOrgRefAndScroll,
       newContact, newInteraction, contactCatLabels, contactCatColors,
       editingContact, editContactData, showMergeSelect,
       contactCategories, showContactCatForm, newContactCat,
@@ -4552,6 +5626,14 @@ const app = createApp({
       loadLife, saveDaughter, createWeekend, toggleWeekendDone, deleteWeekend,
       generateWeekendIdeas, ideaToWeekend, saveHealth, setHealthRing,
       addRitual, toggleRitual, deleteRitual, addMoment, deleteMoment,
+      // Life Plan
+      lifePlanConfig, lifePlanHero, lifePlanTree, lifePlanActive, lifePlanLoading, lifePlanParsed,
+      loadLifePlan, openLifePlanDoc, openLifePlanToday, openLifePlanWeek, closeLifePlanDoc,
+      // dashboard mode
+      lifePlanView, lifePlanDashboard, lifePlanProgress, lifePlanDate, lifePlanSubmitting,
+      nowHHMM, lifePlanBlocksAnnotated,
+      loadLifePlanDashboard, toggleLifePlanCheck, bumpLifePlanCounter,
+      submitLifePlanReview, setLifePlanView,
       // Cockpit
       cockpitData, cockpitLoading, cockpitError, cockpitActiveSection,
       expandedTrack, toggleTrack, financeTotal, northStarTiers, oneLinerParts,
@@ -4564,12 +5646,13 @@ const app = createApp({
       cockpitBlocks, cockpitPrimaryBlocks, cockpitSecondaryBlocks, cockpitFlagshipBlocks, cockpitTertiaryBlocks,
       cockpitActiveBlockKey, cockpitActiveBlockData,
       cockpitDrillPerson, cockpitCurrentDrill,
-      cockpitOpenReport,
-      cockpitBloomMaster, cockpitBloomChapters, cockpitBloomStageGroups, cockpitBloomKeyInsights, cockpitBloomLoading,
+      cockpitOpenReport, cockpitOverlayDocs, cockpitOverlayIdx,
+      cockpitBloomMaster, cockpitBloomMasters, cockpitBloomMasterIdx, cockpitSwitchBloomMaster,
+      cockpitBloomChapters, cockpitBloomStageGroups, cockpitBloomKeyInsights, cockpitBloomLoading,
       forecastSelectedTrack, toggleForecastTrack,
       cockpitSelectBlock, cockpitGoHome,
       cockpitDrillTo, cockpitClearDrill,
-      cockpitOpenDoc, cockpitCloseReport, cockpitOpenChapter,
+      cockpitOpenDoc, cockpitOpenOverlay, cockpitSwitchOverlayDoc, cockpitCloseReport, cockpitOpenChapter,
       createContact, selectContactDetail, startEditContact, saveEditContact, addInteraction, mergeContacts,
       createContactCategory, deleteContactCategory,
       openFile, openNoteFile, heatmapClick,
@@ -4585,11 +5668,21 @@ const app = createApp({
       fabAction, showToast,
       // Interviews & Reports
       interviewGroups, interviewCount, interviewStats, interviewCatFilter, interviewCats, filteredInterviewGroups,
-      hiringList, selectedCandidate, candidateData, candidateTab, candidateRoundSubTab, candidateTranscript, candidateTransBlocks, candidateSumSections, candidateSpeakerMap, loadRoundTranscript, loadRoundSummary, openCandidate, filteredFiles,
+      hiringList, selectedCandidate, candidateData, candidateTab, candidateRoundSubTab, candidateTranscript, candidateTransBlocks, candidateSumSections, candidateSpeakerMap, loadRoundTranscript, loadRoundSummary, openCandidate, filteredFiles, toggleInterviewGroup,
       selectedInterview, interviewContent,
       interviewTab, interviewSummary, interviewTranscript, interviewMeta,
       interviewSummarySections, interviewTranscriptBlocks, interviewInsights, interviewSpeakers, interviewSpeakerMap, interviewTags,
       SPEAKER_COLORS, fixASR, renderMd, updateSpeakerName, shareInterview, shareToast, shareDialog, openShareDialog, checkShareSlug, registerShareSlug, copyShareUrl, toggleSlugMode, updateShare, unregisterShare,
+      startSlugRename, cancelSlugRename, commitSlugRename, toggleShareBasePref, setSharePreferRemote,
+      loadSharePasswordInfo, enableSharePassword, rotateSharePassword, disableSharePassword,
+      confirmRotateSharePassword, confirmDisableSharePassword, cancelShareConfirm,
+      copyShareWithPassword, copySharePasswordOnly,
+      shareList, shareMgrEditing, shareMgrNewSlug, shareMgrMsg,
+      loadShareList, shareItemUrl, copyShareItemUrl, openRenameShare, commitRenameShare, cancelRenameShare, unshareItem, republishShareItem,
+      shareMgrDrawer, openShareMgrDrawer, closeShareMgrDrawer, refreshShareMgrDrawer,
+      drawerEnablePassword, drawerRotatePassword, drawerDisablePassword,
+      drawerRevokeSession, drawerRevokeAllSessions, drawerCopyCombo, drawerCopyPassword,
+      shareBaseLocalDisplay, shareBaseRemoteDisplay,
       reportsList, selectedReport, reportContent, reportEditing, reportEditText,
       activeReportSection, visibleReportSections, currentReportSection,
       primarySections, secondarySections, tertiarySections,
