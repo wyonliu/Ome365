@@ -1,28 +1,56 @@
 # Contributing to Ome365
 
-感谢对 Ome365 感兴趣！本文档是外部贡献者快速上手的入口。如果你是项目作者本人，请先读 [`DEV_WORKFLOW.md`](./DEV_WORKFLOW.md) 了解双仓纪律。
+> Tagline: **Run your company on agents, not org charts.**
+> Sub: **Your AI follows the employee, not the employer.**
 
-## 项目定位
+Thanks for your interest in Ome365! This doc is the fast-track for external contributors. If you're the project author, see [`DEV_WORKFLOW.md`](./DEV_WORKFLOW.md) for the dual-repo discipline.
 
-Ome365 是一个 **AI 原生、本地优先** 的 PKM（Personal Knowledge Management）工具，核心特点：
+## Project positioning
 
-- 数据全部本地文件系统（Markdown + JSON，无数据库）
-- 支持 OpenRouter / Ollama 双模式 AI
-- **租户驾舱** 可通过 `tenant_config.json` 完全自定义品牌、分类、目录结构
-- 前端 Vue 3 CDN + FastAPI 后端，无构建步骤
+Ome365 is the **open-source enterprise AI platform** — file-first multi-tenant Markdown vault, self-learning **Hike** (Hive Intelligence Knowledge Engine, see [`docs/hike.md`](./docs/hike.md)) for organizational memory + decision distillation, and cross-company portability via W3C DID.
 
-## 快速上手
+Core principles:
+
+- **Local-first**: data lives in your filesystem (Markdown + JSON · no DB by default)
+- **Default-private LLM**: ships with Ollama-first config; 9 backends opt-in (DeepSeek/OpenAI/Claude/Gemini/Qwen/Doubao/智谱/OpenRouter/Ollama)
+- **Multi-tenant**: 5 AuthProvider (none/basic/magic_link/oidc/wecom)
+- **Zero-build frontend**: Vue 3 CDN + FastAPI backend
+- **Hike v0.1 → v2 roadmap**: schema v0.2 + L2 Event + L4 Cognition + L6 Swarm + UI 4 page (D+1 ~ D+45 alpha)
+
+## Quick start
 
 ```bash
+# Option A: one-line installer (macOS/Linux/WSL · auto deps + browser)
+curl -fsSL https://raw.githubusercontent.com/wyonliu/Ome365/main/install.sh | sh
+
+# Option B: manual clone
 git clone git@github.com:wyonliu/Ome365.git
 cd Ome365
+./ome365 doctor   # check Python ≥ 3.9 / port / config
+./ome365          # auto-install deps · boot · open browser
+
+# Option C: dev mode (custom port + vault)
 pip install -r requirements.txt
-export OME365_VAULT=/path/to/your/vault
-cd .app && python3 server.py
-# 浏览器打开 http://localhost:3650
+OME365_PORT=3698 OME365_VAULT=/tmp/ome365-test python3 .app/server.py
 ```
 
-首次启动会读 `.app/tenant_config.sample.json`（通用 "Example Workspace" 口径），驾舱目录自动建在 `$OME365_VAULT/Cockpit/`。
+Default settings ship with `.app/tenant_config.sample.json` ("Example Workspace") and `.app/cockpit_config.sample.json` (no PII). The cockpit directory auto-creates at `$OME365_VAULT/Cockpit/`.
+
+## Pre-PR safety check
+
+Before opening a PR, run:
+
+```bash
+python3 scripts/scan_pii.py                  # L1+L2+L4 quick scan (should exit 0)
+python3 scripts/scan_pii.py --fixtures       # contract test 47/47
+bash install.sh --dry-run                    # confirm install plan
+```
+
+The pre-commit hook is auto-installed; you can also enable it manually:
+
+```bash
+git config core.hooksPath .githooks
+```
 
 ## 开发前必读
 
@@ -87,6 +115,29 @@ OME365_PORT=3698 OME365_VAULT=/tmp/ome365-vault python3 .app/server.py
 - PR 描述写清：动机、方案、验证手段、涉及文件
 - 一个 PR 聚焦一件事，不要混修多个主题
 
+### DCO Sign-Off (Developer Certificate of Origin)
+
+We use [DCO](https://developercertificate.org/) instead of CLA. **Every commit must be signed off**:
+
+```bash
+git commit -s -m "your message"
+# adds: Signed-off-by: Your Name <you@example.com>
+```
+
+By signing off, you certify that:
+1. The contribution is your own original work, OR
+2. The contribution is licensed under an appropriate open source license that allows you to submit it, OR
+3. You received the contribution from someone who has certified (1) or (2)
+
+The DCO bot will check every PR. To fix unsigned commits:
+
+```bash
+git rebase --signoff main   # signs all commits between HEAD and main
+git push -f origin <branch>
+```
+
+CLA is **not** required.
+
 ## Issue 规则
 
 - **Bug report**：OS / Python 版本 / 复现步骤 / 期望 vs 实际
@@ -110,9 +161,36 @@ OME365_PORT=3698 OME365_VAULT=/tmp/ome365-vault python3 .app/server.py
 
 ## License
 
-项目当前未明确 LICENSE。在作者添加之前，提交的代码视为贡献者同意后续被纳入作者选定的开源协议（预计 MIT）。
+Ome365 ships under the **MIT License** today (`./LICENSE`). The project is moving toward a **dual-licensing model** to defend against hyperscaler appropriation:
 
-## 联系
+- **OSS main**: MIT → AGPLv3 (target migration ahead of v1.1)
+- **Enterprise modules** (PG+RLS / FinOps / SOC2 / decision-distillation UI / audit): planned **BSL 1.1** (4-year automatic transition to Apache 2.0)
 
-- Issues：https://github.com/wyonliu/Ome365/issues
-- 作者：wyonliu（GitHub）
+By contributing, you agree your code may be relicensed under either OSS or Enterprise tier as the dual model rolls out — this is standard for OSS projects with commercial back-ends (Sentry / GitLab / Elastic / MongoDB).
+
+When the migration happens, contributors will be given 14-day notice and may opt to withdraw their code if they disagree.
+
+## 90-day Roadmap
+
+See [README.md#roadmap](./README.md) for the public 90-day plan. Headline items:
+
+- **Hike v2 alpha** (D+1 ~ D+6 · 2026-05-14 ~ 2026-05-19): schema v0.2 + L2 Event + L4 Cognition + L6 Swarm
+- **PG+RLS** (D+1 ~ D+3): import `ome-server` schema · multi-tenant e2e
+- **A2A adapter + Signed Agent Card** (D+5 ~ D+12): `mindos.protocol.a2a` interop
+- **MemoryBench public leaderboard** (D+5 ~ D+8): HuggingFace Spaces · LoCoMo benchmark
+
+## Issue triage labels
+
+We label issues automatically (Claude AI Reviewer GitHub Action triages on file). The label vocabulary:
+
+- **Priority**: `p0` (security/data-loss) · `p1` (regression/major-feature) · `p2` (nice-to-have)
+- **Type**: `bug` · `feature` · `docs` · `question` · `discussion`
+- **Area**: `area:hike` · `area:cockpit` · `area:share` · `area:auth` · `area:ticnote` · `area:plan` · `area:memory` · `area:mcp` · `area:cognition-loop`
+- **Status**: `good-first-issue` · `help-wanted` · `wontfix` · `needs-info` · `needs-triage`
+
+## Contact
+
+- **GitHub Issues**: https://github.com/wyonliu/Ome365/issues
+- **GitHub Discussions** (preferred for Q&A): https://github.com/wyonliu/Ome365/discussions
+- **Security** (private): use [GH Security Advisories](https://github.com/wyonliu/Ome365/security/advisories/new) — see [`SECURITY.md`](.github/SECURITY.md)
+- **Author**: [@wyonliu](https://github.com/wyonliu)
