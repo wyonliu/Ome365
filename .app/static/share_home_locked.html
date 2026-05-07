@@ -50,7 +50,14 @@ p{font-size:14.5px;color:var(--text2);line-height:1.7;margin-bottom:10px}
   <div class="footer">© Ome365 · 共享知识库</div>
 </div>
 <script>
-(function(){ try { var t = localStorage.getItem('theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch(e){} })();
+// 统一到 sh-theme key；默认白主题（无 data-theme），只在用户显式选 dark 时切暗
+(function(){
+  try {
+    if (localStorage.getItem('sh-theme') === '') localStorage.setItem('sh-theme', 'dark');
+    const v = localStorage.getItem('sh-theme');
+    if (v === 'dark') document.documentElement.setAttribute('data-theme','dark');
+  } catch(_){}
+})();
 </script>
 </body>
 </html>

@@ -126,6 +126,16 @@ body::after{content:'';position:fixed;bottom:-30%;right:-20%;width:700px;height:
   .uc-stat-num{font-size:20px}
 }
 </style>
+<script>
+// 同步默认白主题：新用户（null）/ 选过 light 都走 light
+(function(){
+  try {
+    if (localStorage.getItem('sh-theme') === '') localStorage.setItem('sh-theme', 'dark');
+    const v = localStorage.getItem('sh-theme');
+    if (v === null || v === 'light') document.documentElement.setAttribute('data-theme','light');
+  } catch(_){}
+})();
+</script>
 </head>
 <body>
 <div class="wrap">
@@ -164,14 +174,17 @@ body::after{content:'';position:fixed;bottom:-30%;right:-20%;width:700px;height:
 function $(id){return document.getElementById(id)}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 
-let theme = localStorage.getItem('sh-theme') || '';
-if (theme) document.documentElement.setAttribute('data-theme', theme);
+let theme = (function(){
+  const v = localStorage.getItem('sh-theme');
+  return (v === null || v === 'light') ? 'light' : 'dark';
+})();
+if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
 
 function toggleTheme(){
   const on = document.documentElement.getAttribute('data-theme') === 'light';
   if (on) document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme','light');
-  theme = on ? '' : 'light';
+  theme = on ? 'dark' : 'light';
   localStorage.setItem('sh-theme', theme);
 }
 
