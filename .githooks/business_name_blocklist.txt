@@ -2,24 +2,21 @@
 # Business-name blocklist · pre-commit hook 使用
 # ══════════════════════════════════════════════════════════════
 #
-# 规则（与 memory: feedback_examples_not_content.md 对齐）：
-#   作者口头举例 ≠ 可写进 public 仓的素材。
-#   具体企业 / 产品 / 内部俗称禁止写进 .app/ docs/ scripts/ 的 public 代码。
+# 规则：项目作者口头举例的具体企业 / 产品 / 内部俗称禁止写进
+# .app/ docs/ scripts/ 的 public 代码。pre-commit 读本文件做 staged
+# 内容扫描，命中即拦截。
 #
-# 替换成占位符：
+# 替换占位符：
 #   企业：acme / globex / example.com
 #   人名：alice / bob / carol
 #   自建产品：enterprise SSO / tenant-specific product
 #
-# 格式：每行一个词（忽略大小写 + regex 片段），# 开头为注释，空行跳过。
-# 添加新词直接加行即可，无需改 hook 脚本。
+# 格式：每行一个词（regex 片段，忽略大小写），# 开头为注释，空行跳过。
+# 添加你自己工作环境会出现的真实公司/产品名即可，pre-commit 会拦截。
+#
+# 注意：本文件公开发布版仅含示例占位词；fork 这个仓的开发者请把
+# 自己环境里需要拦截的真实业务名添加到这里（这是各自本地的事）。
 
-# ── 企业名 / 产品名（2026-04-18 Phase 2c 事故） ──
-贝壳
-acme
-acme
-云图搜
-beike
-acme
-acme
-Acme
+# ── 示例（占位 · 删除并替换为你工作环境的真实业务名）──
+example-corp
+example-product
