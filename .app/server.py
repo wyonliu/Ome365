@@ -1,5 +1,14 @@
 """
-Ome365 v0.6 — 个人超级助手 + Ome 智能体
+Ome365 — Open-Source Enterprise AI Platform
+File-first multi-tenant · Self-learning Hike · Cross-company portability
+
+Tagline:    Run your company on agents, not org charts.
+Sub:        Your AI follows the employee, not the employer.
+
+Hike (Hive Intelligence Knowledge Engine) = Ome365's flagship sub-project.
+  v0.1 ships as EEG (entity_registry.py + Knowledge/entities/).
+  v2 roadmap: schema v0.2 + L2 Event + L4 Cognition + L6 Swarm → see docs/hike.md
+
 启动: cd .app && python3 server.py
 """
 

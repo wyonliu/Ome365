@@ -16,22 +16,29 @@
 
 ## TL;DR (English)
 
-Local-first personal AI OS built on a Markdown + JSON vault. FastAPI backend +
-Vue 3 CDN frontend (no build step). Four loops: **Memory · Reflection ·
-Execution · Persona-growth**. AI features are optional and BYO-key (DeepSeek /
-OpenRouter / Ollama). MIT licensed.
+> **Tagline**: Run your company on agents, not org charts.
+> **Sub-tagline**: Your AI follows the employee, not the employer.
+
+**Ome365** is the open-source enterprise AI platform: file-first multi-tenant Markdown vault, self-learning **Hike** (Hive Intelligence Knowledge Engine) for organizational memory + decision distillation, and cross-company portability via W3C DID. FastAPI backend + Vue 3 CDN frontend (zero build step).
+
+> **🌐 LLM defaults to local Ollama** — DeepSeek / OpenAI / Claude / Gemini / Qwen / Doubao / 智谱 / OpenRouter (9 backends) are opt-in via `.env`. PIPL §38 compliant by default — no data leaves your machine unless you flip the switch.
 
 ```bash
+# One-line install (macOS / Linux / WSL):
 curl -fsSL https://raw.githubusercontent.com/wyonliu/Ome365/main/install.sh | sh
 # or:
 git clone https://github.com/wyonliu/Ome365.git && cd Ome365 && ./ome365
 ```
 
 **What's in the box (v1.0):** annual life-plan reader (10 endpoints) ·
-share station with argon2 + 3-word access codes + rename-resilient share_id ·
-truthguard data-hygiene linter · GZipped responses · multi-tenant auth
-(none / basic / magic_link / oidc / wecom) · single-binary deploy via systemd /
-Docker / Compose · ~6000 LOC backend + ~2000 LOC frontend.
+share station with argon2 + Fernet + 3-word access codes + rename-resilient share_id ·
+truthguard data-hygiene linter · **Hike v0.1** entity graph (8 entity types · cross-meeting person profiles) ·
+GZipped responses · multi-tenant auth (none / basic / magic_link / oidc / wecom) ·
+single-binary deploy via systemd / Docker / Compose · ~6000 LOC backend + ~2000 LOC frontend.
+
+**Roadmap (90 days)**: Hike v2 (L2 Event + L4 Cognition + L6 Swarm + UI 4 page) · PG+RLS multi-tenant ·
+A2A federation (3 tier trust + Signed Agent Card) · ome365.id (tenant DID + 4 Skill VC types).
+See [docs/hike.md](docs/hike.md) for the flagship sub-project.
 
 **vs Notion / Obsidian / Mem / Logseq:**
 
@@ -44,6 +51,7 @@ Docker / Compose · ~6000 LOC backend + ~2000 LOC frontend.
 | Visual cockpit / dashboards | config-driven | databases | plugins | graph | — |
 | Data-hygiene lint (truthguard) | ✅ | — | plugins | — | — |
 | No-build frontend | ✅ Vue CDN | — | n/a | n/a | — |
+| Cross-meeting entity graph (Hike) | ✅ v0.1 / v2 alpha | — | — | partial | — |
 | License | MIT | proprietary | proprietary | AGPL | proprietary |
 
 ---
