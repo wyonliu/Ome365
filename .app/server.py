@@ -45,6 +45,9 @@ DEFAULT_CONTACT_CATS = [
 TIER_SIZES = {"A":8,"B":4,"C":2}
 
 app = FastAPI()
+# CORS wildcard is fine for the default single-user, localhost-only deployment
+# (the threat model is "you on your laptop"). For multi-user / public deploys,
+# tighten this in tenant_config or via reverse proxy — see docs/deploy/.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 # 2026-04-25 · 大文档加载提速：JSON/HTML 响应自动 gzip（client 必带 Accept-Encoding: gzip）
 # 178KB markdown 实测 → ~20KB（~9x 压缩），远端首屏立竿见影
@@ -3851,10 +3854,15 @@ def _compute_growth_state() -> dict:
              "memory_count": max(0, memory_count), "reflect_count": reflect_count,
              "contacts": contacts, "plan_pct": plan_pct, "active_days": active_days}
     newly_unlocked = []
+    # ACHIEVEMENTS["check"] is a tiny boolean expression like
+    # "notes_count >= 100 and streak >= 7"; we eval it against `stats`
+    # with __builtins__ stripped (no import/open/etc.). The expressions
+    # are author-defined in this same source file (single-user mode);
+    # treat ACHIEVEMENTS as code, not data — never load from user input.
     for ach in ACHIEVEMENTS:
         if ach["id"] not in unlocked:
             try:
-                if eval(ach["check"], {"__builtins__": {}}, stats):
+                if eval(ach["check"], {"__builtins__": {}}, stats):  # noqa: S307 — sandboxed
                     unlocked.add(ach["id"])
                     newly_unlocked.append(ach)
             except:
