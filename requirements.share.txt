@@ -1,0 +1,24 @@
+# Ome365 **分享站**专用最小依赖（share_server.py + share_routes.py）
+# ══════════════════════════════════════════════════════════════════════
+# 背景：144 共享机的内网 pip 镜像停在 fastapi 0.83.0（2022/09），
+# 装不到 >=0.104。分享站代码只用 FastAPI 基础 API（StaticFiles /
+# CORSMiddleware / UploadFile / Form / Header），fastapi 0.83 够用。
+#
+# 验证代码无 pydantic BaseModel、无 lifespan、无 Annotated —— 全兼容。
+# ══════════════════════════════════════════════════════════════════════
+
+fastapi>=0.80,<0.84
+# uvicorn 0.15+ 在 Server.run() 里用了 asyncio.run（3.7+ API），
+# 144 是 Python 3.6.8，请求处理路径会 hang。0.14.x 是最后一个真正
+# 跑在 3.6 上的版本，已在内网镜像验证可装。
+uvicorn>=0.13,<0.15
+python-multipart>=0.0.5
+# 故意不用 uvicorn[standard]：[standard] 会拉 uvloop / httptools /
+# watchfiles / websockets 四个需要 C 编译的扩展，内网镜像经常没有
+# 预编译 wheel、fallback 到源码编译会卡 5~20 分钟甚至失败。
+# 裸 uvicorn 用纯 Python asyncio，分享站流量不大、完全够。
+
+# cryptography · Fernet（master.key 可逆加密 + stateless session sid）
+# 3.4+ 强制 Rust 工具链；3.3.2 是最后一个纯 cffi 版本，Python 3.6 + 无 rustc 的内网镜像装得动。
+# Fernet/AESGCM/HMAC 全支持，满足 share_auth.py 所有用法。
+cryptography>=3.0,<3.4

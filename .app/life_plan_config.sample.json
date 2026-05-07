@@ -1,0 +1,14 @@
+{
+  "_doc": "Life Plan 配置 · sample 版本。复制为 life_plan_config.json 后把 plan_dir 改到你的私人目录（绝不要 commit live 版）。live 配置已 gitignore。",
+  "enabled": true,
+  "plan_dir": "./life-plan-demo",
+  "plan_start": "2026-04-08",
+  "plan_days": 365,
+  "label": "一年规划",
+  "quarter_themes": {
+    "Q1": "起手 · 诊断与定位",
+    "Q2": "自律与锚定",
+    "Q3": "扩张与兑现",
+    "Q4": "沉淀与复盘"
+  }
+}
