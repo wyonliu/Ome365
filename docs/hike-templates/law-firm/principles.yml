@@ -1,0 +1,34 @@
+- id: pitch-fee-consistency
+  scope: firm
+  principle: "Pitch 报价必须与近 6 月同类案件 P50 ± 20% 一致 · 大幅偏差需 Managing Partner 签"
+  evidence_count: 14
+  confidence: high
+  category: business-development
+
+- id: conflicts-check-precision
+  scope: firm
+  principle: "Conflicts check 必须按 client + matter + adversary 三轴 · 漏一轴是事故"
+  evidence_count: 7
+  confidence: high
+  category: compliance
+
+- id: cross-border-dual-counsel
+  scope: practice
+  principle: "8 jurisdictions（中/美/欧/日/英/印/巴/俄）必须 dual-counsel · 单 counsel 不可发出意见书"
+  evidence_count: 11
+  confidence: high
+  category: cross-border
+
+- id: opinion-letter-review
+  scope: firm
+  principle: "外部意见书必须 48 小时内 senior + KM lawyer 双复核 · 关键时间点不可跳过"
+  evidence_count: 22
+  confidence: high
+  category: quality
+
+- id: matter-budget-recheck
+  scope: practice
+  principle: "Matter actual hour 超 budget 30% 必须 re-pitch · 不可 silent overrun"
+  evidence_count: 9
+  confidence: medium
+  category: business-development

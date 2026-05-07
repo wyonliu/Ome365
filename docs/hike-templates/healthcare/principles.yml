@@ -1,0 +1,34 @@
+- id: mm-readacross
+  scope: hospital
+  principle: "M&M finding 必须 30 天内做 cross-unit read-across · 防止跨科室重复事故"
+  evidence_count: 17
+  confidence: high
+  category: safety
+
+- id: new-protocol-sentinel
+  scope: department
+  principle: "新治疗方案 adoption 必须 3 月 sentinel monitoring + monthly review"
+  evidence_count: 8
+  confidence: high
+  category: clinical
+
+- id: adverse-event-rca-sla
+  scope: hospital
+  principle: "Adverse event 24h 通知 + 48h 完整 RCA · 不可滞后"
+  evidence_count: 31
+  confidence: high
+  category: safety
+
+- id: mdt-decision-trace
+  scope: department
+  principle: "MDT 决策必须 3 attending 签字 · 偏离 MDT 推荐必须书面理由 · 走 patient chart"
+  evidence_count: 12
+  confidence: high
+  category: clinical
+
+- id: irb-protocol-review
+  scope: hospital
+  principle: "Research protocol IRB 复审必须 4 voting members · 任一缺席 → reschedule"
+  evidence_count: 6
+  confidence: medium
+  category: research-ethics

@@ -1,0 +1,34 @@
+- id: regulator-response-sla
+  scope: corporate
+  principle: "银保监/银监 letter 5 天初步响应 + 14 天完整方案 · 不可拖延"
+  evidence_count: 18
+  confidence: high
+  category: compliance
+
+- id: reserve-method-validation
+  scope: corporate
+  principle: "Reserve methodology change 必须 3 季度回溯验证 + 总精算师签字"
+  evidence_count: 4
+  confidence: high
+  category: actuarial
+
+- id: high-value-claim-dual-approve
+  scope: branch
+  principle: "Claim > 100 万必须双人审批 · 一审 underwriter · 二审 claims manager · 不可单人放行"
+  evidence_count: 32
+  confidence: high
+  category: claims
+
+- id: agent-quality-quarterly
+  scope: region
+  principle: "代理人质量评估每季度对齐 NEP / 13M 持续率 · 末位淘汰"
+  evidence_count: 8
+  confidence: medium
+  category: distribution
+
+- id: cross-region-product-consistency
+  scope: corporate
+  principle: "新产品 launch 6 个月内 · 跨区域 GWP 差异 > 30% 必须 root-cause"
+  evidence_count: 6
+  confidence: medium
+  category: pricing

@@ -1,0 +1,34 @@
+- id: oos-threshold-action
+  scope: region
+  principle: "OOS > 5% 必须 same-week category review + cross-store 同 SKU check"
+  evidence_count: 19
+  confidence: high
+  category: inventory
+
+- id: manager-promotion-sustainable
+  scope: corporate
+  principle: "Store manager 晋升必须 6 个月持续 KPI 达标 · 单季度 spike 不算"
+  evidence_count: 7
+  confidence: high
+  category: people
+
+- id: new-sku-pilot
+  scope: corporate
+  principle: "新 SKU 全国 launch 前 · 必须 4 store pilot 4 周 · 销量数据达标才铺"
+  evidence_count: 12
+  confidence: high
+  category: merchandising
+
+- id: promo-template-reuse
+  scope: corporate
+  principle: "促销模板 cross-region 成功 ≥ 3 次 · 自动晋升为 corp standard"
+  evidence_count: 6
+  confidence: medium
+  category: marketing
+
+- id: shrinkage-investigation
+  scope: store
+  principle: "Shrinkage > 0.8% 必须 LP team 进店审计 · 不可只口头警告"
+  evidence_count: 14
+  confidence: high
+  category: loss-prevention

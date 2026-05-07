@@ -1,0 +1,50 @@
+# Hike L4 Cognition · Distilled principles for manufacturing
+# 这些 principles 是从 12-month decision-chain 自动提炼的常见结论
+# Format: id / scope / principle / evidence_count / confidence / first_seen
+- id: ecn-propagation-time
+  scope: corporate
+  principle: "ECN 必须在 30 天内传播到所有受影响 BOM 和生产线; 超 30 天必须触发升级"
+  evidence_count: 12
+  confidence: high
+  first_seen: 2024-03-15
+  category: process
+
+- id: supplier-cross-factory-issue
+  scope: corporate
+  principle: "若同一供应商问题在 2 个以上工厂出现, 立即升级到集团采购委员会"
+  evidence_count: 8
+  confidence: high
+  first_seen: 2024-05-02
+  category: quality
+
+- id: ncm-root-cause-readacross
+  scope: factory
+  principle: "NCM 8D 必须做 read-across check, 确认其他工厂/产线无相同失效模式"
+  evidence_count: 23
+  confidence: high
+  first_seen: 2024-01-08
+  category: quality
+
+- id: process-spec-tolerance
+  scope: line
+  principle: "Cpk < 1.33 必须 24h 内启动 SPC review · 不要等周报"
+  evidence_count: 15
+  confidence: medium
+  first_seen: 2024-04-22
+  category: process
+
+- id: changeover-knowledge
+  scope: line
+  principle: "Changeover 时间超过历史 P75 必须记录原因, 形成 changeover knowledge base"
+  evidence_count: 9
+  confidence: medium
+  first_seen: 2024-06-30
+  category: efficiency
+
+- id: ppap-cross-team-review
+  scope: corporate
+  principle: "新 SKU PPAP 必须 quality + process + procurement 三方会签 · 不可单方放行"
+  evidence_count: 6
+  confidence: high
+  first_seen: 2024-02-19
+  category: quality
