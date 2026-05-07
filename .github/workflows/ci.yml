@@ -77,6 +77,33 @@ jobs:
           curl -fsS http://localhost:3650/api/dashboard > /dev/null && echo "✓ /api/dashboard"
           kill $SERVER_PID 2>/dev/null || true
 
+  unit-tests:
+    name: Unit tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test deps
+        run: |
+          python3 -m pip install pytest pytest-cov
+          # share_auth tests need cryptography
+          python3 -m pip install cryptography
+          # entity_registry needs PyYAML
+          python3 -m pip install pyyaml
+      - name: Run contract tests
+        run: |
+          python3 -m pytest tests/test_ome365_id.py tests/test_ome365_a2a.py \
+                            tests/test_scan_pii.py tests/test_share_auth.py \
+                            -v --no-header
+      - name: Coverage report
+        run: |
+          python3 -m pytest tests/test_ome365_id.py tests/test_ome365_a2a.py \
+                            tests/test_scan_pii.py tests/test_share_auth.py \
+                            --cov=.app/ome365_id --cov=.app/ome365_a2a --cov=.app/share_auth \
+                            --cov-report=term-missing
+
   install-sh-test:
     name: install.sh 三平台 dry-run
     strategy:

@@ -1,6 +1,32 @@
 # Changelog
 
-## v1.0.0-pre — 公开发布筹备 (2026-05-07)
+## v1.0.0-rc1 — 顶级企业 AI 平台开源·12-round 迭代收口 (2026-05-07 evening)
+
+**Tagline**: Run your company on agents, not org charts.
+**Sub**: Your AI follows the employee, not the employer.
+
+12-round iterative push for "the open-source enterprise AI platform" positioning. Zero regression across 14 GET endpoints + 4 share slugs throughout all rounds. 62 contract tests added.
+
+### Highlights
+- **Hike alias** (王牌产品收口): docs/hike.md + server.py docstring + README 顶级定位
+- **Hike v2 schema v0.2** 五字段植入 entity_registry (100% backward compatible)
+- **PII 4 道防线** scanner + 47-item fixture contract test
+- **install.sh 三平台** (macOS/Linux/WSL) + --dry-run 安全模式
+- **GitHub Actions CI** 5 jobs (pii-scan/syntax/smoke/install-matrix/unit-tests)
+- **ISSUE/PR/Security** 模板套件 + DCO bot
+- **CONTRIBUTING.md** + DCO 1.1 + 90-day roadmap + license dual-tier path
+- **docs/legal/** 4 模板 (DCO/DPA/AGPL-Letter/BSL-EULA · ~600 行)
+- **5 行业 starter** (manufacturing/insurance/law-firm/retail/healthcare)
+- **ome365.id v0.1** stub (V1 真空带 · W3C DID + 4 Skill VC types · 220 行)
+- **ome365.a2a v0.1** stub (V5 真空带 · 3-tier trust + SLA + Federation · 236 行)
+- **62 contract tests** (test_ome365_id 20 + test_ome365_a2a 20 + test_scan_pii 5 + test_share_auth 16)
+
+See README + docs/hike.md for full v2 architecture.
+See docs/legal/AGPL-Compliance-Letter.md for enterprise legal review.
+
+---
+
+## v1.0.0-pre — 公开发布筹备 (2026-05-07 morning)
 
 **目标：** 5/13 Show HN 公开发布。本版本是发布前的最后准备 pre-release。
 
