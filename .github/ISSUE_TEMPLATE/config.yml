@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 GitHub Discussions
+    url: https://github.com/wyonliu/Ome365/discussions
+    about: Open-ended Q&A · ideas · show-and-tell
+  - name: 📖 Documentation
+    url: https://github.com/wyonliu/Ome365#readme
+    about: README · Hike docs · deploy guides
+  - name: 🚨 Security report
+    url: https://github.com/wyonliu/Ome365/security/advisories/new
+    about: Privately report security issues — please do not file a public issue

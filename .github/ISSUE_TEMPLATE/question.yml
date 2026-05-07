@@ -1,0 +1,25 @@
+name: ❓ Question
+description: Ask how to do something with Ome365
+labels: ["question", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Quick checks first:
+        - **Discussions**: For open-ended Q&A, prefer [GitHub Discussions](https://github.com/wyonliu/Ome365/discussions) over issues
+        - **Docs**: [README](https://github.com/wyonliu/Ome365#readme) · [docs/hike.md](https://github.com/wyonliu/Ome365/blob/main/docs/hike.md) · [docs/deploy/](https://github.com/wyonliu/Ome365/tree/main/docs/deploy)
+        - **CLAUDE.md**: API endpoint reference at [CLAUDE.md](https://github.com/wyonliu/Ome365/blob/main/CLAUDE.md)
+
+  - type: textarea
+    id: question
+    attributes:
+      label: What are you trying to do?
+      description: Describe the end goal · not just the immediate stuck point
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+      description: Commands run · docs read · settings tried

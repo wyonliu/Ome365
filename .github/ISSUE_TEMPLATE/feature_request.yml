@@ -1,0 +1,54 @@
+name: ✨ Feature Request
+description: Suggest an enhancement or new capability
+labels: ["feature", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea! Before filing, please check `docs/hike.md` and the [90-day roadmap](https://github.com/wyonliu/Ome365#roadmap) — your idea may already be in flight.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Hike (entity graph / cognition layer)
+        - Cockpit / dashboard UI
+        - Share station
+        - Auth / multi-tenant
+        - TicNote / interview pipeline
+        - Plan / today / reflection
+        - Memory / search
+        - MCP / agents / A2A
+        - Docs / onboarding
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the use case · who benefits · why current behavior is insufficient
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How would you ideally see this work? UI sketch / API shape / config example welcome.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you tried · other tools that do this well
+
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Are you willing to contribute?
+      options:
+        - label: I'd like to send a PR for this myself
+        - label: I'd be happy to test a draft implementation

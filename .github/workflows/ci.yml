@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pii-scan:
+    name: PII 4 道防线
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 完整 history · for L3 history scan
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run PII scanner (L1 + L2 + L4)
+        run: python3 scripts/scan_pii.py
+      - name: Verify fixture contract (47/47)
+        run: python3 scripts/scan_pii.py --fixtures
+
+  syntax-check:
+    name: 语法检查（bash + python）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Bash syntax (install.sh / ome365 / setup.sh)
+        run: |
+          for f in install.sh ome365 setup.sh; do
+            if [ -f "$f" ]; then
+              bash -n "$f" && echo "✓ $f"
+            fi
+          done
+      - name: Python compile check (.app/*.py + scripts/*.py)
+        run: |
+          python3 -m compileall -q .app scripts skills 2>&1 | tee /tmp/compile.log
+          if grep -q "SyntaxError\|Error" /tmp/compile.log; then exit 1; fi
+          echo "✓ all .py files compile"
+
+  smoke-test:
+    name: Smoke test (boot server)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install minimal deps
+        run: |
+          if [ -f requirements.txt ]; then
+            python3 -m pip install -r requirements.txt
+          else
+            python3 -m pip install fastapi uvicorn pydantic
+          fi
+      - name: Boot server (5s smoke)
+        run: |
+          python3 .app/server.py > /tmp/server.log 2>&1 &
+          SERVER_PID=$!
+          sleep 5
+          if ! kill -0 $SERVER_PID 2>/dev/null; then
+            echo "✗ Server died"
+            tail -30 /tmp/server.log
+            exit 1
+          fi
+          # 测 main page + dashboard
+          curl -fsS http://localhost:3650/ > /dev/null && echo "✓ /"
+          curl -fsS http://localhost:3650/api/dashboard > /dev/null && echo "✓ /api/dashboard"
+          kill $SERVER_PID 2>/dev/null || true
+
+  install-sh-test:
+    name: install.sh 三平台 dry-run
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash -n syntax
+        run: bash -n install.sh
+      - name: --dry-run preview
+        run: bash install.sh --dry-run
+      - name: OME365_DRY_RUN=1 (env-driven)
+        run: OME365_DRY_RUN=1 bash install.sh

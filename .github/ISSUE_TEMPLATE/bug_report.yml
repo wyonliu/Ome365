@@ -1,0 +1,75 @@
+name: 🐛 Bug Report
+description: Report a problem with Ome365
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report! Please fill out the fields below to help us reproduce.
+
+  - type: input
+    id: version
+    attributes:
+      label: Ome365 version / commit
+      description: Run `git -C ~/Ome365 rev-parse --short HEAD` or check `./ome365 doctor`
+      placeholder: e.g. v1.0.0 or e6087cc
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (Ubuntu/Debian)
+        - Linux (RHEL/Fedora)
+        - WSL2 + Ubuntu
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: Run `python3 --version`
+      placeholder: e.g. 3.11.5
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Clear description of the bug + what you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run `./ome365`
+        2. Open browser at http://localhost:3650
+        3. Click ...
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Server logs
+      description: Paste output from `tail -50 /tmp/ome365.log` or browser console
+      render: shell
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I have removed personal data / API keys / real names from logs and screenshots before posting.
+          required: true
