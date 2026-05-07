@@ -25,6 +25,11 @@
 /面试*.md
 /interview-*.md
 
+# ── EEG / Knowledge 数据（含人名/组织/术语·绝不推·只 sample）──
+/Knowledge/
+!/Knowledge/.sample/
+!/Knowledge/README.md
+
 # ── Sensitive root files ──
 /agent-plan.md
 /agent-mem-evo-need.png

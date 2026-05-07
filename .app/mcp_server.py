@@ -17,7 +17,7 @@ Ome365 MCP Server — 把你的 vault 变成所有 AI agent 共享的记忆底�
   python3 .app/mcp_server.py
 
 Claude Code 注册：
-  claude mcp add ome365 -- python3 /Users/wyon/root/Ome365/.app/mcp_server.py
+  claude mcp add ome365 -- python3 /path/to/ome365/.app/mcp_server.py
 
 前提：主站 server.py 在 localhost:3650 运行（本 MCP 服务只是转发层）。
 """

@@ -11,7 +11,9 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent / "TicNote"
 STATE_DIR = BASE_DIR / "_browser_state"
-TICNOTE_DIR = BASE_DIR / "2026-04-09"
+# Set TICNOTE_DATE_DIR env or pass --date YYYY-MM-DD; falls back to today.
+import os, datetime
+TICNOTE_DIR = BASE_DIR / os.environ.get("TICNOTE_DATE_DIR", datetime.date.today().isoformat())
 
 
 def build_mapping():

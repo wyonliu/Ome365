@@ -97,7 +97,7 @@ OME365_PORT=3698 OME365_VAULT=/tmp/ome365-vault python3 .app/server.py
 
 以下属于项目作者的个人数据仓范畴，**不要** 发相关 PR：
 
-- 访谈内容 / 诊断报告 / Flagship 方案（在 Ome365 数据仓，不在本仓）
+- 访谈内容 / 诊断报告 / 战略方案（在 Ome365 数据仓，不在本仓）
 - 个人 Journal / Memory / Growth 状态
 - 租户品牌文案（作者自用 live 配置里的真实品牌）
 - TicNote 自动化里 **作者专属** 的关键词逻辑（通用清洗规则可以改）

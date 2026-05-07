@@ -1674,7 +1674,7 @@
               </div>
             </div>
 
-            <!-- Secondary tiles: Flagship · Secondary · 核心目标 -->
+            <!-- Secondary tiles: cockpit-config-driven secondary blocks -->
             <div class="rv-sec-tiles cp-tiles" v-if="cockpitSecondaryBlocks.length">
               <div v-for="blk in cockpitSecondaryBlocks" :key="blk.key"
                    class="rv-sec-tile"
@@ -1809,11 +1809,11 @@
                 </div>
                 <!-- Flagship: full-width architecture image below narrative arc -->
                 <div v-if="cockpitActiveBlockData.tier === 'flagship'" class="cp-arc-arch-img">
-                  <img src="/reports-static/04-triad/projects/images/1-top-arch-2.jpg" />
+                  <img src="/reports-static/04-pillars/projects/images/1-top-arch-2.jpg" />
                 </div>
               </div>
 
-              <!-- Bloom mode: parse master doc into sub-block chapter tiles (Flagship · 核心目标) -->
+              <!-- Bloom mode: parse master doc into sub-block chapter tiles -->
               <div v-if="cockpitActiveBlockData.bloom" class="cp-bloom-wrap">
                 <div class="cp-bloom-head">
                   <span class="cp-bloom-icon">{{cockpitActiveBlockData.icon}}</span>
@@ -1825,7 +1825,7 @@
                     📖 展开完整文档 →
                   </button>
                 </div>
-                <!-- Master switcher: only appears when section has >1 master doc (e.g. Flagship 组织方案 + 诊断) -->
+                <!-- Master switcher: only appears when section has >1 master doc -->
                 <div v-if="cockpitBloomMasters.length > 1" class="cp-bloom-mtabs">
                   <button v-for="(m, mi) in cockpitBloomMasters" :key="m.path"
                           class="cp-bloom-mtab"

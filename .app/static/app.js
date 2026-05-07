@@ -57,7 +57,7 @@ const app = createApp({
     function getReportPersonKey(r) {
       // Server now provides `person` field; fallback to eyebrow / name
       let raw = (r.person && r.person.trim()) || (r.eyebrow || '').split('·').pop().trim() || (r.name || '').split('·')[0] || '';
-      // Normalize: strip parenthetical suffix —(—) → —
+      // Normalize: strip parenthetical suffix "Name(suffix)" → "Name"
       raw = raw.replace(/[(（][^)）]*[)）]\s*$/g, '').trim();
       // Strip leading 航道码 "N2 —" / "C3 —" → — / —
       raw = raw.replace(/^[CN]\d[·・\-\s]+/, '').trim();
@@ -510,7 +510,7 @@ const app = createApp({
     const cockpitOverlayDocs = ref([]);             // array of report items currently in modal overlay
     const cockpitOverlayIdx = ref(0);               // index of currently displayed doc
     const cockpitBloomLoading = ref(false);         // loading master doc for bloom sections
-    const cockpitBloomMasterIdx = ref(0);           // which master doc is active (bloom sections with multiple 00· docs, e.g. Flagship)
+    const cockpitBloomMasterIdx = ref(0);           // which master doc is active (bloom sections with multiple 00· docs)
     const forecastSelectedTrack = ref(null);        // clicked track key in forecast chart, e.g. 't1'
     function toggleForecastTrack(trackKey) {
       forecastSelectedTrack.value = forecastSelectedTrack.value === trackKey ? null : trackKey;
@@ -528,12 +528,12 @@ const app = createApp({
       cockpitDrillPerson.value = null;
       cockpitOpenReport.value = null;
       if(!opts.skipNav) pushNav({view:'cockpit', detail:'block:'+key});
-      // For bloom-flagged sections (Flagship / 核心目标), preload the master doc
+      // For bloom-flagged sections, preload the master doc
       // content so we can parse it into chapter tiles.
       const sec = (reportsBySection.value || []).find(s => s.key === key);
       if (sec && sec.bloom && (sec.masters || []).length) {
         // Pick a sensible default master:
-        //   · Flagship has two 00· masters (组织方案 + 诊断) — prefer 方案 as default
+        //   · sections with multiple masters — prefer 方案 as default
         //   · Otherwise fall back to first
         const masters = sec.masters;
         let idx = masters.findIndex(m => /方案/.test(m.title || ''));
@@ -707,7 +707,7 @@ const app = createApp({
       if (!p) return null;
       return { section: sec, entity: sg, person: p };
     });
-    // Bloom master doc (for Flagship / 核心目标) — Flagship has 2 masters (组织方案 + 诊断)
+    // Bloom master doc — bloom-flagged sections may have multiple masters
     // so we track which master is currently active via cockpitBloomMasterIdx.
     const cockpitBloomMaster = computed(() => {
       const sec = cockpitActiveBlockData.value;
@@ -2579,7 +2579,7 @@ const app = createApp({
       return text;
     }
     // EEG 启动热加载：把 /api/entities/asr 的 alias→canonical 规则追加到 ASR_FIXES。
-    // 设计为"追加"而非"替换"——硬编码的非实体修正（话术/CAD解析/造价咨询等）仍然保留。
+    // 设计为"追加"而非"替换"——硬编码的非实体修正（cockpit_config.ASR_FIXES 中的 generic patterns）仍然保留。
     async function loadASRFromEEG(tenant) {
       // tenant default: fetch without param → server uses TENANT.entities.default_tenant
       const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : '';
@@ -2832,8 +2832,8 @@ const app = createApp({
         if (Array.isArray(cfg.ASR_FIXES)) {
           const fixes = cfg.ASR_FIXES.map(f => {
             // Accept both formats:
-            //   "pattern": "/龙珠/g"   (delimited, flags in pattern)
-            //   "pattern": "龙珠"      (plain, flags in f.flags)
+            //   "pattern": "/foo/g"    (delimited, flags in pattern)
+            //   "pattern": "foo"       (plain, flags in f.flags)
             let src = f.pattern, flags = f.flags || "g";
             const m = /^\/(.*)\/([gimsuy]*)$/s.exec(src);
             if (m) { src = m[1]; flags = m[2] || flags; }

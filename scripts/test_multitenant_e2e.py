@@ -13,7 +13,7 @@ Ome365 多用户架构验收测试
 8. Legacy 兼容：OME365_COMPAT_LEGACY=1 强制单用户
 
 运行：
-    cd /Users/wyon/root/Ome365-git
+    cd /path/to/ome365-repo
     python3 scripts/test_multitenant_e2e.py
     # 或 python3 scripts/test_multitenant_e2e.py --only ctx,session,basic
 """
