@@ -1,5 +1,6 @@
 # Ome365
 
+**AI-native personal OS** — Memory · Reflection · Execution · Persona-growth
 **AI 原生个人操作系统** — 记忆 · 反思 · 执行 · 养成
 
 <p align="center">
@@ -10,6 +11,40 @@
   <img src="https://img.shields.io/badge/AI-Omnity--Ome%20SDK-purple" alt="Omnity Ome">
   <img src="https://img.shields.io/badge/license-MIT-brightgreen" alt="MIT">
 </p>
+
+---
+
+## TL;DR (English)
+
+Local-first personal AI OS built on a Markdown + JSON vault. FastAPI backend +
+Vue 3 CDN frontend (no build step). Four loops: **Memory · Reflection ·
+Execution · Persona-growth**. AI features are optional and BYO-key (DeepSeek /
+OpenRouter / Ollama). MIT licensed.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/wyonliu/Ome365/main/install.sh | sh
+# or:
+git clone https://github.com/wyonliu/Ome365.git && cd Ome365 && ./ome365
+```
+
+**What's in the box (v1.0):** annual life-plan reader (10 endpoints) ·
+share station with argon2 + 3-word access codes + rename-resilient share_id ·
+truthguard data-hygiene linter · GZipped responses · multi-tenant auth
+(none / basic / magic_link / oidc / wecom) · single-binary deploy via systemd /
+Docker / Compose · ~6000 LOC backend + ~2000 LOC frontend.
+
+**vs Notion / Obsidian / Mem / Logseq:**
+
+| Need | Ome365 | Notion | Obsidian | Logseq | Mem |
+|------|--------|--------|----------|--------|-----|
+| Local-first .md storage | ✅ | ❌ | ✅ | ✅ | ❌ |
+| Self-host | ✅ | ❌ | desktop only | ✅ | ❌ |
+| AI features | optional, BYO key | Notion AI | plugins | plugins | core cloud |
+| Multi-user share | argon2 + 3-word codes | workspaces | single-vault | — | ✅ |
+| Visual cockpit / dashboards | config-driven | databases | plugins | graph | — |
+| Data-hygiene lint (truthguard) | ✅ | — | plugins | — | — |
+| No-build frontend | ✅ Vue CDN | — | n/a | n/a | — |
+| License | MIT | proprietary | proprietary | AGPL | proprietary |
 
 ---
 
