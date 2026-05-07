@@ -1,5 +1,45 @@
 # Changelog
 
+## v1.0.0-pre — 公开发布筹备 (2026-05-07)
+
+**目标：** 5/13 Show HN 公开发布。本版本是发布前的最后准备 pre-release。
+
+**新增能力（自 v0.9.7 起）**
+- **生活规划阅读器** — `.app/life_plan_routes.py` (787 LOC)
+  - 把外部 Markdown 写的年度规划（profile / annual goals / weekly / daily / health rules）
+    解析成结构化 view，挂在 `/api/life/plan/*` 下 10 个端点
+  - 配套 `.app/life-plan-demo/2026/` 8 份 sample plan（Alice Example persona）
+  - 用户私有 plan_dir 通过 `life_plan_config.json`（gitignored）配置
+- **分享站密码保护** — `.app/share_routes.py` 扩 +545 LOC + `.app/share_auth.py` 420 LOC
+  - argon2 密码哈希 + 三词访问码（170+ 词 wordlist）+ Fernet master_key 可逆加密
+  - 4 个新端点：`/api/share/password/{enable,rotate,disable,info}`
+  - 防文档漂移：`/api/share/by-path` 三层 fallback（path → frontmatter share_id → basename）
+  - 文档注册时自动写入 `share_id` 到 frontmatter，改名/移动后仍能反查
+- **truthguard 数据洁癖工具** — `skills/truthguard/` 套件 (567 + 871 LOC)
+  - 用规则化 truth.yml（人名/组织/产品 canonicals）扫 PKM 仓里的 ASR 错听 / 笔误 / LLM hallucination
+  - `scan` / `fix` / `lint` / `check` / `list` 子命令，CI 友好
+- **CJK markdown 渲染兜底** — `.app/static/vendor/marked-cjk-fix.js`
+  - Proxy 拦截 marked v15 parse，把粘连中文标点的粗体/斜体序列在 post-process 阶段补回 `<strong>` / `<em>`
+- **单仓部署套件** — `infra/` (nginx + systemd + logrotate) + `scripts/` 8 个脚本
+  - `build_share_vault.py` — 抽出注册过的 doc + 引用图片成最小 vault 子集
+  - `deploy_share.sh` / `install-remote.sh` / `publish_to_remote.py` / `publish_static_to_remote.py`
+  - `build_deploy_tarball.sh` / `upgrade-share-fix5.sh` / `backfill_view_audit.py`
+- **GZipMiddleware** — JSON / HTML 响应自动 gzip，178KB markdown 实测 ~9x 压缩
+- **Reports list 健壮化** — assets/ 子树自动跳过（不再把 build artifact 当报告）；
+  composite frontmatter section 正则化为 top-level board key
+- **/api/reports/file ETag/304** — 大文档重复加载从 ~200ms 降到一个 `If-None-Match` 头
+
+**License + 元信息**
+- 新增 `LICENSE`（MIT）— 之前 README badge 标榜 MIT 但仓里无 LICENSE 文件，本次补齐
+- 新增 `tests/` (626 LOC) + `requirements.share.txt`（分享站独立依赖）
+
+**全量隐私 + 历史重写**
+- pre-launch 走 24 轮 PII 全维度审查，工作树 + git history blob + commit messages 全 0 hits
+- `git filter-repo` 重写 80+ commits，去除所有真实公司/产品/人名/家庭信息
+- `.gitignore` 加固：`share_auth.db` / `truth.yml` / 内部设计文档全部 gitignored
+
+---
+
 ## v0.9.7 — 零摩擦安装 + 多租户隔离加固 (2026-04-18)
 
 **一键装 / 一键起**

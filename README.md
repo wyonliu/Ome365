@@ -3,7 +3,7 @@
 **AI 原生个人操作系统** — 记忆 · 反思 · 执行 · 养成
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v0.9.7-blue" alt="v0.9.7">
+  <img src="https://img.shields.io/badge/version-v1.0.0--pre-blue" alt="v1.0.0-pre">
   <img src="https://img.shields.io/badge/python-3.9+-blue" alt="Python 3.9+">
   <img src="https://img.shields.io/badge/vue-3.x-green" alt="Vue 3">
   <img src="https://img.shields.io/badge/storage-markdown-orange" alt="Markdown">
@@ -24,10 +24,15 @@ Ome365 不是笔记工具。它是一个**会记住你、理解你、帮你执�
 - **执行** — 365天计划拆解到季→月→周→日，每一天都有明确的下一步
 - **养成** — 把 AI 当数字生命养成，4 阶段成长 × 7 级羁绊 × 12 个成就
 
-## v0.9.7 新增
+## v1.0 看点（公开发布）
 
+- **本地优先 · AI 原生 · 零依赖前端** — Markdown + JSON 存储，FastAPI + Vue 3 CDN，无打包步骤
 - **零摩擦安装** — `curl -fsSL .../install.sh | sh` 一行装完，或 `git clone && ./ome365` 两步；首跑自动装依赖、复制 `.env`、起服务、开浏览器
 - **`./ome365` 极简启动器** — `--port` / `--no-open` / `--setup` / `doctor` 自检，单文件零依赖
+- **多场景部署** — `./setup.sh` 向导一键生成 solo / family / demo / enterprise 四种 tenant 配置，Docker / Compose 也开箱即用
+- **生活规划阅读器** — `/api/life/plan/*` 把 Markdown 写的年度规划解析成 dashboard / today / week / hero 视图（10 个端点）
+- **分享站 + 密码保护** — 三词访问码（wordlist 生成）+ argon2 密码 + master_key/Fernet 可逆加密，文档改名/移动也不丢分享链接
+- **truthguard 数据洁癖** — 内置 PII / ASR / hallucination 防污染 lint 工具，CI gate 友好
 - **多租户 HTTP 隔离加固** — `/t/{tid}/` path-prefix 正确路由，跨租户 session 被全线拒绝（Basic / Magic Link / OIDC / Wecom）
 - **E2E 测试扩至 110 项** — 新增 session GC、cookie Secure、HTTP 多租户、Magic Link 真实链路、OIDC Mock IdP、CLI 冒烟共 6 套
 
