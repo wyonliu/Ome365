@@ -80,7 +80,7 @@ docs/SHARE_PRIVACY_DESIGN.md
 # 私人 plan_dir 即使被链接到仓内也不推
 /life-plan/
 /.life-plan/
-.app/life-plan-demo/
+# 注：.app/life-plan-demo/ 是合法脱敏 demo（"Alice Example"）·tracked 作为 starter·不 ignore
 
 # ── TicNote export archived versions（保留最新 ticnote_export.py/ticnote_clean.py/ticnote_rename.py）──
 .app/ticnote_export_0414.py

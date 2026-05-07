@@ -1,0 +1,63 @@
+# tests/fixtures/pii_47.txt
+# 47 项 PII fixture · scan_pii.py --fixtures contract test
+# 这些是 PII pattern 示例（占位符内容）·绝不能进 git tracked code
+# v3.6 §10 D0.3 line 505 + §13.1 line 654（4-17 47 项 PII 泄漏教训）
+
+# ── L1 PROTECTED_PATHS (paths that must never be tracked·17 项)
+.app/cockpit_config.json
+.app/tenant_config.json
+.app/share_registry.json
+.app/master.key
+.app/share_auth.db
+.app/settings.json
+.app/categories.json
+.app/contact_categories.json
+.app/special_days.json
+.app/task_repeats.json
+.app/reminders.json
+.app/claude_session.json
+.app/life_plan_config.json
+.app/growth.json
+skills/truthguard/truth.yml
+docs/WORK_ASSISTANT_BRIEF.md
+.app/private_session.live.json
+
+# ── L2 KEY/SECRET PATTERNS (10 项)
+sk-or-v1-1234567890abcdefghijklmnopqrstuvwxyz1234567890abcd
+sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz1234567890abcdefghij
+sk-1234567890abcdefghijklmnopqrstuvwxyz1234567890
+AIzaSyAB1cD2eF3gH4iJ5kL6mN7oP8qR9sT0uV1
+AKIAIOSFODNN7EXAMPLE
+-----BEGIN RSA PRIVATE KEY-----
+pbkdf2$sha256,iter=600000$ABcDeFgHiJkLmNoPqRsT$XYz1234567890abcdefghijklmnopqrs
+$argon2id$v=19$m=65536,t=3,p=4$SaLtSaLt$AbCdEfGhIjKlMnOpQrStUvWxYz1234567890
+fernet$v1$gAAAAABp6KLCCCV3t6YvGsFKSbPreLwwi5Pe-vLu7NYytr8MK7ObfttikkkW6OpAKoBcT2xc2mM4MUBRTSkYcRAKPBdurg75av1xAVA9NcYkagChj6pvX0c=
+ghp_1234567890abcdefghijklmnopqrstuvwxyz1234
+
+# ── L4 SIZE / DATA-FILE PATTERNS (5 项)
+.app/large_dump.json
+.app/audit_log_2026.db
+.app/embedding_cache.bin
+.app/full_export.tar.gz
+.app/user_data_backup.zip
+
+# ── L0 ENV / CREDENTIAL PATHS (5 项)
+.env
+.env.local
+.env.production
+config/secrets.live.json
+config/credentials.live.yml
+
+# ── L0 INTERNAL DESIGN DOCS (5 项)
+docs/SHARE_PASSWORD_UX_DESIGN.md
+docs/SHARE_PRIVACY_DESIGN.md
+docs/INTERNAL_PLAYBOOK.md
+docs/internal/customer-list.md
+docs/internal/pricing-internal.md
+
+# ── L0 BOOTSTRAPPED MARKERS (5 项)
+.ome365-bootstrapped
+.app/UPGRADE_V8.md
+.app/UPGRADE_V8_FULL.md
+.app/.deploy-hash
+.app/.session-state

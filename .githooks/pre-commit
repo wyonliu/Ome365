@@ -33,8 +33,11 @@ for p in "${BLOCKED_PATHS[@]}"; do
 done
 
 # ── 2. 内容层扫描：疑似真实密钥（长度≥20 字符后缀） ──
-# 排除 .githooks/（hook 自己的 pattern 会自匹配）
-scan_files=$(echo "$staged" | grep -v '^\.githooks/' || true)
+# 排除：
+#   .githooks/             - hook 自己的 pattern 会自匹配
+#   tests/fixtures/        - PII 占位符 contract test ground truth（pii_47.txt 故意含示例）
+#   scripts/scan_pii.py    - scanner 定义 pattern 自身
+scan_files=$(echo "$staged" | grep -v '^\.githooks/' | grep -v '^tests/fixtures/' | grep -v '^scripts/scan_pii\.py$' || true)
 if [ -n "$scan_files" ]; then
   leak_patterns=(
     'sk-or-v1-[A-Za-z0-9]{32,}'
