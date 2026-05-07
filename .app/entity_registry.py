@@ -102,6 +102,24 @@ def _load_entity_file(fp: Path, type_hint: str | None = None) -> dict | None:
             cleaned.append(a)
     aliases = cleaned
 
+    # ── Hike v2 schema v0.2 五字段（向后兼容·all optional）─────────
+    # parent_id           — 实体父子层级（org tree / product family / term taxonomy）
+    # validity_period     — 时间有效区间（员工入/离职 / 产品停产 / 术语弃用）
+    # external_ids        — 跨系统标识（钉钉 ID / 飞书 ID / GitHub login / W3C DID）
+    # multilingual        — 多语言名称（zh / en / ja / 等）
+    # disambiguation_hint — 同名消歧提示（"张三 BU=供应链, 区分 张三 BU=城服"）
+    parent_id = meta.get("parent_id", "") or meta.get("parent", "")
+    validity_period = meta.get("validity_period", {}) or {}
+    if not isinstance(validity_period, dict):
+        validity_period = {}
+    external_ids = meta.get("external_ids", {}) or {}
+    if not isinstance(external_ids, dict):
+        external_ids = {}
+    multilingual = meta.get("multilingual", {}) or meta.get("i18n", {}) or {}
+    if not isinstance(multilingual, dict):
+        multilingual = {}
+    disambiguation_hint = meta.get("disambiguation_hint", "") or meta.get("disambiguation", "")
+
     return {
         "id": eid,
         "type": etype,
@@ -119,6 +137,12 @@ def _load_entity_file(fp: Path, type_hint: str | None = None) -> dict | None:
         "evidence": meta.get("evidence", []) or [],
         "relations": meta.get("relations", []) or [],
         "updated_at": str(meta.get("updated_at", "")),
+        # Hike v2 schema v0.2 (D+1 ~ D+3 alpha · backward compatible)
+        "parent_id": parent_id,
+        "validity_period": validity_period,        # {"from": "2024-01-01", "to": null}
+        "external_ids": external_ids,              # {"dingtalk": "x", "github": "y", "did": "did:web:..."}
+        "multilingual": multilingual,              # {"zh": "张三", "en": "Zhang San", "ja": "..."}
+        "disambiguation_hint": disambiguation_hint,
         "body": body.strip(),
         "_file": str(fp),
     }
