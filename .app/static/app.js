@@ -30,7 +30,7 @@ const app = createApp({
     const reportContent = ref('');
     const reportEditing = ref(false);
     const reportEditText = ref('');
-    const tocMode = ref('full'); // 'full' | 'slim' | 'hidden'
+    const tocMode = ref('slim'); // 'full' | 'slim' | 'hidden'  — Captain 2026-04-23: 默认 2 字收缩态
     function cycleTocMode() {
       const order = ['full', 'slim', 'hidden'];
       tocMode.value = order[(order.indexOf(tocMode.value) + 1) % order.length];
@@ -54,10 +54,40 @@ const app = createApp({
     // Map person keys → org-oriented display labels for cockpit cards
     // Keys come from filename prefix before first · (e.g. "<org>-<team>-<person>")
     const PERSON_DISPLAY_MAP = reactive({});  // loaded at init from /api/cockpit/config
+    // CARD_INDEX: { '01-diagnosis': [ {key, section, label, icon, accent, patterns: [regex-src]} ] }
+    // Drives entry-card grouping in cockpit 内部诊断 (each file → first matching card).
+    const CARD_INDEX = reactive({});  // loaded at init from /api/cockpit/config
+    const _cardRegexCache = new WeakMap();
+    function _getCardRegexes(card) {
+      let rxs = _cardRegexCache.get(card);
+      if (rxs) return rxs;
+      rxs = (card.patterns || []).map(p => {
+        try { return new RegExp(p); } catch { return null; }
+      }).filter(Boolean);
+      _cardRegexCache.set(card, rxs);
+      return rxs;
+    }
+    function matchReportCards(r, sectionKey) {
+      // Returns ALL cards whose patterns match the file — a single report can
+      // be cross-listed into multiple cards (e.g. Mason 日志 appears under both
+      // 航道·C1 and BU·acme建管). All existing CARD_INDEX patterns are disjoint,
+      // so historical behavior (1 file → 1 card) is preserved.
+      const cards = (CARD_INDEX[sectionKey] || []);
+      if (!cards.length) return [];
+      const parts = (r.path || '').split('/');
+      const base = (parts[parts.length - 1] || r.name || '').replace(/\.md$/, '');
+      const matched = [];
+      for (const c of cards) {
+        for (const rx of _getCardRegexes(c)) {
+          if (rx.test(base)) { matched.push(c); break; }
+        }
+      }
+      return matched;
+    }
     function getReportPersonKey(r) {
       // Server now provides `person` field; fallback to eyebrow / name
       let raw = (r.person && r.person.trim()) || (r.eyebrow || '').split('·').pop().trim() || (r.name || '').split('·')[0] || '';
-      // Normalize: strip parenthetical suffix "Name(suffix)" → "Name"
+      // Normalize: strip parenthetical suffix —(—) → —
       raw = raw.replace(/[(（][^)）]*[)）]\s*$/g, '').trim();
       // Strip leading 航道码 "N2 —" / "C3 —" → — / —
       raw = raw.replace(/^[CN]\d[·・\-\s]+/, '').trim();
@@ -84,8 +114,12 @@ const app = createApp({
       return (b.mtime || 0) - (a.mtime || 0);
     }
     const reportsBySection = computed(() => {
-      // Build section groups from taxonomy with masters / entity sub-groups / flat items
-      // Each entity sub-group additionally groups its items by PERSON (for L2 drill-down)
+      // Build section groups from taxonomy.
+      // For sections that have a CARD_INDEX (e.g. 01-diagnosis), every non-master
+      // report is routed to its entry-card by filename regex (NOT by folder/person).
+      // Each entity (10-管理层 / 20-航道 / 30-BU / 90-独立推演) becomes a sub-group
+      // whose `entries[]` are the matched cards — the cockpit then renders one tile
+      // per entry card (航道 → 8 tiles, BU → 8 tiles) instead of per-person duplicates.
       const groups = SECTION_TAXONOMY.map(sec => ({
         ...sec,
         masters: [],
@@ -103,19 +137,47 @@ const app = createApp({
           g.masters.push(r);
           return;
         }
+        // Card-index driven routing (preferred): iterate ALL matching cards so
+        // a single file can be cross-listed into multiple entry-cards.
+        const matchedCards = (CARD_INDEX[secKey] && CARD_INDEX[secKey].length) ? matchReportCards(r, secKey) : [];
+        if (matchedCards.length) {
+          let routed = false;
+          for (const card of matchedCards) {
+            const entKey = card.section;
+            const ent = (g.entities || []).find(e => e.key === entKey);
+            if (!ent) continue;
+            if (!g.subGroupMap[entKey]) {
+              g.subGroupMap[entKey] = { ...ent, items: [], entryMap: {} };
+            }
+            g.subGroupMap[entKey].items.push(r);
+            if (!g.subGroupMap[entKey].entryMap[card.key]) {
+              g.subGroupMap[entKey].entryMap[card.key] = {
+                key: card.key,
+                label: card.label,
+                icon: card.icon || ent.icon,
+                accent: card.accent,
+                items: [],
+              };
+            }
+            g.subGroupMap[entKey].entryMap[card.key].items.push(r);
+            routed = true;
+          }
+          if (routed) return;
+        }
+        // Fallback: folder-based entity routing (kept for non-diagnosis sections).
         if (g.entities && g.entities.length) {
           const entKey = getReportEntityKey(r);
           const ent = g.entities.find(e => e.key === entKey);
           if (ent) {
             if (!g.subGroupMap[entKey]) {
-              g.subGroupMap[entKey] = { ...ent, items: [], personMap: {} };
+              g.subGroupMap[entKey] = { ...ent, items: [], entryMap: {} };
             }
             g.subGroupMap[entKey].items.push(r);
             const pk = getReportPersonKey(r) || '·';
-            if (!g.subGroupMap[entKey].personMap[pk]) {
-              g.subGroupMap[entKey].personMap[pk] = { key: pk, label: getPersonDisplayLabel(pk), items: [] };
+            if (!g.subGroupMap[entKey].entryMap[pk]) {
+              g.subGroupMap[entKey].entryMap[pk] = { key: pk, label: getPersonDisplayLabel(pk), items: [] };
             }
-            g.subGroupMap[entKey].personMap[pk].items.push(r);
+            g.subGroupMap[entKey].entryMap[pk].items.push(r);
             return;
           }
         }
@@ -127,19 +189,28 @@ const app = createApp({
         g.subGroups = (g.entities || [])
           .map(e => g.subGroupMap[e.key])
           .filter(Boolean);
+        // Preserve CARD_INDEX declaration order so 航道 renders C1→C5→N1→N2 etc.
+        const cardOrder = {};
+        for (const [sk, cards] of Object.entries(CARD_INDEX)) {
+          cardOrder[sk] = {};
+          (cards || []).forEach((c, i) => { cardOrder[sk][c.key] = i; });
+        }
         g.subGroups.forEach(sg => {
           sg.items.sort(sortReports);
-          // Build persons array ordered by best priority of their docs
-          sg.persons = Object.values(sg.personMap).map(pg => {
-            pg.items.sort(sortReports);
-            // best priority of the group for sorting
-            const bestPrio = Math.min(...pg.items.map(it => PRIO_RANK[it.priority || ''] ?? 4));
-            const latestMtime = Math.max(...pg.items.map(it => it.mtime || 0));
-            return { ...pg, bestPrio, latestMtime };
+          sg.entries = Object.values(sg.entryMap).map(eg => {
+            eg.items.sort(sortReports);
+            const bestPrio = Math.min(...eg.items.map(it => PRIO_RANK[it.priority || ''] ?? 4));
+            const latestMtime = Math.max(...eg.items.map(it => it.mtime || 0));
+            return { ...eg, bestPrio, latestMtime };
           }).sort((a, b) => {
+            const oa = (cardOrder[g.key] || {})[a.key];
+            const ob = (cardOrder[g.key] || {})[b.key];
+            if (oa != null && ob != null) return oa - ob;
             if (a.bestPrio !== b.bestPrio) return a.bestPrio - b.bestPrio;
             return b.latestMtime - a.latestMtime;
           });
+          // Back-compat alias: older templates read `persons` — keep the same array.
+          sg.persons = sg.entries;
         });
         g.count = g.masters.length + g.flat.length +
           g.subGroups.reduce((s, sg) => s + sg.items.length, 0);
@@ -355,6 +426,11 @@ const app = createApp({
       pwdCopied: '',               // '' | 'combo' | 'pwd'  —— 哪个按钮刚复制
       pwdError: '',                // 提示文案
       pwdConfirm: null,            // null | 'rotate' | 'disable'  —— 二次确认 banner
+      pwdCanReveal: false,         // 服务端存了 password_enc 才能 👁️ 回显
+    });
+    // T2R · 批量轮换结果弹窗
+    const shareBatch = reactive({
+      show: false, loading: false, items: [], count: 0, revoked: 0, copied: false, error: '',
     });
     const shareList = ref([]);
     const shareMgrEditing = ref(null);
@@ -510,7 +586,7 @@ const app = createApp({
     const cockpitOverlayDocs = ref([]);             // array of report items currently in modal overlay
     const cockpitOverlayIdx = ref(0);               // index of currently displayed doc
     const cockpitBloomLoading = ref(false);         // loading master doc for bloom sections
-    const cockpitBloomMasterIdx = ref(0);           // which master doc is active (bloom sections with multiple 00· docs)
+    const cockpitBloomMasterIdx = ref(0);           // which master doc is active (bloom sections with multiple 00· docs, e.g. Flagship)
     const forecastSelectedTrack = ref(null);        // clicked track key in forecast chart, e.g. 't1'
     function toggleForecastTrack(trackKey) {
       forecastSelectedTrack.value = forecastSelectedTrack.value === trackKey ? null : trackKey;
@@ -528,12 +604,12 @@ const app = createApp({
       cockpitDrillPerson.value = null;
       cockpitOpenReport.value = null;
       if(!opts.skipNav) pushNav({view:'cockpit', detail:'block:'+key});
-      // For bloom-flagged sections, preload the master doc
+      // For bloom-flagged sections (Flagship / 核心目标), preload the master doc
       // content so we can parse it into chapter tiles.
       const sec = (reportsBySection.value || []).find(s => s.key === key);
       if (sec && sec.bloom && (sec.masters || []).length) {
         // Pick a sensible default master:
-        //   · sections with multiple masters — prefer 方案 as default
+        //   · Flagship has two 00· masters (组织方案 + 诊断) — prefer 方案 as default
         //   · Otherwise fall back to first
         const masters = sec.masters;
         let idx = masters.findIndex(m => /方案/.test(m.title || ''));
@@ -568,8 +644,93 @@ const app = createApp({
     }
     async function cockpitOpenDoc(r, opts={}) {
       if (!r) return;
-      // Single-doc overlay: just open the one doc.
-      await cockpitOpenOverlay([r], 0, opts);
+      // Captain rule (2026-04-23): 所有驾舱内文档卡点击统一进入文档页（reports view），
+      // 不再弹 overlay。适用于：航道/BU 聚合窗、战略总图·旗舰项目提案、外部研究（空间智能地图等）。
+      if (cockpitPersonPopover.show) closeCockpitPersonPopover();
+      view.value = 'reports';
+      await openReport(r, opts);
+    }
+    // ── Person popover: click 航道/BU person card → floating list of its docs → click doc → overlay ──
+    const cockpitPersonPopover = reactive({
+      show: false,
+      person: null,       // { key, label, items[] }
+      entityLabel: '',    // parent entity label ("航道" / "acme9BU" etc)
+      pos: { position: 'fixed', top: '0px', left: '0px', width: '720px' },
+    });
+    const cockpitPersonStats = computed(() => {
+      const items = (cockpitPersonPopover.person && cockpitPersonPopover.person.items) || [];
+      if (!items.length) return { p0: 0, p1: 0, prescriptions: 0, latestDate: '' };
+      let p0 = 0, p1 = 0, presc = 0, latestMtime = 0, latestDate = '';
+      for (const it of items) {
+        if (it.priority === 'P0') p0++;
+        else if (it.priority === 'P1') p1++;
+        const nm = (it.name || '') + ' ' + (it.title || '');
+        if (/处方卡?/.test(nm)) presc++;
+        if ((it.mtime || 0) > latestMtime) {
+          latestMtime = it.mtime || 0;
+          latestDate = it.date || '';
+        }
+      }
+      return { p0, p1, prescriptions: presc, latestDate };
+    });
+    let _cpPersonPopClickAway = null;
+    let _cpPersonPopEscHandler = (e) => { if (e.key === 'Escape') closeCockpitPersonPopover(); };
+    function openCockpitPersonPopover(sg, p, ev) {
+      // Toggle if same person re-clicked
+      if (cockpitPersonPopover.show && cockpitPersonPopover.person && cockpitPersonPopover.person.key === p.key) {
+        cockpitPersonPopover.show = false;
+        cockpitPersonPopover.person = null;
+        return;
+      }
+      const items = (p.items || []).slice();
+      // Captain rule (2026-04-23): always go through popover even for single-doc
+      // — keeps the card → aggregate → doc interaction consistent.
+      cockpitPersonPopover.person = { key: p.key, label: p.label, items };
+      cockpitPersonPopover.entityLabel = (sg && sg.label) || '';
+      cockpitPersonPopover.show = true;
+      nextTick(() => {
+        const pop = document.querySelector('.cp-person-popover');
+        if (!pop) return;
+        // Page-wide aware: target width = clamp(600, 80vw, 960); center horizontally
+        const vw = window.innerWidth, vh = window.innerHeight;
+        const margin = 24;
+        const pw = Math.min(960, Math.max(600, Math.round(vw * 0.80)));
+        const ph = pop.offsetHeight || 420;
+        const left = Math.max(margin, Math.round((vw - pw) / 2));
+        let top = Math.max(margin, Math.round((vh - ph) / 2));
+        if (top + ph + margin > vh) top = margin;
+        cockpitPersonPopover.pos = {
+          position: 'fixed',
+          top: top + 'px',
+          left: left + 'px',
+          width: pw + 'px',
+          maxHeight: (vh - margin * 2) + 'px',
+        };
+      });
+      if (_cpPersonPopClickAway) document.removeEventListener('click', _cpPersonPopClickAway);
+      document.removeEventListener('keydown', _cpPersonPopEscHandler);
+      _cpPersonPopClickAway = (e) => {
+        if (!e.target.closest('.cp-person-popover') && !e.target.closest('.rv-person-card')) {
+          closeCockpitPersonPopover();
+        }
+      };
+      setTimeout(() => {
+        document.addEventListener('click', _cpPersonPopClickAway);
+        document.addEventListener('keydown', _cpPersonPopEscHandler);
+      }, 0);
+    }
+    function closeCockpitPersonPopover() {
+      cockpitPersonPopover.show = false;
+      cockpitPersonPopover.person = null;
+      if (_cpPersonPopClickAway) document.removeEventListener('click', _cpPersonPopClickAway);
+      document.removeEventListener('keydown', _cpPersonPopEscHandler);
+    }
+    function pickCockpitPersonDoc(r) {
+      // Captain rule (2026-04-23): clicking a doc card in the aggregate popover
+      // navigates into the real report reader page (not an overlay).
+      closeCockpitPersonPopover();
+      view.value = 'reports';
+      openReport(r);
     }
     async function cockpitOpenOverlay(items, startIdx = 0, opts={}) {
       const arr = (Array.isArray(items) ? items : [items]).filter(Boolean);
@@ -707,7 +868,7 @@ const app = createApp({
       if (!p) return null;
       return { section: sec, entity: sg, person: p };
     });
-    // Bloom master doc — bloom-flagged sections may have multiple masters
+    // Bloom master doc (for Flagship / 核心目标) — Flagship has 2 masters (组织方案 + 诊断)
     // so we track which master is currently active via cockpitBloomMasterIdx.
     const cockpitBloomMaster = computed(() => {
       const sec = cockpitActiveBlockData.value;
@@ -1141,7 +1302,15 @@ const app = createApp({
           const firstLine = b.raw.split('\n')[0];
           const m = firstLine.match(/^(#{3,6})\s+(.*)$/);
           if (m) {
-            chunks.push({ kind: 'h-sub', level: m[1].length, title: m[2].trim() });
+            const subTitle = m[2].trim();
+            const chunk = { kind: 'h-sub', level: m[1].length, title: subTitle };
+            // Captain 2026-04-25 · MasonAI 实验日志：把 ### Round N 锚成 rv-round-N，
+            // 让 TOC 直接跳到具体一轮。仅在 h3 命中时打 id，避免污染其它 h3。
+            if (m[1].length === 3) {
+              const rm = subTitle.match(/^Round\s+(\d+)\b/i);
+              if (rm) chunk.id = 'rv-round-' + rm[1];
+            }
+            chunks.push(chunk);
             // If heading block had trailing lines, keep them as prose
             const rest = b.raw.split('\n').slice(1).join('\n').trim();
             if (rest) pendingProse.push(rest);
@@ -1209,8 +1378,11 @@ const app = createApp({
 
     // ══ Report parser · split markdown into hero + sections for cockpit-grade rendering ══
     // ── Shared MD-doc parser (used by cockpit reportParsed + life plan lifePlanParsed) ──
-    function parseMdReport(raw) {
+    // opts.hydrateUpTo (number, default Infinity)：只对前 N 节做 marked.parse，
+    // 其余节点保留 raw chunks（仅 h-sub 完整，prose/list/table 留 html='', 由 progressivelyHydrateReport 后续填）
+    function parseMdReport(raw, opts) {
       if (!raw) return null;
+      const hydrateUpTo = (opts && Number.isFinite(opts.hydrateUpTo)) ? opts.hydrateUpTo : Infinity;
       // ── Strip YAML frontmatter, capturing title/subtitle/eyebrow ──
       let fmTitle = '', fmSubtitle = '', fmEyebrow = '';
       if (/^---\s*\n/.test(raw)) {
@@ -1311,13 +1483,22 @@ const app = createApp({
             else if (cnMap[raw] !== undefined) numStr = String(cnMap[raw]).padStart(2, '0');
             else numStr = raw.padStart(2, '0');
           }
+          // Slim-mode label (Captain 2026-04-25): prefer §X.Y / §X marker, then numeric, fallback first 2 chars
+          let slimLabel = '';
+          const sectMark = rawTitle.match(/^§\s*(\d+(?:\.\d+)?)/);
+          if (sectMark) slimLabel = '§' + sectMark[1];
+          else if (m && /^\d/.test(m[1])) slimLabel = numStr;
+          // else compute from title later (after `cur.title` is set, see below)
           cur = {
             id: 'rv-sec-' + sections.length,
             num: numStr,
             hasExplicitNum: !!m,
+            rawTitle,
             title: m ? m[2].trim() : rawTitle,
+            slimLabel,
             body: [],
           };
+          if (!cur.slimLabel) cur.slimLabel = (cur.title || rawTitle).slice(0, 2);
         } else if (cur) {
           cur.body.push(l);
         } else {
@@ -1328,20 +1509,83 @@ const app = createApp({
       if (cur) sections.push(cur);
       // Render each section body via marked (legacy) + smart chunking (new)
       const md = (txt) => (typeof marked !== 'undefined' && txt) ? badgifyDoc(marked.parse(txt, {gfm:true, breaks:true})) : '';
+      const renderedSections = sections.map((s, idx) => {
+        const bodyText = s.body.join('\n').trim();
+        const rawChunks = buildSmartChunks(bodyText);
+        if (idx < hydrateUpTo) {
+          const chunks = hydrateChunks(rawChunks);
+          return { ...s, bodyText, rawChunks, html: md(bodyText), chunks, _hydrated: true };
+        }
+        // 占位：保留 h-sub（含 round id）原样，其它 chunk 暂留空 html
+        const placeholder = rawChunks.map(c =>
+          (c.kind === 'h-sub' || c.kind === 'hr') ? c : { ...c, html: '', bodyHtml: '' }
+        );
+        return { ...s, bodyText, rawChunks, html: '', chunks: placeholder, _hydrated: false };
+      });
+      // Captain 2026-04-25 · 把 §N 下的 ### Round X 抓成 TOC 子项（slim 模式显示 R{X}）
+      const tocItems = [];
+      for (const s of renderedSections) {
+        tocItems.push({
+          id: s.id, num: s.num, hasExplicitNum: s.hasExplicitNum,
+          title: s.title, slimLabel: s.slimLabel || s.title.slice(0, 2),
+          isSub: false,
+        });
+        for (const c of (s.chunks || [])) {
+          if (c.kind === 'h-sub' && c.level === 3 && c.id && /^rv-round-/.test(c.id)) {
+            const rm = c.title.match(/^Round\s+(\d+)\b/i);
+            const n = rm ? rm[1] : '';
+            tocItems.push({
+              id: c.id, num: '', hasExplicitNum: false,
+              title: c.title, slimLabel: n ? ('R' + n) : c.title.slice(0, 2),
+              isSub: true,
+            });
+          }
+        }
+      }
       return {
         title,
         eyebrow,
         metaPills,
         prefaceHtml: md(preface.join('\n').trim()),
-        sections: sections.map(s => {
-          const bodyText = s.body.join('\n').trim();
-          const rawChunks = buildSmartChunks(bodyText);
-          const chunks = hydrateChunks(rawChunks);
-          return { ...s, html: md(bodyText), chunks };
-        }),
+        sections: renderedSections,
+        tocItems,
       };
     }
-    const reportParsed = computed(() => parseMdReport(reportContent.value || ''));
+    // ── reportParsed · 渐进式渲染（Captain 2026-04-25）──
+    // 大文档（MasonAI 178KB / 530 chunk / 12 节）首屏一次 hydrate 全跑要 ~700ms
+    // 改为：parse 结构 + 前 2 节立即 hydrate；其余节点 requestIdleCallback 排队补
+    // 用户先看见骨架 + 顶部完整内容，剩余节点在 200-500ms 内陆续就位
+    const reportParsed = ref(null);
+    let _reportHydrateGen = 0;
+    function _hydrateOneSection(s) {
+      if (s._hydrated) return s;
+      const md = (typeof marked !== 'undefined' && s.bodyText)
+        ? badgifyDoc(marked.parse(s.bodyText, { gfm: true, breaks: true }))
+        : '';
+      const chunks = hydrateChunks(s.rawChunks || s.chunks || []);
+      return { ...s, html: md, chunks, _hydrated: true };
+    }
+    watch(reportContent, async (raw) => {
+      const myGen = ++_reportHydrateGen;
+      if (!raw) { reportParsed.value = null; return; }
+      // 小文档（<=4 节 或 <40KB）：一次性 hydrate，避免占位闪烁
+      // 大文档：前 2 节立即出，其余 idle 排队
+      const isLarge = (raw.length > 40000) || ((raw.match(/\n##\s+/g) || []).length > 4);
+      const HYDRATE_FIRST = isLarge ? 2 : Infinity;
+      const parsed = parseMdReport(raw, { hydrateUpTo: HYDRATE_FIRST });
+      reportParsed.value = parsed;
+      if (!parsed || !isLarge || parsed.sections.length <= HYDRATE_FIRST) return;
+      // Phase 2: 余下节点 idle 排队
+      const ric = window.requestIdleCallback || ((cb) => setTimeout(() => cb({timeRemaining:()=>16}), 16));
+      for (let idx = HYDRATE_FIRST; idx < parsed.sections.length; idx++) {
+        if (myGen !== _reportHydrateGen) return; // 切走了 → 取消
+        await new Promise(r => ric(r, { timeout: 300 }));
+        if (myGen !== _reportHydrateGen) return;
+        parsed.sections[idx] = _hydrateOneSection(parsed.sections[idx]);
+        // Vue 3 ref 浅响应：换 sections 数组才会触发 re-render
+        reportParsed.value = { ...parsed, sections: [...parsed.sections] };
+      }
+    }, { immediate: true });
 
     function scrollToReportSection(id) {
       const el = document.getElementById(id);
@@ -1428,6 +1672,58 @@ const app = createApp({
     const recruitingLoading = ref(false);
     const recruitingError = ref('');
     const RECRUITING_SECTION = '06-recruiting';
+
+    // 组织总表（新 tab · 优先一个权威 IRONLAW 摘要，失败回落到 00-org 目录最新一份）
+    const ORG_DOC_PATH = 'Projects/Acme/reports/00-org/组织总表·2026-04-22.md';
+    const orgDocContent = ref('');
+    const orgDocMeta = ref({path:'', title:'', subtitle:'', date:''});
+    const orgDocLoading = ref(false);
+    const orgDocError = ref('');
+    const orgDocHtml = computed(() => orgDocContent.value ? marked.parse(orgDocContent.value, {gfm:true, breaks:true}) : '');
+    async function loadOrgDoc(force=false) {
+      if (orgDocContent.value && !force) return;
+      orgDocLoading.value = true;
+      orgDocError.value = '';
+      try {
+        let res = null;
+        try {
+          res = await api('/reports/file?path=' + encodeURIComponent(ORG_DOC_PATH));
+        } catch (_) {
+          // Fallback: pick newest from 00-org section via reports list
+          if (!reportsList.value || !reportsList.value.length) await loadReports();
+          const docs = (reportsList.value || [])
+            .filter(r => (r.section || '') === '00-org')
+            .sort((a,b) => (b.date||'').localeCompare(a.date||''));
+          if (!docs.length) { orgDocError.value = '未找到组织总表（00-org）'; return; }
+          res = await api('/reports/file?path=' + encodeURIComponent(docs[0].path));
+          orgDocMeta.value.path = docs[0].path;
+        }
+        orgDocContent.value = (res && (res.raw || res.content)) || '';
+        if (!orgDocMeta.value.path) orgDocMeta.value.path = ORG_DOC_PATH;
+        // parse frontmatter for title/subtitle/updated
+        const fm = (orgDocContent.value.match(/^---\n([\s\S]*?)\n---/) || [])[1] || '';
+        const pick = (k) => (fm.match(new RegExp('^' + k + ':\\s*(.+)$', 'm')) || [])[1] || '';
+        orgDocMeta.value.title = pick('title') || 'acme·acme组织总表';
+        orgDocMeta.value.subtitle = pick('subtitle') || '';
+        orgDocMeta.value.date = pick('updated') || '';
+        if (!orgDocContent.value) orgDocError.value = '文档为空';
+      } catch (e) {
+        orgDocError.value = String(e && e.message || e);
+      } finally {
+        orgDocLoading.value = false;
+      }
+    }
+    function shareOrgDoc(ev) {
+      const path = orgDocMeta.value.path;
+      if (!path) return;
+      openShareDialog(ev, { path, title: orgDocMeta.value.title || 'acme·acme组织总表' });
+    }
+    function openOrgDocInEditor() {
+      const path = orgDocMeta.value.path;
+      if (!path) return;
+      // 跳到原始报告视图（已有 overlay）
+      cockpitOpenDoc({ path, title: orgDocMeta.value.title || '组织总表' });
+    }
     // Extract `**级别**：Principal · **部门**：空间BU · **地点**：成都` → [{k:'级别',v:'Principal'},...]
     // Returns {chips, rest} — `rest` is the section body with the meta line removed.
     function extractJobMetaChips(bodyLines) {
@@ -1571,6 +1867,95 @@ const app = createApp({
       if (recruitingEditDirty.value && !confirm('有未保存的修改，确定关闭吗？')) return;
       recruitingEditOpen.value = false;
     }
+
+    // 人才计划（新 tab · 读取 07-talent 下最新一份 markdown）
+    const TALENT_SECTION = '07-talent';
+    const talentContent = ref('');
+    const talentDocMeta = ref({path:'', title:'', subtitle:'', date:'', version:''});
+    const talentLoading = ref(false);
+    const talentError = ref('');
+    const talentParsed = computed(() => {
+      if (!talentContent.value) return null;
+      return parseMdReport(talentContent.value);
+    });
+    async function loadTalentDoc(force=false) {
+      if (talentContent.value && !force) return;
+      talentLoading.value = true;
+      talentError.value = '';
+      try {
+        if (!reportsList.value || !reportsList.value.length) await loadReports();
+        const pickDocs = () => (reportsList.value || [])
+          .filter(r => (r.section || '') === TALENT_SECTION)
+          .sort((a,b) => (b.date||'').localeCompare(a.date||''));
+        let docs = pickDocs();
+        // Stale cache may miss newly created folders — force a refresh once before giving up.
+        if (!docs.length) {
+          await loadReports();
+          docs = pickDocs();
+        }
+        if (!docs.length) {
+          talentError.value = '暂无人才计划文档（' + TALENT_SECTION + '）';
+          return;
+        }
+        const top = docs[0];
+        const res = await api('/reports/file?path=' + encodeURIComponent(top.path));
+        talentContent.value = (res && (res.raw || res.content)) || '';
+        talentDocMeta.value = {
+          path: top.path,
+          title: top.title || res?.name || '',
+          subtitle: top.subtitle || '',
+          date: top.date || '',
+          version: top.version || '',
+        };
+        if (!talentContent.value) talentError.value = '文档为空';
+      } catch (e) {
+        talentError.value = String(e && e.message || e);
+      } finally {
+        talentLoading.value = false;
+      }
+    }
+    function shareTalentDoc(ev) {
+      const path = talentDocMeta.value.path;
+      if (!path) return;
+      openShareDialog(ev, { path, title: talentDocMeta.value.title || '人才计划' });
+    }
+    const talentEditOpen = ref(false);
+    const talentEditContent = ref('');
+    const talentEditDirty = ref(false);
+    const talentEditSaving = ref(false);
+    async function editTalentDoc() {
+      const path = talentDocMeta.value.path;
+      if (!path) return;
+      try {
+        const res = await api('/reports/file?path=' + encodeURIComponent(path));
+        talentEditContent.value = res?.raw || '';
+        talentEditDirty.value = false;
+        talentEditOpen.value = true;
+      } catch(e) { showToast('打开编辑器失败：' + e.message, 'error'); }
+    }
+    async function saveTalentEdit() {
+      if (!talentEditDirty.value || talentEditSaving.value) return;
+      talentEditSaving.value = true;
+      try {
+        const res = await api('/reports/file', {
+          method: 'PUT',
+          body: JSON.stringify({ path: talentDocMeta.value.path, content: talentEditContent.value }),
+        });
+        if (!res?.ok) throw new Error(res?.error || '保存失败');
+        talentEditDirty.value = false;
+        showToast('已保存');
+        await loadTalentDoc(true);
+      } catch(e) {
+        showToast('保存失败：' + e.message, 'error');
+      } finally {
+        talentEditSaving.value = false;
+      }
+    }
+    function closeTalentEdit() {
+      if (talentEditDirty.value && !confirm('有未保存的修改，确定关闭吗？')) return;
+      talentEditOpen.value = false;
+    }
+
     // 默认只展开 root；分组节点 id 由 tenant 的 cockpit_config.orgTree 决定，不在代码里写死业务 id
     const orgExpandedNodes = ref(new Set(['root']));
     const orgPersonExpanded = ref(new Set());
@@ -2289,6 +2674,32 @@ const app = createApp({
       return all;
     });
     function renderMd(s) { return s ? badgifyDoc(marked.parse(s, {gfm:true, breaks:true})) : ''; }
+    // Strip markdown syntax → plain text. Use at source of any `{{ }}` interpolation
+    // (Vue text binding doesn't process markdown, so raw **bold** / - bullet would leak literally).
+    function mdToText(s) {
+      if (!s) return '';
+      let out = String(s)
+        .replace(/^[\s]*[-*+>]\s+/, '')                // leading bullet
+        .replace(/^#{1,6}\s*/, '');                    // heading marks
+      // 迭代剥 bold：处理嵌套畸形（如 ****x** 或 **y **z****）直到稳定
+      let prev = null;
+      for (let i = 0; i < 5 && out !== prev; i++) {
+        prev = out;
+        out = out
+          .replace(/\*\*([^*]+)\*\*/g, '$1')
+          .replace(/__([^_]+)__/g, '$1');
+      }
+      return out
+        .replace(/(?<!\*)\*([^*\s][^*]*[^*\s]|[^*\s])\*(?!\*)/g, '$1')  // *italic*
+        .replace(/`([^`]+)`/g, '$1')                   // `code`
+        .replace(/~~([^~]+)~~/g, '$1')                 // ~~strike~~
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')       // [text](url)
+        .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')      // ![alt](url)
+        .replace(/<[^>]+>/g, '')                       // stray html tags
+        .replace(/\*+/g, '')                           // 残余 stray 星号（畸形输入兜底）
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
     // Auto-badge Track/Layer/Zone/Curve/底盘 tokens in rendered HTML
     function badgifyDoc(html) {
       if (!html) return html;
@@ -2579,7 +2990,7 @@ const app = createApp({
       return text;
     }
     // EEG 启动热加载：把 /api/entities/asr 的 alias→canonical 规则追加到 ASR_FIXES。
-    // 设计为"追加"而非"替换"——硬编码的非实体修正（cockpit_config.ASR_FIXES 中的 generic patterns）仍然保留。
+    // 设计为"追加"而非"替换"——硬编码的非实体修正（话术/CAD解析/造价咨询等）仍然保留。
     async function loadASRFromEEG(tenant) {
       // tenant default: fetch without param → server uses TENANT.entities.default_tenant
       const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : '';
@@ -2667,9 +3078,18 @@ const app = createApp({
       const emojiHeadRe = /^([\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}]+)\s*(.+)$/u;
       const boldHeadRe = /^(?:#{1,3}\s+)?([\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}]*)\s*(.+)$/u;
 
+      // Markdown H2/H3 heading (e.g. "## 本段定位" or "## 💡 洞察")
+      const mdHeadRe = /^#{2,3}\s+(?:([\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}]+)\s*)?(.+?)\s*$/u;
       for (const line of lines) {
         const t = line.trim();
         if (!t) { if (current) current.body += '\n'; continue; }
+        // Markdown H2/H3 heading (review/analysis docs use these)
+        const md = t.match(mdHeadRe);
+        if (md && t.length < 120 && t.startsWith('##')) {
+          if (current) sections.push(current);
+          current = { icon: md[1] || '', title: md[2].trim(), body: '' };
+          continue;
+        }
         // Emoji-prefixed heading
         const em = t.match(emojiHeadRe);
         if (em && t.length < 80) {
@@ -2678,7 +3098,8 @@ const app = createApp({
           continue;
         }
         // Bold-prefixed or colon-ended heading pattern (like "产品核心功能与现状：")
-        if (t.endsWith('：') && t.length < 50 && !t.startsWith('>') && !t.startsWith('-')) {
+        // 注意：如果行本身已含 `**` 或 `*`，不再二次包裹（否则会变成 ****x** 畸形）
+        if (t.endsWith('：') && t.length < 50 && !t.startsWith('>') && !t.startsWith('-') && !t.includes('**') && !t.includes('`')) {
           if (current) {
             // Sub-heading within section
             current.body += '\n**' + t + '**\n';
@@ -2694,9 +3115,11 @@ const app = createApp({
       }
       if (current) sections.push(current);
       // Clean up empty sections, trim bodies
+      // title 走 mdToText 剥离 markdown（因为模板里是 {{ sec.title }} 纯文本插值）
       return sections.filter(s => s.body.trim()).map(s => ({
         ...s,
-        icon: s.icon || iconForTitle(s.title),
+        title: mdToText(s.title),
+        icon: s.icon || iconForTitle(mdToText(s.title)),
         body: s.body.trim()
       }));
     }
@@ -2794,16 +3217,23 @@ const app = createApp({
         }
         if (/行动|后续|下一步/.test(s.title)) {
           s.body.split('\n').filter(l => l.trim().startsWith('') || /^\d+[\.\、]/.test(l.trim()) || l.trim().startsWith('-')).forEach(l => {
-            insights.actionItems.push(l.trim().replace(/^[\s\d\.\、\-]+/, '').trim());
+            const cleaned = mdToText(l.trim().replace(/^[\s\d\.\、]+/, ''));
+            if (cleaned) insights.actionItems.push(cleaned);
           });
         }
       }
 
-      // Key signals: pick first sentence of each major section
+      // Key signals: pick first sentence of each major section.
+      // title/text 都走 mdToText（全局函数）——模板里 {{ sig.title }} / {{ sig.text }} 是纯文本插值。
+      // 过滤 meta 段（基本信息/SPEAKER/ASR/truth.yml）避免生成噪音关键信号。
       for (const s of sections.slice(0, 8)) {
-        if (/概述|引用|建议|AI建议/.test(s.title)) continue;
-        const firstLine = s.body.split('\n').find(l => l.trim() && l.trim().length > 20);
-        if (firstLine) insights.keySignals.push({ title: s.title, icon: s.icon, text: firstLine.trim().substring(0, 120) });
+        if (/概述|引用|建议|AI建议|ASR|SPEAKER|truth\.yml|基本信息/i.test(s.title)) continue;
+        const firstLine = s.body.split('\n').find(l => l.trim() && mdToText(l).length > 20);
+        if (firstLine) insights.keySignals.push({
+          title: mdToText(s.title),
+          icon: s.icon,
+          text: mdToText(firstLine).substring(0, 120)
+        });
       }
 
       return insights;
@@ -2828,12 +3258,15 @@ const app = createApp({
         const cfg = await r.json();
         if (Array.isArray(cfg.SECTION_TAXONOMY))   SECTION_TAXONOMY.splice(0, SECTION_TAXONOMY.length, ...cfg.SECTION_TAXONOMY);
         if (cfg.PERSON_DISPLAY_MAP && typeof cfg.PERSON_DISPLAY_MAP === "object") Object.assign(PERSON_DISPLAY_MAP, cfg.PERSON_DISPLAY_MAP);
+        if (cfg.CARD_INDEX && typeof cfg.CARD_INDEX === "object") {
+          for (const k of Object.keys(cfg.CARD_INDEX)) CARD_INDEX[k] = cfg.CARD_INDEX[k];
+        }
         if (Array.isArray(cfg.orgTree))            orgTree.splice(0, orgTree.length, ...cfg.orgTree);
         if (Array.isArray(cfg.ASR_FIXES)) {
           const fixes = cfg.ASR_FIXES.map(f => {
             // Accept both formats:
-            //   "pattern": "/foo/g"    (delimited, flags in pattern)
-            //   "pattern": "foo"       (plain, flags in f.flags)
+            //   "pattern": "/龙珠/g"   (delimited, flags in pattern)
+            //   "pattern": "龙珠"      (plain, flags in f.flags)
             let src = f.pattern, flags = f.flags || "g";
             const m = /^\/(.*)\/([gimsuy]*)$/s.exec(src);
             if (m) { src = m[1]; flags = m[2] || flags; }
@@ -2947,12 +3380,60 @@ const app = createApp({
       const header = parts[0] || '';
       const urlM = header.match(/URL:\s*(https?:\/\/\S+)/);
       if(urlM) meta.url = urlM[1];
+      const summaryBuckets = [];
       for(let i=1;i<parts.length;i++){
         const nl = parts[i].indexOf('\n');
         const name = parts[i].substring(0,nl).trim();
         const body = parts[i].substring(nl+1).trim();
-        if(name==='总结') rawSummary = body;
-        else if(name==='转录') rawTranscript = body;
+        if(name==='转录') rawTranscript = body;
+        else if(name==='总结') rawSummary = body;
+        else summaryBuckets.push({name, body});
+      }
+      // If file uses "## 会议概述" etc. instead of "## 总结", fold those into summary
+      if(!rawSummary && summaryBuckets.length){
+        rawSummary = summaryBuckets.map(s => `## ${s.name}\n${s.body}`).join('\n\n');
+      }
+      // Extract frontmatter raw_source (if any)
+      let fmRawSource = '';
+      if(raw.startsWith('---')){
+        const fmEnd = raw.indexOf('\n---', 3);
+        if(fmEnd !== -1){
+          const fm = raw.substring(3, fmEnd);
+          const m = fm.match(/^raw_source:\s*(.+)$/m);
+          if(m) fmRawSource = m[1].trim();
+        }
+      }
+      // Fallback: file has neither 总结 nor 转录 nor any ## sections → render body as summary
+      if(!rawSummary && !rawTranscript){
+        let body = raw;
+        if(body.startsWith('---')){
+          const end = body.indexOf('\n---', 3);
+          if(end !== -1) body = body.substring(end + 4).trim();
+        }
+        rawSummary = body;
+      }
+      // If transcript is still empty and file is a review doc → try raw_source / sibling .raw.md
+      if(!rawTranscript && file.path && !file.path.endsWith('.raw.md')){
+        const dir = file.path.replace(/\/[^/]+$/, '');
+        const candidates = [];
+        if(fmRawSource) candidates.push(fmRawSource.startsWith('TicNote/') ? fmRawSource : dir + '/' + fmRawSource);
+        candidates.push(file.path.replace(/\.md$/, '.raw.md'));
+        for(const rawPath of candidates){
+          try {
+            const rawRes = await api('/interviews/file?path='+encodeURIComponent(rawPath));
+            const rawBody = rawRes?.raw || '';
+            if(rawBody){
+              const rawParts = rawBody.split(/^## /m);
+              for(let i=1;i<rawParts.length;i++){
+                const nl = rawParts[i].indexOf('\n');
+                const name = rawParts[i].substring(0,nl).trim();
+                const body2 = rawParts[i].substring(nl+1).trim();
+                if(name==='转录'){ rawTranscript = body2; break; }
+              }
+              if(rawTranscript) break;
+            }
+          } catch(e) { /* try next candidate */ }
+        }
       }
 
       // Extract meta
@@ -3284,11 +3765,40 @@ const app = createApp({
           shareDialog.pwdProtected = !!res.protected;
           shareDialog.pwdSetAt = res.password_set_at || '';
           shareDialog.pwdActiveSessions = res.active_sessions || 0;
+          shareDialog.pwdCanReveal = !!res.can_reveal;
           shareDialog.pwdError = '';
         }
         return res;
       } catch (e) {
         if (!item) shareDialog.pwdError = '读取状态失败：' + (e.message || '');
+        return null;
+      } finally {
+        if (!item) shareDialog.pwdLoading = false;
+      }
+    }
+    async function revealSharePassword(item) {
+      // 👁️ 按钮：用服务端 master.key 解密明文。只对 can_reveal=true 的条目有用。
+      const c = _shareItemCtx(item);
+      if (!c.slug) return null;
+      if (!item) shareDialog.pwdLoading = true;
+      try {
+        const res = await _shareApi(`/share/password/reveal?user=${encodeURIComponent(c.user)}&slug=${encodeURIComponent(c.slug)}`);
+        if (!res.recoverable) {
+          const why = res.reason === 'legacy_hash_only'
+            ? '此密码是老版本（只存 hash），无法恢复，请先「🔄 重置密码」'
+            : ('无法读取：' + (res.reason || 'unknown') + (res.error ? ' / ' + res.error : ''));
+          showToast(why, 'error');
+          return null;
+        }
+        if (!item) {
+          shareDialog.pwdPlain = res.plain || '';
+          shareDialog.pwdShow = true;
+          shareDialog.pwdError = '';
+        }
+        return res;
+      } catch (e) {
+        if (!item) shareDialog.pwdError = '读取密码失败：' + (e.message || '');
+        showToast('读取密码失败：' + (e.message || ''), 'error');
         return null;
       } finally {
         if (!item) shareDialog.pwdLoading = false;
@@ -3372,12 +3882,16 @@ const app = createApp({
       }
     }
     function _shareCopyCombo(url, password, title) {
+      // 与分享弹窗+设置页+批量复制 共用统一格式
+      // 密码空时不输出 🔑 行 + 不输出 ⏱ 提示行（无密码场景没有 30 天免重输概念）
       const lines = [
         `📄 ${title || '文档'}`,
         `🔗 ${url}`,
-        `🔑 ${password}`,
-        `⏱ 30 天内免重输｜请勿转发此条消息`,
       ];
+      if (password) {
+        lines.push(`🔑 ${password}`);
+        lines.push(`⏱ 30 天内免重输｜请勿转发此条消息`);
+      }
       return lines.join('\n');
     }
     async function copyShareWithPassword() {
@@ -3427,6 +3941,9 @@ const app = createApp({
             pwdProtected: !!s.protected,
             pwdSetAt: s.password_set_at || '',
             pwdActiveSessions: s.active_sessions || 0,
+            totalViews: s.total_views || 0,
+            lastView: s.last_view || '',
+            uniqueIps: s.unique_ips || 0,
           };
         });
       } catch (_) { /* 远端无 T2 → 静默 */ }
@@ -3442,8 +3959,48 @@ const app = createApp({
       newPlain: '',        // 新近换/开的明文
       copied: '',
       error: '',
+      pos: {},             // 锚定到 🔒 按钮的 fixed 定位
     });
-    async function openShareMgrDrawer(item) {
+    let _mgrClickAway = null;
+    function _mgrEscHandler(e) { if (e.key === 'Escape') closeShareMgrDrawer(); }
+    function _positionShareMgrPop(btn) {
+      const POP_W = 380;
+      const GAP = 8;
+      const VIEW_PAD = 12;
+      const MIN_BELOW = 240;
+      const r = btn.getBoundingClientRect();
+      let rightPx = window.innerWidth - r.right;
+      if (rightPx + POP_W > window.innerWidth - VIEW_PAD) {
+        rightPx = Math.max(VIEW_PAD, window.innerWidth - r.left - POP_W);
+      }
+      const spaceBelow = window.innerHeight - r.bottom;
+      if (spaceBelow < MIN_BELOW && r.top > spaceBelow) {
+        // flip upward — anchor by bottom
+        shareMgrDrawer.pos = {
+          position: 'fixed',
+          bottom: (window.innerHeight - r.top + GAP) + 'px',
+          right: rightPx + 'px',
+          maxHeight: (r.top - VIEW_PAD - GAP) + 'px',
+          transformOrigin: 'bottom right',
+        };
+      } else {
+        shareMgrDrawer.pos = {
+          position: 'fixed',
+          top: (r.bottom + GAP) + 'px',
+          right: rightPx + 'px',
+          maxHeight: (window.innerHeight - r.bottom - GAP - VIEW_PAD) + 'px',
+          transformOrigin: 'top right',
+        };
+      }
+    }
+    async function openShareMgrDrawer(item, ev) {
+      // 如果已经是这条 item 打开了 → toggle 关闭
+      if (shareMgrDrawer.show && shareMgrDrawer.item && shareMgrDrawer.item.slug === (item && item.slug)) {
+        closeShareMgrDrawer();
+        return;
+      }
+      const btn = ev?.currentTarget || ev?.target?.closest('.share-mgr-lock');
+      if (btn) _positionShareMgrPop(btn);
       shareMgrDrawer.item = item;
       shareMgrDrawer.show = true;
       shareMgrDrawer.loading = true;
@@ -3454,6 +4011,13 @@ const app = createApp({
       shareMgrDrawer.confirm = null;
       shareMgrDrawer.copied = '';
       shareMgrDrawer.error = '';
+      if (_mgrClickAway) document.removeEventListener('click', _mgrClickAway);
+      document.removeEventListener('keydown', _mgrEscHandler);
+      _mgrClickAway = (e) => {
+        if (!e.target.closest('.share-mgr-pop') && !e.target.closest('.share-mgr-lock')) closeShareMgrDrawer();
+      };
+      document.addEventListener('click', _mgrClickAway);
+      document.addEventListener('keydown', _mgrEscHandler);
       await refreshShareMgrDrawer();
     }
     async function refreshShareMgrDrawer() {
@@ -3480,6 +4044,10 @@ const app = createApp({
       shareMgrDrawer.show = false;
       shareMgrDrawer.item = null;
       shareMgrDrawer.newPlain = '';
+      shareMgrDrawer.confirm = null;
+      shareMgrDrawer.error = '';
+      if (_mgrClickAway) { document.removeEventListener('click', _mgrClickAway); _mgrClickAway = null; }
+      document.removeEventListener('keydown', _mgrEscHandler);
     }
     async function drawerEnablePassword() {
       const it = shareMgrDrawer.item;
@@ -3583,6 +4151,239 @@ const app = createApp({
         setTimeout(() => { if (shareMgrDrawer.copied === 'pwd') shareMgrDrawer.copied = ''; }, 2000);
       } catch (e) { showToast('复制失败', 'error'); }
     }
+    async function drawerRevealPassword() {
+      // 👁️ 按钮：读 password_enc 解密
+      const it = shareMgrDrawer.item;
+      if (!it) return;
+      shareMgrDrawer.loading = true;
+      try {
+        const res = await _shareApi(`/share/password/reveal?user=${encodeURIComponent(shareDialog.user)}&slug=${encodeURIComponent(it.slug)}`);
+        if (!res.recoverable) {
+          const why = res.reason === 'legacy_hash_only'
+            ? '此密码是老版本（只存 hash），无法恢复，请点 🔄 换新密码'
+            : ('无法读取：' + (res.reason || 'unknown') + (res.error ? ' / ' + res.error : ''));
+          shareMgrDrawer.error = why;
+          return;
+        }
+        shareMgrDrawer.newPlain = res.plain || '';
+      } catch (e) {
+        shareMgrDrawer.error = '读取密码失败：' + (e.message || '');
+      } finally {
+        shareMgrDrawer.loading = false;
+      }
+    }
+
+    // ── 活跃访问 / 审计 专用 popover（与 🔒 密码 popover 并列独立） ──
+    const shareMgrVisits = reactive({
+      show: false, item: null,
+      loading: false, loaded: false,
+      sessions: [], audit: [],
+      error: '',
+      pos: {},
+    });
+    let _visitsClickAway = null;
+    function _visitsEscHandler(e) { if (e.key === 'Escape') closeShareMgrVisits(); }
+    function _positionShareVisitsPop(btn) {
+      const POP_W = 420;
+      const GAP = 8;
+      const VIEW_PAD = 12;
+      const MIN_BELOW = 260;
+      const r = btn.getBoundingClientRect();
+      let rightPx = window.innerWidth - r.right;
+      if (rightPx + POP_W > window.innerWidth - VIEW_PAD) {
+        rightPx = Math.max(VIEW_PAD, window.innerWidth - r.left - POP_W);
+      }
+      const spaceBelow = window.innerHeight - r.bottom;
+      if (spaceBelow < MIN_BELOW && r.top > spaceBelow) {
+        shareMgrVisits.pos = {
+          position: 'fixed',
+          bottom: (window.innerHeight - r.top + GAP) + 'px',
+          right: rightPx + 'px',
+          maxHeight: (r.top - VIEW_PAD - GAP) + 'px',
+          transformOrigin: 'bottom right',
+        };
+      } else {
+        shareMgrVisits.pos = {
+          position: 'fixed',
+          top: (r.bottom + GAP) + 'px',
+          right: rightPx + 'px',
+          maxHeight: (window.innerHeight - r.bottom - GAP - VIEW_PAD) + 'px',
+          transformOrigin: 'top right',
+        };
+      }
+    }
+    async function openShareMgrVisits(item, ev) {
+      // toggle 关闭
+      if (shareMgrVisits.show && shareMgrVisits.item && shareMgrVisits.item.slug === (item && item.slug)) {
+        closeShareMgrVisits();
+        return;
+      }
+      // 打开访问弹窗时自动收起密码弹窗（互斥，避免 pop 叠 pop）
+      if (shareMgrDrawer.show) closeShareMgrDrawer();
+      const btn = ev?.currentTarget || ev?.target?.closest('.share-mgr-visits-chip');
+      if (btn) _positionShareVisitsPop(btn);
+      shareMgrVisits.item = item;
+      shareMgrVisits.show = true;
+      shareMgrVisits.loading = true;
+      shareMgrVisits.loaded = false;
+      shareMgrVisits.sessions = [];
+      shareMgrVisits.audit = [];
+      shareMgrVisits.error = '';
+      if (_visitsClickAway) document.removeEventListener('click', _visitsClickAway);
+      document.removeEventListener('keydown', _visitsEscHandler);
+      _visitsClickAway = (e) => {
+        if (!e.target.closest('.share-visits-pop') && !e.target.closest('.share-mgr-visits-chip') && !e.target.closest('.share-drawer-visits-link')) {
+          closeShareMgrVisits();
+        }
+      };
+      document.addEventListener('click', _visitsClickAway);
+      document.addEventListener('keydown', _visitsEscHandler);
+      await refreshShareMgrVisits();
+    }
+    async function refreshShareMgrVisits() {
+      const it = shareMgrVisits.item;
+      if (!it) return;
+      const u = shareDialog.user, s = it.slug;
+      shareMgrVisits.loading = true;
+      try {
+        const [ses, aud] = await Promise.all([
+          _shareApi(`/share/sessions?user=${encodeURIComponent(u)}&slug=${encodeURIComponent(s)}`).catch(() => ({ sessions: [] })),
+          _shareApi(`/share/audit?user=${encodeURIComponent(u)}&slug=${encodeURIComponent(s)}&limit=30`).catch(() => ({ audit: [] })),
+        ]);
+        shareMgrVisits.sessions = (ses && ses.sessions) || [];
+        shareMgrVisits.audit = (aud && aud.audit) || [];
+        shareMgrVisits.loaded = true;
+      } catch (e) {
+        shareMgrVisits.error = '读取失败：' + (e.message || '');
+      } finally {
+        shareMgrVisits.loading = false;
+      }
+    }
+    function closeShareMgrVisits() {
+      shareMgrVisits.show = false;
+      shareMgrVisits.item = null;
+      shareMgrVisits.error = '';
+      if (_visitsClickAway) { document.removeEventListener('click', _visitsClickAway); _visitsClickAway = null; }
+      document.removeEventListener('keydown', _visitsEscHandler);
+    }
+    async function visitsRevokeSession(sid) {
+      const it = shareMgrVisits.item;
+      if (!it || !sid) return;
+      shareMgrVisits.loading = true;
+      try {
+        await _shareApi(`/share/sessions/revoke?user=${encodeURIComponent(shareDialog.user)}&slug=${encodeURIComponent(it.slug)}`, {
+          method: 'POST', body: JSON.stringify({ sid }),
+        });
+        showToast('✓ 已踢出', 'success');
+        await refreshShareMgrVisits();
+        await loadShareList();
+      } catch (e) {
+        shareMgrVisits.error = '踢出失败：' + (e.message || '');
+      } finally {
+        shareMgrVisits.loading = false;
+      }
+    }
+    async function visitsRevokeAllSessions() {
+      const it = shareMgrVisits.item;
+      if (!it) return;
+      if (!(shareMgrVisits.sessions || []).length) return;
+      shareMgrVisits.loading = true;
+      try {
+        const res = await _shareApi(`/share/sessions/revoke?user=${encodeURIComponent(shareDialog.user)}&slug=${encodeURIComponent(it.slug)}`, {
+          method: 'POST', body: JSON.stringify({ all: true }),
+        });
+        showToast(`✓ 已踢出 ${res.revoked || 0} 个`, 'success');
+        await refreshShareMgrVisits();
+        await loadShareList();
+      } catch (e) {
+        shareMgrVisits.error = '踢出失败：' + (e.message || '');
+      } finally {
+        shareMgrVisits.loading = false;
+      }
+    }
+    // 从 🔒 popover 内部跳转到活跃访问 popover
+    function openVisitsFromDrawer() {
+      const it = shareMgrDrawer.item;
+      if (!it) return;
+      // 用当前 🔒 popover 的视觉锚点（drawer pos），简单复用其 bottom/top/right
+      const pos = shareMgrDrawer.pos || {};
+      shareMgrVisits.pos = Object.assign({}, pos);
+      closeShareMgrDrawer();
+      shareMgrVisits.item = it;
+      shareMgrVisits.show = true;
+      shareMgrVisits.loading = true;
+      shareMgrVisits.loaded = false;
+      shareMgrVisits.sessions = [];
+      shareMgrVisits.audit = [];
+      shareMgrVisits.error = '';
+      if (_visitsClickAway) document.removeEventListener('click', _visitsClickAway);
+      document.removeEventListener('keydown', _visitsEscHandler);
+      _visitsClickAway = (e) => {
+        if (!e.target.closest('.share-visits-pop') && !e.target.closest('.share-mgr-visits-chip') && !e.target.closest('.share-drawer-visits-link')) {
+          closeShareMgrVisits();
+        }
+      };
+      document.addEventListener('click', _visitsClickAway);
+      document.addEventListener('keydown', _visitsEscHandler);
+      refreshShareMgrVisits();
+    }
+    const visitsStats = computed(() => {
+      const aud = shareMgrVisits.audit || [];
+      let unlockOk = 0, view = 0;
+      for (const a of aud) {
+        if (a.event === 'unlock_ok') unlockOk++;
+        else if (a.event === 'view') view++;
+      }
+      return { unlockOk, view };
+    });
+    // T2R · 批量一键换所有已保护文档密码
+    async function openRotateAllDialog() {
+      shareBatch.show = true;
+      shareBatch.loading = true;
+      shareBatch.items = [];
+      shareBatch.count = 0;
+      shareBatch.revoked = 0;
+      shareBatch.copied = false;
+      shareBatch.error = '';
+      try {
+        const u = shareDialog.user || tenantConfig.value?.share?.default_user || '';
+        if (!u) { shareBatch.error = '未知 user namespace'; return; }
+        const res = await _shareApi(`/share/password/rotate_all?user=${encodeURIComponent(u)}`, { method: 'POST' });
+        shareBatch.items = res.items || [];
+        shareBatch.count = res.count || 0;
+        shareBatch.revoked = res.revoked_total || 0;
+        await loadShareList();
+      } catch (e) {
+        shareBatch.error = '批量换密码失败：' + (e.message || '');
+      } finally {
+        shareBatch.loading = false;
+      }
+    }
+    function closeBatchDialog() {
+      shareBatch.show = false;
+    }
+    function _batchCopyText() {
+      return (shareBatch.items || []).map(it =>
+        `📄 ${it.title}\n🔗 ${it.url}\n🔑 ${it.password}`
+      ).join('\n\n');
+    }
+    async function copyBatchAll() {
+      if (!shareBatch.items.length) return;
+      try {
+        await navigator.clipboard.writeText(_batchCopyText());
+        shareBatch.copied = true;
+        setTimeout(() => { shareBatch.copied = false; }, 2000);
+        showToast(`✓ 已复制 ${shareBatch.items.length} 条`, 'success');
+      } catch (e) { showToast('复制失败', 'error'); }
+    }
+    async function copyBatchItem(it) {
+      if (!it) return;
+      const txt = _shareCopyCombo(it.url, it.password, it.title);
+      try {
+        await navigator.clipboard.writeText(txt);
+        showToast('✓ 已复制', 'success');
+      } catch (e) { showToast('复制失败', 'error'); }
+    }
     function shareItemUrl(item) {
       const user = shareDialog.user;
       const slug = item.slug || item.code;
@@ -3590,11 +4391,42 @@ const app = createApp({
       const urls = _buildShareUrls(user, slug);
       return _activeShareUrl(urls);
     }
+    // 设置页·分享条目「标题」点击 → 主站文档详情页（驾舱内）
+    // 用 path 计算 8 位 shortId（FNV-1a hash），与 reports SPA 路由一致
+    function shareItemMainUrl(item) {
+      if (!item || !item.path) return '#';
+      return '#/reports/' + shortId(item.path);
+    }
+    // 标题点击 handler·走 SPA 内部 navigate（不依赖 hashchange，绕开 hash-only 不触发 popstate 的坑）
+    async function openShareItemInMain(item, ev) {
+      if (ev) ev.preventDefault();
+      if (!item || !item.path) return;
+      // 复用 reports view 的 _findByIdOrPath + openReport 路径
+      if (!reportsList.value.length) await loadReports();
+      const r = reportsList.value.find(x => x.path === item.path)
+             || { path: item.path, name: item.path.split('/').pop().replace(/\.md$/,''), title: item.title || '' };
+      // 切到 reports 视图并打开文档
+      await switchView('reports', { skipNav: false });
+      await openReport(r, { skipNav: false });
+    }
     async function copyShareItemUrl(item) {
+      // 设置页/分享管理 popover 单条复制 —— 与页内分享弹窗 copyShareWithPassword 逻辑一致
+      // 复制内容包含：title + 链接 + 密码（空就不填）
       const u = shareItemUrl(item);
-      if (!u) return;
-      try { await navigator.clipboard.writeText(u); shareMgrMsg.value = '✓ 已复制 · ' + u; setTimeout(()=>shareMgrMsg.value='', 2000); }
-      catch(e) { shareMgrMsg.value = '✗ 复制失败'; setTimeout(()=>shareMgrMsg.value='', 2000); }
+      if (!u || !item) return;
+      const title = item.title || '';
+      const password = item.password || '';
+      const txt = _shareCopyCombo(u, password, title);
+      try {
+        await navigator.clipboard.writeText(txt);
+        shareMgrMsg.value = '✓ 已复制（含 标题/链接' + (password ? '/密码' : '') + '）';
+        setTimeout(() => shareMgrMsg.value = '', 2000);
+        showToast('✓ 已复制', 'success');
+      } catch(e) {
+        shareMgrMsg.value = '✗ 复制失败';
+        setTimeout(() => shareMgrMsg.value = '', 2000);
+        showToast('复制失败', 'error');
+      }
     }
     function openRenameShare(item) {
       shareMgrEditing.value = { ...item, slug: item.slug || item.code };
@@ -5520,6 +6352,10 @@ const app = createApp({
         if(!contacts.value || !contacts.value.length) await loadContacts();
       } else if(v === 'recruiting'){
         await loadRecruitingDoc();
+      } else if(v === 'talent'){
+        await loadTalentDoc();
+      } else if(v === 'orgdoc'){
+        await loadOrgDoc();
       }
     }, { immediate: true });
 
@@ -5561,7 +6397,12 @@ const app = createApp({
       showContactForm, contactFilter, contactView, showInteractionForm,
       recruitingContent, recruitingDocMeta, recruitingLoading, recruitingError, recruitingParsed,
       loadRecruitingDoc, shareRecruitingDoc,
+      orgDocContent, orgDocMeta, orgDocLoading, orgDocError, orgDocHtml,
+      loadOrgDoc, shareOrgDoc, openOrgDocInEditor,
       editRecruitingDoc, recruitingEditOpen, recruitingEditContent, recruitingEditDirty, recruitingEditSaving, saveRecruitingEdit, closeRecruitingEdit,
+      talentContent, talentDocMeta, talentLoading, talentError, talentParsed,
+      loadTalentDoc, shareTalentDoc,
+      editTalentDoc, talentEditOpen, talentEditContent, talentEditDirty, talentEditSaving, saveTalentEdit, closeTalentEdit,
       jdCollapsed, toggleJdSection,
       orgTree, orgExpandedNodes, toggleOrgNode, orgPersonExpanded, toggleOrgPersons, orgPersonsFor, expandOrgRefAndScroll,
       newContact, newInteraction, contactCatLabels, contactCatColors,
@@ -5653,6 +6494,7 @@ const app = createApp({
       cockpitSelectBlock, cockpitGoHome,
       cockpitDrillTo, cockpitClearDrill,
       cockpitOpenDoc, cockpitOpenOverlay, cockpitSwitchOverlayDoc, cockpitCloseReport, cockpitOpenChapter,
+      cockpitPersonPopover, cockpitPersonStats, openCockpitPersonPopover, closeCockpitPersonPopover, pickCockpitPersonDoc,
       createContact, selectContactDetail, startEditContact, saveEditContact, addInteraction, mergeContacts,
       createContactCategory, deleteContactCategory,
       openFile, openNoteFile, heatmapClick,
@@ -5675,13 +6517,18 @@ const app = createApp({
       SPEAKER_COLORS, fixASR, renderMd, updateSpeakerName, shareInterview, shareToast, shareDialog, openShareDialog, checkShareSlug, registerShareSlug, copyShareUrl, toggleSlugMode, updateShare, unregisterShare,
       startSlugRename, cancelSlugRename, commitSlugRename, toggleShareBasePref, setSharePreferRemote,
       loadSharePasswordInfo, enableSharePassword, rotateSharePassword, disableSharePassword,
+      revealSharePassword,
       confirmRotateSharePassword, confirmDisableSharePassword, cancelShareConfirm,
       copyShareWithPassword, copySharePasswordOnly,
       shareList, shareMgrEditing, shareMgrNewSlug, shareMgrMsg,
-      loadShareList, shareItemUrl, copyShareItemUrl, openRenameShare, commitRenameShare, cancelRenameShare, unshareItem, republishShareItem,
+      loadShareList, shareItemUrl, shareItemMainUrl, openShareItemInMain, copyShareItemUrl, openRenameShare, commitRenameShare, cancelRenameShare, unshareItem, republishShareItem,
       shareMgrDrawer, openShareMgrDrawer, closeShareMgrDrawer, refreshShareMgrDrawer,
       drawerEnablePassword, drawerRotatePassword, drawerDisablePassword,
       drawerRevokeSession, drawerRevokeAllSessions, drawerCopyCombo, drawerCopyPassword,
+      drawerRevealPassword,
+      shareMgrVisits, openShareMgrVisits, closeShareMgrVisits, refreshShareMgrVisits,
+      visitsRevokeSession, visitsRevokeAllSessions, openVisitsFromDrawer, visitsStats,
+      shareBatch, openRotateAllDialog, closeBatchDialog, copyBatchAll, copyBatchItem,
       shareBaseLocalDisplay, shareBaseRemoteDisplay,
       reportsList, selectedReport, reportContent, reportEditing, reportEditText,
       activeReportSection, visibleReportSections, currentReportSection,

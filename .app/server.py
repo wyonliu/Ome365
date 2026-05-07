@@ -8,8 +8,9 @@ from datetime import datetime, date, timedelta
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 import uvicorn
@@ -45,6 +46,9 @@ TIER_SIZES = {"A":8,"B":4,"C":2}
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# 2026-04-25 · 大文档加载提速：JSON/HTML 响应自动 gzip（client 必带 Accept-Encoding: gzip）
+# 178KB markdown 实测 → ~20KB（~9x 压缩），远端首屏立竿见影
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
 # ── T1 Privacy headers · 仅作用于 /s 前缀（share 路由）──
@@ -2473,6 +2477,9 @@ async def get_interviews():
             continue
         files = []
         for fp in sorted(d.glob("*.md")):
+            # Hide raw/pairing artifacts — review doc is the canonical entry
+            if fp.name.endswith(".raw.md") or fp.name.endswith(".full.raw.md") or fp.name.endswith(".truncated.raw.md"):
+                continue
             size = fp.stat().st_size
             raw = fp.read_text("utf-8")
             # Parse YAML frontmatter (--- ... ---) for title, then fall back to first heading
@@ -2520,7 +2527,7 @@ async def get_interviews():
                     mm, dd = groups[0], groups[1]
                     sort_key = f"2026-{mm}-{dd}T00:00"
                     time_str = f"{mm}-{dd}"
-            # Parse duration from content: "YYYY-MM-DD HH:MM:SS|<duration>|<TicNoteUser>"
+            # Parse duration from content: "2026-04-08 11:07:02|26m 46s|TicNoteUser"
             duration = ""
             dur_m = _re.search(r'\d{4}-\d{2}-\d{2}\s[\d:]+\|(.+?)\|', raw[:500])
             if dur_m:
@@ -2649,6 +2656,11 @@ async def get_reports():
                        reverse=False)
     for fp in all_files:
         rel = fp.relative_to(REPORTS_DIR)
+        # Skip build/tooling artifacts: anything under an assets/ subtree is
+        # audit/trace/mining output (e.g. 20-航道/assets/mason/v1-rules/audit/*.md),
+        # not a user-facing report.
+        if "assets" in rel.parts:
+            continue
         # top-level subfolder is the section (e.g. "01-diagnosis"); empty for legacy flat files
         parts = list(rel.parts)
         section_dir = parts[0] if len(parts) > 1 else ""
@@ -2708,7 +2720,10 @@ async def get_reports():
                 title = s.lstrip("# ").strip()
                 break
         # Prefer explicit frontmatter section; else infer from subfolder name.
-        final_section = section or section_dir
+        # Normalize composite frontmatter values like "01-diagnosis/20-航道" down
+        # to the top-level board key so SECTION_TAXONOMY lookup (by top-level key)
+        # always matches. Sub-path is still recoverable from `entity`/`subEntity`.
+        final_section = (section or section_dir).split("/")[0]
         # Always derive entity from the 2nd-level folder (folder taxonomy is source of truth),
         # not from frontmatter — ensures consistent grouping regardless of what agents wrote.
         folder_entity = parts[1] if len(parts) >= 3 else ""
@@ -2778,13 +2793,22 @@ async def get_reports():
 
 
 @app.get("/api/reports/file")
-async def get_report_file(path: str):
-    """Read a single report file."""
+async def get_report_file(path: str, request: Request):
+    """Read a single report file. Supports ETag/304 for repeat loads."""
+    from fastapi.responses import Response
     fp = VAULT / path
     if not fp.exists() or not str(fp).startswith(str(REPORTS_DIR)):
         raise HTTPException(404)
+    st = fp.stat()
+    # weak ETag: mtime + size — 文档版本只要写入就变，足够分辨
+    etag = f'W/"{int(st.st_mtime)}-{st.st_size}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache"})
     raw = fp.read_text("utf-8")
-    return {"path": path, "raw": raw, "name": fp.stem}
+    return JSONResponse(
+        {"path": path, "raw": raw, "name": fp.stem},
+        headers={"ETag": etag, "Cache-Control": "no-cache"},
+    )
 
 
 @app.get("/api/reports/image")
@@ -4505,11 +4529,10 @@ async def insights_synthesize(body: dict):
 
     focus_hint = f"\n用户特别关注：{focus}\n" if focus else ""
 
-    user_bio = _tb("prompts.user_bio", "a senior AI product & tech leader")
-    system = f"你是用户（{user_bio}）的高级战略顾问。输入是用户最近的工作语料（访谈、反思、速记、汇报、长期记忆、联系人）。输出必须是合法 JSON，不要任何说明文字。"
+    system = "你是用户的高级战略顾问。输入是用户最近的工作语料（访谈、反思、速记、汇报、长期记忆、联系人）。输出必须是合法 JSON，不要任何说明文字。"
     user = f"""{context}
 {focus_hint}
-请基于以上语料，为用户（{user_bio}）输出以下 JSON：
+请基于以上语料，为用户（{_tb("prompts.user_bio", "a senior AI product & tech leader")}）输出以下 JSON：
 
 {{
   "headline": "一句话点明本轮洞察的核心发现（25 字内，直接、有穿透力）",
@@ -4592,7 +4615,7 @@ async def insights_ask(body: dict):
     system = "你是用户的私人战略顾问，只能基于用户自己的语料回答，不许编造。输出必须是合法 JSON。"
     user = f"""{context}
 
-问题：{q}
+用户的问题：{q}
 
 请输出 JSON：
 {{
@@ -5689,14 +5712,55 @@ async def share_registry(user: str = ""):
 
 @app.get("/api/share/by-path")
 async def share_by_path(path: str, user: str = ""):
+    """
+    分享状态查询·鲁棒三层兜底（防文档改名/移目录丢失分享）：
+      1. 严格 path 匹配（最快·最严）
+      2. frontmatter share_id 反查（爸爸 4-29 引入·改名/移动都不丢）
+      3. basename 模糊匹配（兜底·命中后自动 patch registry）
+    任一层命中后返回 found；如果 2/3 层命中且 path 漂移，自动同步 registry。
+    """
     if not user:
         user = SHARE_USERS[0] if SHARE_USERS else "user"
     reg = _load_share_registry()
     ns = reg.get(user, {})
+    base = SHARE_SERVER_BASE.rstrip("/")
+
+    # 1) 严格 path 匹配
     for slug, entry in ns.items():
-        if entry["path"] == path:
-            base = SHARE_SERVER_BASE.rstrip("/")
-            return {"found": True, "slug": slug, "title": entry["title"], "url": f"{base}/{user}/{slug}", "created": entry.get("created", "")}
+        if entry.get("path") == path:
+            return {"found": True, "slug": slug, "title": entry.get("title",""), "url": f"{base}/{user}/{slug}", "created": entry.get("created", "")}
+
+    # 2) frontmatter share_id 反查（doc 自带 share_id → 直接拿 slug）
+    try:
+        vault = get_vault() if "get_vault" in globals() else Path(VAULT_ROOT)
+        doc_abs = (vault / path).resolve()
+        if doc_abs.is_file():
+            head = doc_abs.read_text(encoding="utf-8", errors="ignore")[:2000]
+            import re as _re
+            m = _re.search(r"^share_id:\s*([A-Za-z0-9_-]+)", head, _re.MULTILINE)
+            if m:
+                fid = m.group(1)
+                if fid in ns:
+                    # 自动同步 registry path → 当前 path
+                    if ns[fid].get("path") != path:
+                        ns[fid]["path"] = path
+                        from datetime import date as _date
+                        ns[fid]["updated"] = _date.today().isoformat()
+                        _save_share_registry(reg)
+                    return {"found": True, "slug": fid, "title": ns[fid].get("title",""), "url": f"{base}/{user}/{fid}", "created": ns[fid].get("created",""), "_drift_synced": "frontmatter"}
+    except Exception:
+        pass
+
+    # 3) basename 模糊匹配（fallback 兜底；命中后不自动同步，仅返回让前端确认）
+    try:
+        target_base = path.rsplit("/", 1)[-1]
+        for slug, entry in ns.items():
+            ep = entry.get("path","")
+            if ep and ep.rsplit("/", 1)[-1] == target_base:
+                return {"found": True, "slug": slug, "title": entry.get("title",""), "url": f"{base}/{user}/{slug}", "created": entry.get("created",""), "_drift_basename": ep}
+    except Exception:
+        pass
+
     return {"found": False}
 
 @app.get("/api/share/check-slug")
@@ -5728,8 +5792,38 @@ async def share_register(slug: str, path: str, title: str = "", user: str = ""):
         del ns[old]
     if not title:
         title = _extract_title_from_file(fp)
-    ns[slug] = {"path": path, "title": title, "created": date.today().isoformat()}
+    existing = ns.get(slug, {}) if isinstance(ns.get(slug), dict) else {}
+    entry = {"path": path, "title": title, "created": existing.get("created") or date.today().isoformat()}
+    # Preserve password policy / folder set previously（"更新内容" 不能擦掉密码保护）
+    for k in ("policy", "folder", "updated"):
+        if k in existing:
+            entry[k] = existing[k]
+    ns[slug] = entry
     _save_share_registry(reg)
+
+    # ── 鲁棒性补丁（爸爸 4-29 引入）──
+    # 注册成功后把 share_id 写入文档 frontmatter，让分享状态绑在内容上：
+    # 文档改名/移目录都不丢，前端 by-path 找不到时可通过 frontmatter share_id 反查。
+    try:
+        if fp.is_file() and fp.suffix == ".md":
+            raw = fp.read_text(encoding="utf-8", errors="ignore")
+            if raw.startswith("---\n"):
+                end_idx = raw.find("\n---\n", 4)
+                if end_idx > 0:
+                    fm = raw[4:end_idx]
+                    if "share_id:" not in fm:
+                        new_fm = fm.rstrip() + f"\nshare_id: {slug}\nshare_user: {user}\n"
+                        fp.write_text("---\n" + new_fm + raw[end_idx:], encoding="utf-8")
+                    elif f"share_id: {slug}" not in fm:
+                        # slug 改名了 → 同步覆盖
+                        import re as _re_fm
+                        new_fm = _re_fm.sub(r"^share_id:\s*\S+", f"share_id: {slug}", fm, flags=_re_fm.MULTILINE)
+                        if "share_user:" not in new_fm:
+                            new_fm = new_fm.rstrip() + f"\nshare_user: {user}\n"
+                        fp.write_text("---\n" + new_fm + raw[end_idx:], encoding="utf-8")
+    except Exception:
+        pass  # 写 frontmatter 失败不阻塞注册主流程
+
     base = SHARE_SERVER_BASE.rstrip("/")
     local_url = f"{base}/{user}/{slug}"
 
@@ -5843,6 +5937,17 @@ async def share_password_rotate(user: str, slug: str):
 @app.post("/api/share/password/disable")
 async def share_password_disable(user: str, slug: str):
     return _share_admin_proxy("POST", f"/api/share/{user}/{slug}/password/disable")
+
+
+@app.get("/api/share/password/reveal")
+async def share_password_reveal(user: str, slug: str):
+    return _share_admin_proxy("GET", f"/api/share/{user}/{slug}/password/reveal")
+
+
+@app.post("/api/share/password/rotate_all")
+async def share_password_rotate_all(user: str, only_legacy: int = 0):
+    return _share_admin_proxy("POST", "/api/share/rotate_all",
+                              params={"user": user, "only_legacy": only_legacy})
 
 
 @app.get("/api/share/sessions")

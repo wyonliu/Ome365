@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+SC:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/style.css?v=20260421b">
+<link rel="stylesheet" href="/style.css?v=20260424c">
 </head>
 <body>
 <div id="app" v-cloak>
@@ -1173,7 +1173,7 @@
                         </div>
                       </div>
                       <div v-else-if="c.kind === 'long-prose'" class="rv-chunk rv-chunk-prose rendered-md" v-html="c.html"></div>
-                      <h3 v-else-if="c.kind === 'h-sub' && c.level === 3" class="rv-chunk rv-chunk-h3">{{c.title}}</h3>
+                      <h3 v-else-if="c.kind === 'h-sub' && c.level === 3" class="rv-chunk rv-chunk-h3" :id="c.id || null">{{c.title}}</h3>
                       <h4 v-else-if="c.kind === 'h-sub' && c.level === 4" class="rv-chunk rv-chunk-h4">{{c.title}}</h4>
                       <h5 v-else-if="c.kind === 'h-sub'" class="rv-chunk rv-chunk-h5">{{c.title}}</h5>
                       <div v-else-if="c.kind === 'list-card'" class="rv-chunk rv-chunk-list rendered-md" v-html="c.html"></div>
@@ -1559,10 +1559,10 @@
                         </button>
                         <div class="rv-toc-label" v-if="tocMode==='full'">目&nbsp;录</div>
                         <ul class="rv-toc-list">
-                          <li v-for="s in reportParsed.sections" :key="s.id" @click="scrollToReportSection(s.id)" :class="{'is-unnum': !s.hasExplicitNum}">
+                          <li v-for="s in (reportParsed.tocItems || reportParsed.sections)" :key="s.id" @click="scrollToReportSection(s.id)" :class="{'is-unnum': !s.hasExplicitNum, 'is-sub': s.isSub}">
                             <span class="rv-toc-num">{{s.num || '·'}}</span>
                             <span class="rv-toc-txt" v-if="tocMode==='full'">{{s.title}}</span>
-                            <span class="rv-toc-txt rv-toc-txt--abbr" v-else-if="tocMode==='slim'">{{s.title.slice(0,2)}}</span>
+                            <span class="rv-toc-txt rv-toc-txt--abbr" v-else-if="tocMode==='slim'">{{ s.slimLabel || s.title.slice(0,2) }}</span>
                           </li>
                         </ul>
                       </aside>
@@ -1587,7 +1587,7 @@
                                 </div>
                               </div>
                               <div v-else-if="c.kind === 'long-prose'" class="rv-chunk rv-chunk-prose rendered-md" v-html="c.html"></div>
-                              <h3 v-else-if="c.kind === 'h-sub' && c.level === 3" class="rv-chunk rv-chunk-h3">{{c.title}}</h3>
+                              <h3 v-else-if="c.kind === 'h-sub' && c.level === 3" class="rv-chunk rv-chunk-h3" :id="c.id || null">{{c.title}}</h3>
                               <h4 v-else-if="c.kind === 'h-sub' && c.level === 4" class="rv-chunk rv-chunk-h4">{{c.title}}</h4>
                               <h5 v-else-if="c.kind === 'h-sub'" class="rv-chunk rv-chunk-h5">{{c.title}}</h5>
                               <div v-else-if="c.kind === 'list-card'" class="rv-chunk rv-chunk-list rendered-md" v-html="c.html"></div>
@@ -1674,7 +1674,7 @@
               </div>
             </div>
 
-            <!-- Secondary tiles: cockpit-config-driven secondary blocks -->
+            <!-- Secondary tiles: Flagship · Secondary · 核心目标 -->
             <div class="rv-sec-tiles cp-tiles" v-if="cockpitSecondaryBlocks.length">
               <div v-for="blk in cockpitSecondaryBlocks" :key="blk.key"
                    class="rv-sec-tile"
@@ -1809,11 +1809,11 @@
                 </div>
                 <!-- Flagship: full-width architecture image below narrative arc -->
                 <div v-if="cockpitActiveBlockData.tier === 'flagship'" class="cp-arc-arch-img">
-                  <img src="/reports-static/04-pillars/projects/images/1-top-arch-2.jpg" />
+                  <img src="/reports-static/04-triad/projects/images/1-top-arch-2.jpg" />
                 </div>
               </div>
 
-              <!-- Bloom mode: parse master doc into sub-block chapter tiles -->
+              <!-- Bloom mode: parse master doc into sub-block chapter tiles (Flagship · 核心目标) -->
               <div v-if="cockpitActiveBlockData.bloom" class="cp-bloom-wrap">
                 <div class="cp-bloom-head">
                   <span class="cp-bloom-icon">{{cockpitActiveBlockData.icon}}</span>
@@ -1825,7 +1825,7 @@
                     📖 展开完整文档 →
                   </button>
                 </div>
-                <!-- Master switcher: only appears when section has >1 master doc -->
+                <!-- Master switcher: only appears when section has >1 master doc (e.g. Flagship 组织方案 + 诊断) -->
                 <div v-if="cockpitBloomMasters.length > 1" class="cp-bloom-mtabs">
                   <button v-for="(m, mi) in cockpitBloomMasters" :key="m.path"
                           class="cp-bloom-mtab"
@@ -1996,11 +1996,12 @@
                     <div class="rv-flagship-header-title">旗舰项目战略提案</div>
                     <div class="rv-flagship-header-sub" v-if="cockpitActiveBlockData.flagshipSubtitle" v-html="cockpitActiveBlockData.flagshipSubtitle"></div>
                   </div>
-                  <div class="rv-person-grid" v-if="sg.persons && sg.persons.length > 1 && cockpitActiveBlockData.tier !== 'flagship'">
+                  <div class="rv-person-grid" v-if="sg.persons && sg.persons.length >= 1 && cockpitActiveBlockData.tier !== 'flagship'">
                     <div v-for="p in sg.persons" :key="p.key"
                          class="rv-person-card"
-                         :class="{'is-p0': p.items.some(it=>it.priority==='P0')}"
-                         @click="cockpitOpenOverlay(p.items, 0)">
+                         :class="{'is-p0': p.items.some(it=>it.priority==='P0'), 'is-active': cockpitPersonPopover.show && cockpitPersonPopover.person && cockpitPersonPopover.person.key === p.key}"
+                         :style="p.accent ? ('--rv-card-accent:' + p.accent) : ''"
+                         @click="openCockpitPersonPopover(sg, p, $event)">
                       <div class="rv-person-card-top">
                         <span class="rv-person-card-name">{{p.label}}</span>
                         <span class="rv-person-card-count">{{p.items.length}}</span>
@@ -2014,7 +2015,7 @@
                         <div v-if="p.items.length > 3" class="rv-person-card-more">… 共 {{p.items.length}} 份</div>
                       </div>
                       <div class="rv-person-card-foot">
-                        <span class="rv-person-card-open">{{p.items.length === 1 ? '打开' : '展开 '+p.items.length+' 份'}} →</span>
+                        <span class="rv-person-card-open">{{p.items.length === 1 ? '打开' : p.items.length+' 份 · 点击选择'}} →</span>
                       </div>
                     </div>
                   </div>
@@ -2228,6 +2229,38 @@
               <div class="ce-foot">
                 <span>{{recruitingEditContent.length}} 字符</span>
                 <span>保存后招聘页自动重载</span>
+              </div>
+            </div>
+          </div>
+        </teleport>
+
+        <!-- Talent plan editor modal -->
+        <teleport to="body">
+          <div v-if="talentEditOpen" class="cockpit-editor-mask" @click.self="closeTalentEdit">
+            <div class="cockpit-editor">
+              <div class="ce-head">
+                <div class="ce-head-left">
+                  <div class="ce-title">✎ 人才计划 · 数据源编辑</div>
+                  <div class="ce-path">{{talentDocMeta?.path}}</div>
+                </div>
+                <div class="ce-head-right">
+                  <span v-if="talentEditDirty" class="ce-dirty">● 未保存</span>
+                  <button class="btn-ce-primary" @click="saveTalentEdit" :disabled="talentEditSaving || !talentEditDirty">
+                    {{talentEditSaving ? '保存中…' : '保存并刷新 ⌘S'}}
+                  </button>
+                  <button class="btn-ce-ghost" @click="closeTalentEdit">关闭 Esc</button>
+                </div>
+              </div>
+              <textarea v-model="talentEditContent"
+                        class="ce-textarea"
+                        spellcheck="false"
+                        @keydown.meta.s.prevent="saveTalentEdit"
+                        @keydown.ctrl.s.prevent="saveTalentEdit"
+                        @keydown.esc="closeTalentEdit"
+                        @input="talentEditDirty = true"></textarea>
+              <div class="ce-foot">
+                <span>{{talentEditContent.length}} 字符</span>
+                <span>保存后人才页自动重载</span>
               </div>
             </div>
           </div>
@@ -2466,7 +2499,7 @@
       </div>
 
       <!-- ══ CONTACTS ══ -->
-      <div v-if="view==='contacts'" class="view" :class="{'view-wide': contactView==='recruiting'}" key="contacts">
+      <div v-if="view==='contacts'" class="view" :class="{'view-wide': contactView==='recruiting' || contactView==='talent'}" key="contacts">
         <!-- Contact Detail -->
         <div v-if="selectedContact" class="card card-highlight">
           <div class="card-top">
@@ -2569,6 +2602,7 @@
         <template v-else>
           <div class="tab-bar">
             <button class="tab-btn" :class="{active:contactView==='org'}" @click="contactView='org'">🏢 组织架构</button>
+            <button class="tab-btn" :class="{active:contactView==='orgdoc'}" @click="contactView='orgdoc'">📜 组织总表</button>
             <button class="tab-btn" :class="{active:contactView==='list'}" @click="contactView='list'">📋 联系人</button>
             <button class="tab-btn" :class="{active:contactView==='graph'}" @click="contactView='graph'">🕸 关系图</button>
             <button class="tab-btn" :class="{active:contactView==='cold'}" @click="contactView='cold'">
@@ -2576,6 +2610,7 @@
               <span v-if="coldContacts.length" class="tab-badge-red">{{coldContacts.length}}</span>
             </button>
             <button class="tab-btn" :class="{active:contactView==='recruiting'}" @click="contactView='recruiting'">📣 招聘</button>
+            <button class="tab-btn" :class="{active:contactView==='talent'}" @click="contactView='talent'">🌱 人才</button>
           </div>
 
           <!-- Org Tree -->
@@ -2646,6 +2681,20 @@
                   </div>
                 </transition>
               </div>
+            </template>
+          </div>
+
+          <!-- Org Doc (组织总表) -->
+          <div v-if="contactView==='orgdoc'" class="orgdoc-wrap">
+            <div v-if="orgDocLoading" class="empty-lg">加载中…</div>
+            <div v-else-if="orgDocError" class="empty-lg">✗ {{orgDocError}}</div>
+            <template v-else>
+              <div class="orgdoc-actionbar">
+                <button class="btn-ghost share-btn-anchor" @click="shareOrgDoc($event)" title="分享文档">🔗 分享</button>
+                <button class="btn-ghost" @click="openOrgDocInEditor" title="打开原文">✎ 原文</button>
+                <span class="orgdoc-meta" v-if="orgDocMeta.date">更新于 {{orgDocMeta.date}}</span>
+              </div>
+              <div class="orgdoc-body rendered-md" v-html="orgDocHtml"></div>
             </template>
           </div>
 
@@ -2731,6 +2780,90 @@
               </div>
             </template>
             <div v-else class="empty-lg">暂无招聘文档</div>
+          </div>
+
+          <!-- Talent Plan -->
+          <div v-if="contactView==='talent'" class="rv-wrap jd-wrap">
+            <div v-if="talentLoading" class="empty-lg">加载中…</div>
+            <div v-else-if="talentError" class="empty-lg">✗ {{talentError}}</div>
+            <template v-else-if="talentParsed">
+              <div class="rv-actionbar jd-actionbar">
+                <button class="btn-ghost rv-back" @click="contactView='org'">← 返回组织</button>
+                <button class="btn-ghost share-btn-anchor" @click="shareTalentDoc($event)" title="分享文档">🔗 分享</button>
+                <button class="btn-ghost" @click="editTalentDoc" title="编辑">✎ 编辑</button>
+              </div>
+              <section class="rv-hero">
+                <div class="rv-hero-eyebrow" v-if="talentParsed.eyebrow">{{talentParsed.eyebrow}}</div>
+                <h1 class="rv-hero-title">{{talentParsed.title}}</h1>
+                <div class="rv-hero-pills" v-if="(talentParsed.metaPills||[]).length">
+                  <div v-for="(mp, mpi) in talentParsed.metaPills" :key="mpi" class="rv-pill">
+                    <span class="rv-pill-k">{{mp.key}}</span>
+                    <span class="rv-pill-v">{{mp.val}}</span>
+                  </div>
+                </div>
+                <div class="rv-hero-line"></div>
+              </section>
+              <div class="rv-body">
+                <aside class="rv-toc jd-toc" v-if="talentParsed.sections.length > 1" :class="'rv-toc--' + tocMode">
+                  <button class="rv-toc-toggle" @click="cycleTocMode" :title="tocMode==='full'?'收起目录':tocMode==='slim'?'隐藏目录':'展开目录'">
+                    <span class="rv-toc-toggle-icon" :class="'is-' + tocMode">{{ tocMode==='hidden'?'☰':tocMode==='slim'?'◀':'✕' }}</span>
+                  </button>
+                  <div class="rv-toc-label" v-if="tocMode==='full'">目&nbsp;录</div>
+                  <ul class="rv-toc-list">
+                    <li v-for="s in talentParsed.sections" :key="s.id" @click="scrollToReportSection(s.id)" :class="{'is-unnum': !s.hasExplicitNum}">
+                      <span class="rv-toc-num">{{s.num || '·'}}</span>
+                      <span class="rv-toc-txt" v-if="tocMode==='full'">{{s.title}}</span>
+                      <span class="rv-toc-txt rv-toc-txt--abbr" v-else-if="tocMode==='slim'">{{s.title.slice(0,2)}}</span>
+                    </li>
+                  </ul>
+                </aside>
+                <div class="rv-main">
+                  <div v-if="talentParsed.prefaceHtml" class="rv-preface rendered-md" v-html="talentParsed.prefaceHtml"></div>
+                  <section v-for="s in talentParsed.sections" :key="s.id" :id="s.id" class="rv-section jd-section jd-card" :class="{'is-unnum': !s.hasExplicitNum, 'has-chips':(s.jobChips||[]).length, 'is-collapsed': jdCollapsed[s.id]}">
+                    <button class="jd-card-head" @click="toggleJdSection(s.id)" :aria-expanded="!jdCollapsed[s.id]">
+                      <span class="jd-card-num" v-if="s.hasExplicitNum">{{s.num}}</span>
+                      <span class="jd-card-num jd-card-num-dot" v-else>◆</span>
+                      <span class="jd-card-title">{{s.title}}</span>
+                      <span class="jd-card-keywords" v-if="(s.jobKeywords||[]).length">
+                        <span v-for="(kw, ki) in s.jobKeywords" :key="ki" class="jd-kw">{{kw}}</span>
+                      </span>
+                      <span class="jd-card-caret">▾</span>
+                    </button>
+                    <div class="jd-card-body" v-show="!jdCollapsed[s.id]">
+                      <div v-if="(s.jobChips||[]).length" class="jd-chips">
+                        <span v-for="(c, ci) in s.jobChips" :key="ci" class="jd-chip" :data-kind="c.k">
+                          <span class="jd-chip-k">{{c.k}}</span>
+                          <span class="jd-chip-v">{{c.v}}</span>
+                        </span>
+                      </div>
+                      <div class="rv-sec-body rv-sec-chunked" v-if="s.chunks && s.chunks.length">
+                        <template v-for="(c, ci) in s.chunks" :key="ci">
+                          <div v-if="c.kind === 'headline-card'" class="rv-chunk rv-chunk-headline" :data-accent="c.accent">
+                            <div class="rv-chunk-headline-bar"></div>
+                            <div class="rv-chunk-headline-body">
+                              <h3 class="rv-chunk-headline-title">{{c.title}}</h3>
+                              <div class="rv-chunk-headline-text rendered-md" v-html="c.bodyHtml"></div>
+                            </div>
+                          </div>
+                          <div v-else-if="c.kind === 'long-prose'" class="rv-chunk rv-chunk-prose rendered-md" v-html="c.html"></div>
+                          <h3 v-else-if="c.kind === 'h-sub' && c.level === 3" class="rv-chunk rv-chunk-h3 jd-subhead">{{c.title}}</h3>
+                          <h4 v-else-if="c.kind === 'h-sub' && c.level === 4" class="rv-chunk rv-chunk-h4">{{c.title}}</h4>
+                          <h5 v-else-if="c.kind === 'h-sub'" class="rv-chunk rv-chunk-h5">{{c.title}}</h5>
+                          <div v-else-if="c.kind === 'list-card'" class="rv-chunk rv-chunk-list jd-list rendered-md" v-html="c.html"></div>
+                          <div v-else-if="c.kind === 'table-card'" class="rv-chunk rv-chunk-table rendered-md" v-html="c.html"></div>
+                          <div v-else-if="c.kind === 'quote-card'" class="rv-chunk rv-chunk-quote rendered-md" v-html="c.html"></div>
+                          <div v-else-if="c.kind === 'code-card'" class="rv-chunk rv-chunk-code rendered-md" v-html="c.html"></div>
+                          <div v-else-if="c.kind === 'prose'" class="rv-chunk rv-chunk-prose rendered-md" v-html="c.html"></div>
+                          <hr v-else-if="c.kind === 'hr'" class="rv-chunk-hr"/>
+                        </template>
+                      </div>
+                      <div class="rv-sec-body rendered-md" v-else v-html="s.html"></div>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </template>
+            <div v-else class="empty-lg">暂无人才计划文档</div>
           </div>
 
           <!-- Cold contacts -->
@@ -3301,7 +3434,12 @@
               </span>
             </div>
             <!-- Transcript blocks -->
-            <div class="iv-trans-blocks">
+            <div v-if="!interviewTranscriptBlocks.length" class="iv-empty-state">
+              <div class="iv-empty-icon">📝</div>
+              <div class="iv-empty-title">本档无转录</div>
+              <div class="iv-empty-hint">可能为复盘/对比/分析文档；若需原始转录，请打开对应的 <code>.raw.md</code> 条目。</div>
+            </div>
+            <div class="iv-trans-blocks" v-else>
               <div v-for="(b, bi) in interviewTranscriptBlocks" :key="bi" class="iv-trans-block"
                    :style="{'--speaker-color': SPEAKER_COLORS[parseInt((b.speakerRaw||b.speaker).replace(/\D/g,''))||0] || '#60a5fa'}">
                 <div class="iv-trans-gutter">
@@ -3835,6 +3973,7 @@
           </nav>
           <div class="rv-actionbar">
             <button class="btn-ghost rv-back" @click="selectedReport=null">← 返回</button>
+            <button class="btn-ghost share-btn-anchor" @click="openShareDialog($event)" title="分享文档">🔗 分享</button>
             <button class="btn-ghost" @click="startEditReport">✏️ 编辑</button>
           </div>
           <section class="rv-hero">
@@ -3855,9 +3994,10 @@
               </button>
               <div class="rv-toc-label" v-if="tocMode==='full'">目&nbsp;录</div>
               <ul class="rv-toc-list">
-                <li v-for="s in reportParsed.sections" :key="s.id" @click="scrollToReportSection(s.id)" :class="{'is-unnum': !s.hasExplicitNum}">
+                <li v-for="s in (reportParsed.tocItems || reportParsed.sections)" :key="s.id" @click="scrollToReportSection(s.id)" :class="{'is-unnum': !s.hasExplicitNum, 'is-sub': s.isSub}">
                   <span class="rv-toc-num">{{ s.num || '·' }}</span>
                   <span class="rv-toc-txt" v-if="tocMode==='full'">{{ s.title }}</span>
+                  <span class="rv-toc-txt rv-toc-txt--abbr" v-else-if="tocMode==='slim'">{{ s.slimLabel || s.title.slice(0,2) }}</span>
                 </li>
               </ul>
             </aside>
@@ -3872,7 +4012,28 @@
                     <div class="rv-sec-rule"></div>
                   </div>
                 </div>
-                <div class="rv-sec-body rendered-md" v-html="s.html"></div>
+                <div class="rv-sec-body rv-sec-chunked" v-if="s.chunks && s.chunks.length">
+                  <template v-for="(c, ci) in s.chunks" :key="ci">
+                    <div v-if="c.kind === 'headline-card'" class="rv-chunk rv-chunk-headline" :data-accent="c.accent">
+                      <div class="rv-chunk-headline-bar"></div>
+                      <div class="rv-chunk-headline-body">
+                        <h3 class="rv-chunk-headline-title">{{c.title}}</h3>
+                        <div class="rv-chunk-headline-text rendered-md" v-html="c.bodyHtml"></div>
+                      </div>
+                    </div>
+                    <div v-else-if="c.kind === 'long-prose'" class="rv-chunk rv-chunk-prose rendered-md" v-html="c.html"></div>
+                    <h3 v-else-if="c.kind === 'h-sub' && c.level === 3" class="rv-chunk rv-chunk-h3" :id="c.id || null">{{c.title}}</h3>
+                    <h4 v-else-if="c.kind === 'h-sub' && c.level === 4" class="rv-chunk rv-chunk-h4">{{c.title}}</h4>
+                    <h5 v-else-if="c.kind === 'h-sub'" class="rv-chunk rv-chunk-h5">{{c.title}}</h5>
+                    <div v-else-if="c.kind === 'list-card'" class="rv-chunk rv-chunk-list rendered-md" v-html="c.html"></div>
+                    <div v-else-if="c.kind === 'table-card'" class="rv-chunk rv-chunk-table rendered-md" v-html="c.html"></div>
+                    <div v-else-if="c.kind === 'quote-card'" class="rv-chunk rv-chunk-quote rendered-md" v-html="c.html"></div>
+                    <div v-else-if="c.kind === 'code-card'" class="rv-chunk rv-chunk-code rendered-md" v-html="c.html"></div>
+                    <div v-else-if="c.kind === 'prose'" class="rv-chunk rv-chunk-prose rendered-md" v-html="c.html"></div>
+                    <hr v-else-if="c.kind === 'hr'" class="rv-chunk-hr"/>
+                  </template>
+                </div>
+                <div class="rv-sec-body rendered-md" v-else v-html="s.html"></div>
               </section>
             </div>
           </div>
@@ -4041,22 +4202,33 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label">分享管理（共 {{ shareList.length }} 个）</label>
+            <label class="form-label">分享管理（共 {{ shareList.length }} 个）
+              <button v-if="shareList.length"
+                      class="btn-mini"
+                      style="margin-left:12px"
+                      @click="openRotateAllDialog"
+                      title="一键换掉所有已加密文档的密码；结果清单可整体复制">🔄 批量换所有密码</button>
+            </label>
             <div class="share-mgr">
               <div v-if="!shareList.length" class="share-mgr-empty">暂无分享的文档 · 在文档页点 🔗 分享 即可</div>
               <ul v-else class="share-mgr-list">
                 <li v-for="item in shareList" :key="item.slug || item.code" class="share-mgr-item">
                   <div class="share-mgr-info">
                     <div class="share-mgr-title">
-                      {{ item.title || item.slug || item.code }}
-                      <button class="share-mgr-lock" :class="{ on: item.pwdProtected }" @click="openShareMgrDrawer(item)" :title="item.pwdProtected ? `已加密 · ${item.pwdActiveSessions||0} 个访问` : '开启密码保护'">
+                      <a :href="shareItemMainUrl(item)" class="share-mgr-title-link" :title="'打开主站文档 · ' + (item.path || '')" @click="openShareItemInMain(item, $event)">{{ item.title || item.slug || item.code }}</a>
+                      <button class="share-mgr-lock" :class="{ on: item.pwdProtected }" @click="openShareMgrDrawer(item, $event)" :title="item.pwdProtected ? '已加密 · 点击管理' : '开启密码保护'">
                         <span v-if="item.pwdProtected">🔒</span>
                         <span v-else class="share-mgr-lock-off">🔒</span>
                       </button>
                     </div>
-                    <div class="share-mgr-url"><code>{{ shareItemUrl(item) }}</code></div>
+                    <div class="share-mgr-url"><a :href="shareItemUrl(item)" target="_blank" rel="noopener noreferrer" class="share-mgr-url-link"><code>{{ shareItemUrl(item) }}</code></a></div>
                     <div class="share-mgr-meta"><span>{{ item.path }}</span><span v-if="item.created"> · {{ item.created }}</span></div>
                   </div>
+                  <button class="share-mgr-visits-chip" :class="{'is-quiet': !(item.totalViews)}" @click="openShareMgrVisits(item, $event)" :title="item.pwdProtected ? `累计 ${item.totalViews||0} 次访问 · 当前 ${item.pwdActiveSessions||0} 活跃 · 点击查看详情` : `累计 ${item.totalViews||0} 次访问 · ${item.uniqueIps||0} 个独立 IP · 点击查看详情`">
+                    <span class="share-mgr-visits-icon">👥</span>
+                    <span class="share-mgr-visits-num">{{ item.totalViews || 0 }}</span>
+                    <span class="share-mgr-visits-label">访问</span>
+                  </button>
                   <div class="share-mgr-actions">
                     <button class="btn-mini" @click="copyShareItemUrl(item)">复制</button>
                     <button class="btn-mini" @click="openRenameShare(item)">改链接</button>
@@ -4251,8 +4423,13 @@
                   <button class="share-pwd-copy" @click="copySharePasswordOnly" :title="'复制密码'">{{ shareDialog.pwdCopied === 'pwd' ? '✓' : '📋' }}</button>
                 </div>
                 <div v-else class="share-pwd-passbox dim">
-                  <code class="share-pwd-pass masked">•••• •••• •••• ••</code>
-                  <span class="share-pwd-sub">明文不保存 · 忘记请「换密码」</span>
+                  <code class="share-pwd-pass masked">•••• •••• ••••</code>
+                  <button v-if="shareDialog.pwdCanReveal"
+                          class="share-pwd-copy"
+                          @click="revealSharePassword()"
+                          :disabled="shareDialog.pwdLoading"
+                          title="查看密码">👁</button>
+                  <span v-else class="share-pwd-sub">老密码只有 hash · 请「换密码」</span>
                 </div>
 
                 <!-- 主按钮：复制三件套（链接+密码+说明） -->
@@ -4293,11 +4470,10 @@
     </transition>
   </teleport>
 
-  <!-- ── T2 · 分享管理 · 抽屉 ── -->
+  <!-- ── T2 · 分享管理 · 原地弹出 popover（anchored to 🔒 按钮）── -->
   <teleport to="body">
-    <transition name="drawer">
-      <div v-if="shareMgrDrawer.show" class="share-drawer-backdrop" @click.self="closeShareMgrDrawer">
-        <aside class="share-drawer" @click.stop>
+    <transition name="share-mgr-pop-fx">
+      <div v-if="shareMgrDrawer.show" class="share-mgr-pop" :style="shareMgrDrawer.pos" @click.stop>
           <header class="share-drawer-head">
             <div>
               <div class="share-drawer-eyebrow">密码保护</div>
@@ -4341,10 +4517,16 @@
               </div>
               <div v-else class="share-drawer-pass-card dim">
                 <div class="share-drawer-pass-row">
-                  <code class="share-drawer-pass masked">•••• •••• •••• ••</code>
+                  <code class="share-drawer-pass masked">•••• •••• ••••</code>
+                  <button v-if="shareMgrDrawer.info.can_reveal"
+                          class="share-pwd-copy"
+                          @click="drawerRevealPassword"
+                          :disabled="shareMgrDrawer.loading"
+                          title="查看密码">👁</button>
                   <span class="share-drawer-meta">设置于 {{ shareMgrDrawer.info.password_set_at ? shareMgrDrawer.info.password_set_at.slice(0,16).replace('T',' ') : '—' }}</span>
                 </div>
-                <p class="share-drawer-hint">密码哈希存于远端 · 明文不保存，忘记请「换密码」。</p>
+                <p v-if="shareMgrDrawer.info.can_reveal" class="share-drawer-hint">密文存于远端 · 点 👁 服务端用 master.key 解密回显。</p>
+                <p v-else class="share-drawer-hint">老版本仅存 hash 无法恢复 · 请点「🔄 换密码」。</p>
               </div>
 
               <!-- 动作 -->
@@ -4368,37 +4550,199 @@
               </div>
             </div>
 
-            <!-- 活跃 session -->
-            <div v-if="shareMgrDrawer.info.protected" class="share-drawer-section">
-              <h4 class="share-drawer-h4">活跃访问 <span class="share-drawer-count">{{ shareMgrDrawer.sessions.length }}</span></h4>
-              <div v-if="!shareMgrDrawer.sessions.length" class="share-drawer-empty">尚无访问</div>
-              <ul v-else class="share-drawer-session-list">
-                <li v-for="s in shareMgrDrawer.sessions" :key="s.sid" class="share-drawer-session">
-                  <div class="share-drawer-session-main">
-                    <code class="share-drawer-ip">{{ s.ip || '—' }}</code>
-                    <span class="share-drawer-session-meta">{{ (s.last_seen || '').slice(11, 16) || '—' }} · {{ (s.ua || '').slice(0, 32) }}</span>
-                  </div>
-                  <button class="share-drawer-kick" @click="drawerRevokeSession(s.sid)">踢</button>
-                </li>
-              </ul>
-              <button v-if="shareMgrDrawer.sessions.length > 1" class="share-drawer-kickall" @click="drawerRevokeAllSessions">踢出全部 ({{ shareMgrDrawer.sessions.length }})</button>
-            </div>
-
-            <!-- 审计 -->
-            <div v-if="shareMgrDrawer.audit.length" class="share-drawer-section">
-              <h4 class="share-drawer-h4">最近访问</h4>
-              <ul class="share-drawer-audit">
-                <li v-for="(a, i) in shareMgrDrawer.audit" :key="i" class="share-drawer-audit-row">
-                  <span class="share-drawer-audit-ts">{{ (a.ts || '').slice(5, 16).replace('T', ' ') }}</span>
-                  <span class="share-drawer-audit-ev" :class="{ ok: a.event === 'unlock_ok' || a.event === 'view', fail: (a.event||'').includes('fail') || (a.event||'').includes('rate') }">
-                    {{ {unlock_ok:'✓ 解锁', unlock_fail:'✗ 密码错', view:'👁 查看', password_enable:'🛡 开启', password_rotate:'🔄 换密码', password_disable:'🔓 关闭', session_revoke:'踢出', sessions_revoke_all:'全部踢出'}[a.event] || a.event }}
-                  </span>
-                  <code class="share-drawer-audit-ip">{{ a.ip || '—' }}</code>
-                </li>
-              </ul>
+            <!-- 活跃访问入口（提示而已，主 chip 在行级）-->
+            <div v-if="shareMgrDrawer.info.protected" class="share-drawer-section share-drawer-visits-hint">
+              <button class="share-drawer-visits-link" @click="openVisitsFromDrawer">
+                👥 活跃访问 <b>{{ shareMgrDrawer.sessions.length }}</b> · 点击查看详情与审计
+              </button>
             </div>
 
             <div v-if="shareMgrDrawer.error" class="share-pwd-err">{{ shareMgrDrawer.error }}</div>
+          </section>
+      </div>
+    </transition>
+  </teleport>
+
+  <!-- ── T2R · 活跃访问专用 popover（锚定行级 👥 chip）── -->
+  <teleport to="body">
+    <transition name="share-mgr-pop-fx">
+      <div v-if="shareMgrVisits.show" class="share-mgr-pop share-visits-pop" :style="shareMgrVisits.pos" @click.stop>
+        <header class="share-drawer-head">
+          <div>
+            <div class="share-drawer-eyebrow">{{ shareMgrVisits.item && shareMgrVisits.item.pwdProtected ? '活跃访问 · 审计' : '访问统计 · 审计（未加密）' }}</div>
+            <h3 class="share-drawer-title">{{ shareMgrVisits.item && (shareMgrVisits.item.title || shareMgrVisits.item.slug) }}</h3>
+            <div class="share-drawer-url" v-if="shareMgrVisits.item">
+              <code>/{{ shareDialog.user }}/{{ shareMgrVisits.item.slug }}</code>
+            </div>
+          </div>
+          <button class="share-drawer-x" @click="closeShareMgrVisits" title="关闭">×</button>
+        </header>
+
+        <div v-if="shareMgrVisits.loading && !shareMgrVisits.loaded" class="share-drawer-loading">加载中…</div>
+
+        <section v-else class="share-drawer-body">
+          <!-- 统计条 -->
+          <div class="share-visits-stats">
+            <div class="share-visits-stat" v-if="shareMgrVisits.item && shareMgrVisits.item.pwdProtected">
+              <div class="share-visits-stat-num">{{ shareMgrVisits.sessions.length }}</div>
+              <div class="share-visits-stat-lbl">当前活跃</div>
+            </div>
+            <div class="share-visits-stat" v-if="shareMgrVisits.item && shareMgrVisits.item.pwdProtected">
+              <div class="share-visits-stat-num">{{ visitsStats.unlockOk }}</div>
+              <div class="share-visits-stat-lbl">近期解锁</div>
+            </div>
+            <div class="share-visits-stat">
+              <div class="share-visits-stat-num">{{ shareMgrVisits.item && shareMgrVisits.item.totalViews || visitsStats.view }}</div>
+              <div class="share-visits-stat-lbl">累计访问</div>
+            </div>
+            <div class="share-visits-stat" v-if="shareMgrVisits.item && shareMgrVisits.item.uniqueIps">
+              <div class="share-visits-stat-num">{{ shareMgrVisits.item.uniqueIps }}</div>
+              <div class="share-visits-stat-lbl">独立 IP</div>
+            </div>
+          </div>
+
+          <!-- 活跃 session（仅加密时显示） -->
+          <div class="share-drawer-section" v-if="shareMgrVisits.item && shareMgrVisits.item.pwdProtected">
+            <div class="share-drawer-h4-row">
+              <h4 class="share-drawer-h4">当前活跃 <span class="share-drawer-count">{{ shareMgrVisits.sessions.length }}</span></h4>
+              <button v-if="shareMgrVisits.sessions.length > 1" class="share-visits-kickall" @click="visitsRevokeAllSessions" :disabled="shareMgrVisits.loading">踢出全部</button>
+            </div>
+            <div v-if="!shareMgrVisits.sessions.length" class="share-drawer-empty">尚无活跃访问</div>
+            <ul v-else class="share-drawer-session-list">
+              <li v-for="s in shareMgrVisits.sessions" :key="s.sid" class="share-drawer-session">
+                <div class="share-drawer-session-main">
+                  <code class="share-drawer-ip">{{ s.ip || '—' }}</code>
+                  <span class="share-drawer-session-meta">{{ (s.last_seen || '').slice(11, 16) || '—' }} · {{ (s.ua || '').slice(0, 48) }}</span>
+                </div>
+                <button class="share-drawer-kick" @click="visitsRevokeSession(s.sid)" :disabled="shareMgrVisits.loading">踢</button>
+              </li>
+            </ul>
+          </div>
+
+          <!-- 审计 -->
+          <div class="share-drawer-section">
+            <h4 class="share-drawer-h4">最近访问记录</h4>
+            <div v-if="!shareMgrVisits.audit.length" class="share-drawer-empty">暂无记录</div>
+            <ul v-else class="share-drawer-audit">
+              <li v-for="(a, i) in shareMgrVisits.audit" :key="i" class="share-drawer-audit-row">
+                <span class="share-drawer-audit-ts">{{ (a.ts || '').slice(5, 16).replace('T', ' ') }}</span>
+                <span class="share-drawer-audit-ev" :class="{ ok: a.event === 'unlock_ok' || a.event === 'view', fail: (a.event||'').includes('fail') || (a.event||'').includes('rate') }">
+                  {{ {unlock_ok:'✓ 解锁', unlock_fail:'✗ 密码错', view:'👁 查看', password_enable:'🛡 开启', password_rotate:'🔄 换密码', password_disable:'🔓 关闭', session_revoke:'踢出', sessions_revoke_all:'全部踢出'}[a.event] || a.event }}
+                </span>
+                <code class="share-drawer-audit-ip">{{ a.ip || '—' }}</code>
+              </li>
+            </ul>
+          </div>
+
+          <div v-if="shareMgrVisits.error" class="share-pwd-err">{{ shareMgrVisits.error }}</div>
+        </section>
+      </div>
+    </transition>
+  </teleport>
+
+  <!-- ═══ 驾舱 · 航道/BU 聚合窗 · 点卡片 → 弹聚合窗(header+stats+grid) → 点文档进入文档页 ═══ -->
+  <teleport to="body">
+    <transition name="share-mgr-pop-fx">
+      <div v-if="cockpitPersonPopover.show && cockpitPersonPopover.person"
+           class="cp-person-popover" :style="cockpitPersonPopover.pos" @click.stop>
+        <header class="cp-pp-head">
+          <div class="cp-pp-head-text">
+            <div class="cp-pp-eyebrow" v-if="cockpitPersonPopover.entityLabel">{{cockpitPersonPopover.entityLabel}}</div>
+            <div class="cp-pp-title">{{cockpitPersonPopover.person.label}}</div>
+            <div class="cp-pp-sub" v-if="cockpitPersonPopover.person.desc">{{cockpitPersonPopover.person.desc}}</div>
+          </div>
+          <button class="cp-pp-close" @click="closeCockpitPersonPopover" title="关闭">✕</button>
+        </header>
+        <div class="cp-pp-stats">
+          <div class="cp-pp-stat">
+            <div class="cp-pp-stat-num">{{cockpitPersonPopover.person.items.length}}</div>
+            <div class="cp-pp-stat-lbl">文档数</div>
+          </div>
+          <div class="cp-pp-stat" v-if="cockpitPersonStats.p0">
+            <div class="cp-pp-stat-num prio-P0">{{cockpitPersonStats.p0}}</div>
+            <div class="cp-pp-stat-lbl">P0 关键</div>
+          </div>
+          <div class="cp-pp-stat" v-if="cockpitPersonStats.p1">
+            <div class="cp-pp-stat-num prio-P1">{{cockpitPersonStats.p1}}</div>
+            <div class="cp-pp-stat-lbl">P1 重要</div>
+          </div>
+          <div class="cp-pp-stat" v-if="cockpitPersonStats.prescriptions">
+            <div class="cp-pp-stat-num">{{cockpitPersonStats.prescriptions}}</div>
+            <div class="cp-pp-stat-lbl">处方卡</div>
+          </div>
+          <div class="cp-pp-stat" v-if="cockpitPersonStats.latestDate">
+            <div class="cp-pp-stat-num cp-pp-stat-date">{{cockpitPersonStats.latestDate}}</div>
+            <div class="cp-pp-stat-lbl">最新更新</div>
+          </div>
+        </div>
+        <div class="cp-pp-grid">
+          <div v-for="d in cockpitPersonPopover.person.items" :key="d.path"
+               class="cp-pp-card" :class="{'is-p0': d.priority==='P0','is-p1': d.priority==='P1'}"
+               @click="pickCockpitPersonDoc(d)">
+            <div class="cp-pp-card-top">
+              <span v-if="d.priority" class="cp-pp-card-prio" :class="'prio-'+d.priority">{{d.priority}}</span>
+              <span class="cp-pp-card-eyebrow" v-if="d.eyebrow">{{d.eyebrow}}</span>
+              <span class="cp-pp-card-date" v-if="d.date">{{d.date}}</span>
+            </div>
+            <div class="cp-pp-card-title">{{d.title || d.name}}</div>
+            <div class="cp-pp-card-sub" v-if="d.subtitle">{{d.subtitle}}</div>
+            <div class="cp-pp-card-tags" v-if="d.tags && d.tags.length">
+              <span v-for="(t,ti) in d.tags.slice(0,4)" :key="ti" class="cp-pp-card-tag">{{t}}</span>
+            </div>
+            <div class="cp-pp-card-foot">
+              <span class="cp-pp-card-open">进入文档 →</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
+  </teleport>
+
+  <!-- ── T2R · 批量换密码结果弹窗 ── -->
+  <teleport to="body">
+    <transition name="drawer">
+      <div v-if="shareBatch.show" class="share-drawer-backdrop" @click.self="closeBatchDialog">
+        <aside class="share-drawer" @click.stop style="max-width:720px">
+          <header class="share-drawer-head">
+            <div>
+              <div class="share-drawer-eyebrow">批量换密码</div>
+              <h3 class="share-drawer-title">
+                <span v-if="shareBatch.loading">生成中…</span>
+                <span v-else>已换 {{ shareBatch.count }} 个文档</span>
+              </h3>
+              <div class="share-drawer-url">
+                <span v-if="!shareBatch.loading && shareBatch.count">踢出 {{ shareBatch.revoked }} 个已解锁访问 · 旧密码立即失效</span>
+              </div>
+            </div>
+            <button class="share-drawer-x" @click="closeBatchDialog" title="关闭">×</button>
+          </header>
+          <section class="share-drawer-body">
+            <div v-if="shareBatch.loading" class="share-drawer-loading">正在生成新密码…</div>
+            <div v-else-if="shareBatch.error" class="share-pwd-err">{{ shareBatch.error }}</div>
+            <div v-else-if="!shareBatch.items.length" class="share-drawer-empty">没有已加密的文档可换</div>
+            <div v-else>
+              <button class="share-drawer-primary" @click="copyBatchAll" style="margin-bottom:16px">
+                <span v-if="!shareBatch.copied">📋 一键复制全部（文档名 · 链接 · 密码）</span>
+                <span v-else>✓ 已复制 {{ shareBatch.items.length }} 条到剪贴板</span>
+              </button>
+              <ul class="share-mgr-list">
+                <li v-for="it in shareBatch.items" :key="it.slug" class="share-mgr-item">
+                  <div class="share-mgr-info">
+                    <div class="share-mgr-title">{{ it.title }}</div>
+                    <div class="share-mgr-url"><code>{{ it.url }}</code></div>
+                    <div class="share-drawer-pass-row" style="margin-top:6px">
+                      <code class="share-drawer-pass">{{ it.password }}</code>
+                    </div>
+                  </div>
+                  <div class="share-mgr-actions">
+                    <button class="btn-mini" @click="copyBatchItem(it)">复制此条</button>
+                  </div>
+                </li>
+              </ul>
+              <p class="share-drawer-hint" style="margin-top:16px">
+                明文会保存在服务端（master.key 加密存储）· 下次进设置页点 👁 可再查看。
+              </p>
+            </div>
           </section>
         </aside>
       </div>
@@ -4406,10 +4750,11 @@
   </teleport>
 </div>
 
-<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="/vendor/vue.global.prod.js"></script>
+<script src="/vendor/marked.min.js"></script>
+<script src="/vendor/marked-cjk-fix.js"></script>
 <script>/*force-graph lazy load — only needed on contacts graph view*/</script>
-<script src="/app.js?v=20260421b"></script>
+<script src="/app.js?v=20260427a"></script>
 <script>
 /* ══════════════════════════════════════════════════════════════════════════
    驾舱之上 · Cinematic Layer · rv-cine
