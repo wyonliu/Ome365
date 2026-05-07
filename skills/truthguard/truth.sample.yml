@@ -1,0 +1,93 @@
+# ============================================================================
+# truthguard · canonical truth-of-record (SAMPLE / TEMPLATE)
+# ----------------------------------------------------------------------------
+# Copy this file to truth.yml (gitignored) and fill in your real
+# people / orgs / products / channels. truthguard reads truth.yml at
+# scan/lint/fix time; truth.sample.yml is just a layout reference.
+#
+# Schema sections supported by run.py: people / channels / bus / terms /
+# patterns. Section semantics:
+#   people       — canonical name + aliases (hard, autofix) + nicknames (info)
+#   channels     — code + label + deprecated_labels (hard fail post-rename)
+#   bus          — business units, with optional autofix toggle + exceptions
+#   terms        — product / technology canonicals
+#   patterns     — regex escape hatch
+#
+# Rule of thumb:
+#   aliases  = wrong spellings that unambiguously mean canonical (autofix-safe)
+#   nicknames = honorifics / informal forms (info-level, never autofix)
+#   deprecated_labels = old labels for channels post-rename
+#
+# Never merge an alias without a source reference (cite an interview,
+# an internal doc, or a confirmation from the source-of-truth person).
+# ============================================================================
+
+meta:
+  version: 1
+  updated: "YYYY-MM-DD"
+  sources:
+    - "docs/your-org-chart.md"
+    - "internal-spreadsheet (link)"
+
+# ----------------------------------------------------------------------------
+# People — canonical name + aliases (autofix) + nicknames (info)
+# ----------------------------------------------------------------------------
+people:
+  - canonical: Alice
+    role: Example role / position
+    aliases: [Alise, Alize]
+    notes: "ASR commonly mishears Alice as Alise/Alize. autofix-safe."
+
+  - canonical: Bob
+    role: Example role
+    aliases: [Boby, Bobi]
+    nicknames: [Mr. Bob]
+    notes: "Phonetic variants documented from team interviews."
+
+  - canonical: Carol
+    role: Example role
+    aliases: [Carrol]
+
+# ----------------------------------------------------------------------------
+# Channels — sales / distribution / matrix-org channels
+# Schema: {code, label, deprecated_labels}
+# ----------------------------------------------------------------------------
+channels:
+  - code: C1
+    label: First Channel
+    deprecated_labels: ["Old Channel One", "Channel-1"]
+    notes: "Renamed YYYY-MM-DD."
+
+  - code: C2
+    label: Second Channel
+    deprecated_labels: []
+
+# ----------------------------------------------------------------------------
+# BUs — internal business units
+# Schema: {canonical, aliases, autofix, rename_rule, exceptions}
+# ----------------------------------------------------------------------------
+bus:
+  - canonical: NewUnit
+    aliases: [OldUnit]
+    autofix: true
+    rename_rule: "OldUnit renamed to NewUnit on YYYY-MM-DD"
+    exceptions: []
+
+# ----------------------------------------------------------------------------
+# Terms — product / technology canonicals
+# Schema: {canonical, aliases}
+# ----------------------------------------------------------------------------
+terms:
+  - canonical: ProductA
+    aliases: [ProdA, Product-A]
+
+# ----------------------------------------------------------------------------
+# Patterns — regex escape hatch (when alias-based rules are too rigid)
+# Schema: {id, pattern, fix, autofix, reason}
+# ----------------------------------------------------------------------------
+patterns:
+  - id: example-rule
+    pattern: "ExamplePattern"
+    fix: "ReplacementText"
+    autofix: false
+    reason: "Demonstrate pattern syntax"
