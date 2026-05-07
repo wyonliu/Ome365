@@ -16,7 +16,7 @@
 - **Skip**：P1-5 `/skills` Marketplace、P2-8 公共榜 v0、P2-10 Agent Team preset
 - **新增**：驾舱加"昨夜记忆同步"卡片（P1-7 的本地化版本）
 
-**底层理由**：Omnity NOTICE 是按"B 端企业 SaaS 产品"视角写的；Ome365 v0.9.7 的实际身份是**用户个人 vault + TicNote + 驾舱 + EEG + 小圈子同事**。两者受众差一个数量级，不宜照搬 P0/P1/P2 清单。
+**底层理由**：Omnity NOTICE 是按"B 端企业 SaaS 产品"视角写的；Ome365 v0.9.7 的实际身份是**作者个人 vault + TicNote + 驾舱 + EEG + 小圈子同事**。两者受众差一个数量级，不宜照搬 P0/P1/P2 清单。
 
 ---
 
@@ -32,7 +32,7 @@
 |---|---|---|
 | Chat 接口 | `/api/chat` 已存在 | 不存在 |
 | 数据层 | PG + RLS | 磁盘 vault（`Projects/<tenant>/` 等） |
-| 用户规模 | 企业员工（几十到几千） | 用户 1 人 + 小圈子同事 |
+| 用户规模 | 企业员工（几十到几千） | 作者 1 人 + 小圈子同事 |
 | 付费模式 | 企业订阅 / 私有化 | 开源自用 + 同事分享 |
 | 调度层 | K8s CronJob | macOS launchd / 本地 cron |
 | 主要负载 | 对话（chat） | 访谈消化 + 驾舱维护 + 战略文档 |
@@ -40,7 +40,7 @@
 ### 1.3 结论
 Omnity 的 W2-W6 是给**未来**的 Ome365 企业版用的蓝图，不是**现在**的施工图。我们必须按当下形态过滤、分层，避免被"企业壳"语言带跑。
 
-**用户四月圣旨里的两条正好卡这里**：
+**作者四月圣旨里的两条正好卡这里**：
 - "不坍缩"——每个子项目撑起自己的形态，Ome365 ≠ Mindos B 端壳
 - "代码 vs 数据绝对分离"——Omnity 建议的 4 个 `/api/*` 端点如果不节制，会把业务逻辑糊进 Ome365 服务层
 
@@ -193,7 +193,7 @@ Omnity 的 W2-W6 是给**未来**的 Ome365 企业版用的蓝图，不是**现�
 - [ ] 把本评审 ACK 部分追加到 `NOTICE_FOR_OME365_W2-W6_HARNESS_2026-04-19.md §8`
 - [ ] 按 §6 diff 改 `docs/ROADMAP_v1.md` 的 v0.10 / v0.11 行
 - [ ] 把 A 档三件事登记到 `docs/ROADMAP_v1.md` Track 2/3/4 的具体编号下（#7 / #16 / 新增 #21 OmeBench CLI）
-- [ ] 把之前三个未提交的改动（`.gitignore` + `ROADMAP_v1.md` + `enterprise_claude_backend.py`）加上本文件 + NOTICE ACK 一起提交（**待用户确认**）
+- [ ] 把之前三个未提交的改动（`.gitignore` + `ROADMAP_v1.md` + `enterprise_claude_backend.py`）加上本文件 + NOTICE ACK 一起提交（**待作者确认**）
 
 ---
 

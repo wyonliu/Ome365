@@ -2520,7 +2520,7 @@ async def get_interviews():
                     mm, dd = groups[0], groups[1]
                     sort_key = f"2026-{mm}-{dd}T00:00"
                     time_str = f"{mm}-{dd}"
-            # Parse duration from content: "2026-04-08 11:07:02|26m 46s|TicNoteUser"
+            # Parse duration from content: "YYYY-MM-DD HH:MM:SS|<duration>|<TicNoteUser>"
             duration = ""
             dur_m = _re.search(r'\d{4}-\d{2}-\d{2}\s[\d:]+\|(.+?)\|', raw[:500])
             if dur_m:
@@ -4505,10 +4505,11 @@ async def insights_synthesize(body: dict):
 
     focus_hint = f"\n用户特别关注：{focus}\n" if focus else ""
 
-    system = "你是用户的高级战略顾问。输入是用户最近的工作语料（访谈、反思、速记、汇报、长期记忆、联系人）。输出必须是合法 JSON，不要任何说明文字。"
+    user_bio = _tb("prompts.user_bio", "a senior AI product & tech leader")
+    system = f"你是用户（{user_bio}）的高级战略顾问。输入是用户最近的工作语料（访谈、反思、速记、汇报、长期记忆、联系人）。输出必须是合法 JSON，不要任何说明文字。"
     user = f"""{context}
 {focus_hint}
-请基于以上语料，为用户（{_tb("prompts.user_bio", "a senior AI product & tech leader")}）输出以下 JSON：
+请基于以上语料，为用户（{user_bio}）输出以下 JSON：
 
 {{
   "headline": "一句话点明本轮洞察的核心发现（25 字内，直接、有穿透力）",
@@ -4591,7 +4592,7 @@ async def insights_ask(body: dict):
     system = "你是用户的私人战略顾问，只能基于用户自己的语料回答，不许编造。输出必须是合法 JSON。"
     user = f"""{context}
 
-用户的问题：{q}
+问题：{q}
 
 请输出 JSON：
 {{
@@ -4609,18 +4610,22 @@ async def insights_ask(body: dict):
 
 
 # ── API: Life (生活 · 家庭 / 健康 / 仪式 / 时刻) ──────
-# 面向个人生活品质：女儿周末计划、健康打卡、日常仪式、生活高光时刻。
-# 核心洞察：孩子真实年龄 11.5 岁 → 上大学还有 ~365 个周末，这个数字
-# 必须每天都让用户看到。
+# 面向个人生活品质：孩子周末计划、健康打卡、日常仪式、生活高光时刻。
+# 核心洞察：基于孩子的真实年龄反推到 college_age 还有多少个周末，
+# 这个数字每天都提醒用户珍惜陪伴时光。
 LIFE_DIR = VAULT / "Life"
 LIFE_DATA_FILE = LIFE_DIR / "life.json"
 LIFE_MOMENTS_FILE = LIFE_DIR / "moments.md"
 
 LIFE_DEFAULTS = {
     "daughter": {
-        "name": "孩子",
-        "birth_date": "YYYY-MM-DD",   # 11.5 岁（可在前端编辑）
+        "name": "",                   # 用户在前端填写
+        "birth_date": "",
         "college_age": 18,
+        "hobbies": [],                # ["阅读", "绘画"] 之类
+        "pets": [],
+        "aspiration": "",
+        "city": "",
     },
     "weekends": [],       # [{id, date, title, theme, activities, notes, done, photos}]
     "weekend_ideas": [],  # [{id, title, vibe, duration, supplies, created_at}]
@@ -4773,19 +4778,34 @@ async def life_weekend_ideas(body: dict):
     vibe = (body.get("vibe") or "").strip()
     season_hint = body.get("season", "")
 
-    age_text = f"{age} 岁" if age else "11-12 岁"
+    age_text = f"{age} 岁" if age else "未填写"
     vibe_hint = f"\n特别要求：{vibe}" if vibe else ""
     season_text = f"\n当前季节：{season_hint}" if season_hint else ""
 
-    system = "你是一个最懂孩子也最懂父亲的生活策划师。只输出合法 JSON，不要任何说明。"
-    user = f"""请为用户（家长）和女儿孩子（{age_text}，喜欢她的兴趣，养她的宠物，梦想做「她的梦想」）生成 5 个真正好玩又有意义的周末活动点子。{vibe_hint}{season_text}
+    child_name = (d.get("name") or "孩子").strip() or "孩子"
+    hobbies = d.get("hobbies") or []
+    pets = d.get("pets") or []
+    aspiration = (d.get("aspiration") or "").strip()
+    city = (d.get("city") or "").strip()
+
+    bio_bits = [f"{age_text}"]
+    if hobbies:
+        bio_bits.append(f"喜欢{'/'.join(hobbies)}")
+    if pets:
+        bio_bits.append(f"养{'、'.join(pets)}")
+    if aspiration:
+        bio_bits.append(f"梦想做「{aspiration}」")
+    bio = "，".join(bio_bits)
+    city_hint = f"\n地点：{city}（或室内通用）" if city else "\n地点：室内通用"
+
+    system = "你是一个最懂孩子也最懂家长的生活策划师。只输出合法 JSON，不要任何说明。"
+    user = f"""请为家长和孩子（{child_name}，{bio}）生成 5 个真正好玩又有意义的周末活动点子。{vibe_hint}{season_text}{city_hint}
 
 要求：
 - 不是泛泛的"去公园"，要具体到做什么事、怎么玩
-- 父女可以真的一起参与，不是用户看着女儿玩
+- 家长和孩子可以真的一起参与，不是家长看着孩子玩
 - 涵盖不同风格：自然/创作/科技/安静相处/探索
-- 每个点子要能激发「她的梦想」的好奇心
-- 北京可执行（或室内通用）
+- 每个点子要能激发孩子的好奇心
 
 输出 JSON：
 {{
@@ -5526,12 +5546,12 @@ async def icon():
 static_dir = Path(__file__).parent / "static"
 
 # ── Share: read-only document sharing ──
-# URL: /<user>/<code>  (e.g. /wyon/43ce7eaa)
-# Config: SHARE_USERS lists allowed usernames
+# URL: /<user>/<code>  (e.g. /alice/43ce7eaa)
+# Config: SHARE_USERS lists allowed usernames (comma-separated env var)
 # Deploy: set SHARE_BASE_URL to your public domain (e.g. https://ome365.example.com)
 import hashlib
 
-SHARE_USERS = os.environ.get("SHARE_USERS", "wyon").split(",")
+SHARE_USERS = [u.strip() for u in os.environ.get("SHARE_USERS", "user").split(",") if u.strip()] or ["user"]
 SHARE_BASE_URL = os.environ.get("SHARE_BASE_URL", f"http://localhost:{PORT}")
 SHARE_SERVER_PORT = int(os.environ.get("SHARE_PORT", "3651"))
 SHARE_SERVER_BASE = os.environ.get("SHARE_SERVER_BASE", f"http://localhost:{SHARE_SERVER_PORT}")

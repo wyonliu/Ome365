@@ -1,6 +1,6 @@
 # Ome365 · Enterprise Entity Graph（EEG · 企业实体知识图谱）
 
-> 2026-04-17 · 用户 & AI 助手
+> 2026-04-17 · 作者 & AI 助手
 > 目标：让 Ome365 内部的**企业术语 / 人名 / 组织 / 产品**作为精准常识，任何生成、检索、展示都基于统一事实源。
 
 ---
@@ -81,7 +81,7 @@ $VAULT/Knowledge/entities/
 `tenant` 字段区分实体归属：
 - `<tenant-slug>` — 某一家企业租户的全部实体
 - `ome365` — Ome365 平台自身术语
-- `personal` — 单用户/用户个人
+- `personal` — 单用户/作者个人
 - `public` — 行业通用（DeepSeek、Claude、Figma、GPT 等）
 
 查询时按租户过滤。**这就是企业智能体平台的核心隔离层**。
@@ -120,8 +120,8 @@ GET  /api/entities/_pending               # 审核队列：pipeline 自动提取
 ## 五 · 吸收新实体的三种方式（由严到松）
 
 1. **人工录入**（当前）：直接编辑 `Knowledge/entities/xxx.md`，`updated_at` 自动打点。
-2. **TicNote 管线抽取**（半自动）：清洗脚本在文本里命名实体识别，命中新名字放入 `_pending/`，Web UI 出现审核卡片，用户一键 Approve/Reject。
-3. **对话原位提取**（最松）：AI Chat 中用户随口说「—就是集团研发设计负责人」，系统自动 diff 现有实体并问「要不要更新 `—.md`？」。
+2. **TicNote 管线抽取**（半自动）：清洗脚本在文本里命名实体识别，命中新名字放入 `_pending/`，Web UI 出现审核卡片，作者一键 Approve/Reject。
+3. **对话原位提取**（最松）：AI Chat 中作者随口说「—就是集团研发设计负责人」，系统自动 diff 现有实体并问「要不要更新 `—.md`？」。
 
 **P0 只做 1+2**，3 属于 v1.1+。
 

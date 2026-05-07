@@ -65,7 +65,7 @@
         "agent_id": "1000002",
         "secret_env": "OME365_WECOM_SECRET",
         "redirect_uri": "https://ome.your-company.com/auth/wecom/callback",
-        "allowlist_userids": ["wyon", "alice"]
+        "allowlist_userids": ["alice", "bob"]
       }
     }
   }

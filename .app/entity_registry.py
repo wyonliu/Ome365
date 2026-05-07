@@ -11,7 +11,7 @@ Ome365 的一级能力：统一企业术语/人名/组织/产品的"常识层"�
 - 进程内缓存 + mtime 失效（避免每次请求遍历磁盘）
 - resolve(text) 用最长优先别名替换做 canonicalization
 
-Author: — & AI 助手, 2026-04-17
+Author: Ome365 contributors
 """
 
 from __future__ import annotations
@@ -94,7 +94,7 @@ def _load_entity_file(fp: Path, type_hint: str | None = None) -> dict | None:
     if isinstance(aliases, str):
         aliases = [a.strip() for a in re.split(r'[,，\n]', aliases) if a.strip()]
     aliases = [str(a).strip() for a in aliases if str(a).strip()]
-    # Strip inline comments ("用户  # 口语") if any slipped through yaml
+    # Strip inline comments ("alias  # note") if any slipped through yaml
     cleaned = []
     for a in aliases:
         a = re.sub(r'\s*#.*$', '', a).strip()

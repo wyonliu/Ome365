@@ -1,6 +1,6 @@
 """
 NoneProvider · 不认证，用于：
-- Phase 2a legacy 单用户模式（当前用户的本地 setup）
+- Phase 2a legacy 单用户模式（默认本地 setup）
 - 开发调试
 - sample-vault demo 不需要登录的场景
 

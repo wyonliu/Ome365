@@ -8,7 +8,7 @@ TicNote 通用导出工具
   python ticnote_export.py — --folder 录音文件 --date 2026-04-15
   python ticnote_export.py — — --folder "项目-0414"
 """
-import argparse, re, time, sys
+import argparse, os, re, time, sys
 from pathlib import Path
 from datetime import datetime
 
@@ -124,8 +124,13 @@ def main():
         page.goto("https://ticnote.cn/zh", timeout=30000)
         time.sleep(4)
 
+        # Logged-in detection: page body contains any of the known UI markers OR the username from $TICNOTE_USER
+        login_markers = ["知识库", "录音文件"]
+        ticnote_user = os.environ.get("TICNOTE_USER", "").strip()
+        if ticnote_user:
+            login_markers.append(ticnote_user)
         body = page.inner_text("body")[:1000]
-        if any(k in body for k in ["知识库", "TicNoteUser", "录音文件"]):
+        if any(k in body for k in login_markers):
             print("  ✅ 已登录", flush=True)
         else:
             if args.auto:

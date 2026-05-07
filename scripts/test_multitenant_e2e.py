@@ -659,7 +659,7 @@ def suite_sso_providers():
         from auth.base import User
         tmp = Path(tempfile.mkdtemp()) / "s.db"
         ss = SessionStore(tmp)
-        u = User(user_id="wyon", tenant_id="acme", display_name="w", email="", roles=["user"], provider="wecom")
+        u = User(user_id="alice", tenant_id="acme", display_name="alice", email="", roles=["user"], provider="wecom")
         sess = ss.create(u)
         # 模拟 globex 租户的 wecom provider 用同 session_store
         p_globex = WecomProvider({"corp_id": "wwGlobex", "agent_id": "1", "redirect_uri": "https://x"}, session_store=ss, tenant_id="globex")

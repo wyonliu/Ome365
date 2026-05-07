@@ -49,7 +49,7 @@ if [ -n "$scan_files" ]; then
 fi
 
 # ── 3. 业务名扫描：禁止具体企业 / 产品 / 内部俗称写进 public 代码 ──
-# 原则：用户口头举例 ≠ 可写进 public 仓的素材。统一换 acme/globex/<tenant-slug> 占位。
+# 原则：作者口头举例 ≠ 可写进 public 仓的素材。统一换 acme/globex/<tenant-slug> 占位。
 # blocklist 从 .githooks/business_name_blocklist.txt 读（每行一个，# 开头为注释）
 # 只扫代码/docs/测试/config 路径；memory 文件、sample 数据、历史迁移代码不扫。
 BIZ_BLOCKLIST_FILE=".githooks/business_name_blocklist.txt"

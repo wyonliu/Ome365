@@ -49,7 +49,7 @@ def is_metadata_line(line, recording_title=""):
     s = line.strip()
     if not s:
         return False
-    # 时间戳行: "2026-04-15 13:27:39|48m 28s|TicNoteUser"
+    # 时间戳行: "YYYY-MM-DD HH:MM:SS|<duration>|<TicNoteUser>"
     if re.match(r'\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\|', s):
         return True
     # 录音标题行（和文件名相同或接近）
