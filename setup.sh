@@ -168,7 +168,7 @@ EOF
       ;;
 
     family)
-      USERNAME=$(ask "管理员用户名" "captain")
+      USERNAME=$(ask "管理员用户名" "admin")
       PW=$(ask "管理员密码（回车跳过则用 magic link）" "")
       if [[ -n "$PW" ]]; then
         HASH=$(python3 -c "import sys; sys.path.insert(0,'.app'); from auth.providers.basic_provider import hash_sha256; print(hash_sha256('$PW'))")
