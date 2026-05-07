@@ -19,6 +19,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 import uvicorn
 
 from share_routes import build_router
@@ -81,6 +82,8 @@ REPORTS_DIR = VAULT / _reports_rel
 # ── FastAPI 组装 ───────────────────────────────────
 app = FastAPI(title="Ome365 Share")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# 2026-04-25 · 公网分享站 gzip：178KB markdown → ~20KB
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
 @app.middleware("http")

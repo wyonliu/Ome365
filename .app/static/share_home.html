@@ -205,6 +205,16 @@ body::before{content:'';position:fixed;top:-200px;left:50%;transform:translateX(
   .modal{min-width:calc(100vw - 40px);margin:0 20px}
 }
 </style>
+<script>
+// 同步设置主题，避免 dark→light 闪烁：新用户（null）/ 选过 light 都走 light；'' 旧值也迁移到 light 前先清洗
+(function(){
+  try {
+    if (localStorage.getItem('sh-theme') === '') localStorage.setItem('sh-theme', 'dark');
+    const v = localStorage.getItem('sh-theme');
+    if (v === null || v === 'light') document.documentElement.setAttribute('data-theme','light');
+  } catch(_){}
+})();
+</script>
 </head>
 <body>
 <div class="wrap">
@@ -279,7 +289,13 @@ const USER = '{{USER}}';
 let docs = [];
 let customFolders = JSON.parse(localStorage.getItem('sh-folders-' + USER) || '[]');
 let view = localStorage.getItem('sh-view') || 'grid';
-let theme = localStorage.getItem('sh-theme') || '';
+// 老版本 dark 存成 ''，一次性迁移到 'dark'，便于区分"未选过"与"选过 dark"
+if (localStorage.getItem('sh-theme') === '') localStorage.setItem('sh-theme', 'dark');
+// 默认白主题：未选过（null）或选过 'light' 都走 light
+let theme = (function(){
+  const v = localStorage.getItem('sh-theme');
+  return (v === null || v === 'light') ? 'light' : 'dark';
+})();
 let collapsed = JSON.parse(localStorage.getItem('sh-collapsed') || '{}');
 let searchQ = '';
 
@@ -543,7 +559,7 @@ function toggleTheme() {
   const on = document.documentElement.getAttribute('data-theme') === 'light';
   if (on) document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', 'light');
-  theme = on ? '' : 'light';
+  theme = on ? 'dark' : 'light';
   localStorage.setItem('sh-theme', theme);
 }
 

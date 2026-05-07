@@ -8,7 +8,26 @@
 <link rel="stylesheet" href="/static/style.css?v=20260417">
 <style>
   /* ══ 核心：杀掉 style.css 的驾舱布局规则 ══ */
-  html { height: auto !important; }
+  html { height: auto !important; font-size: 15px !important; }
+  /* 2026-04-23: 对齐主站 reports 正文 12.5px（.rv-sec-body 标准）。分享页 body 会被浏览器 reset 成 16px，需强制回到 15px，
+     并把所有 chunk 子类型显式锁到 12.5，避免 list/table/quote/headline 吃 body=16 被放大。 */
+  body { font-size: 15px; }
+  .rv-sec-body,
+  .rv-sec-body p,
+  .rv-sec-body li,
+  .rv-chunk,
+  .rv-chunk-prose,
+  .rv-chunk-prose p,
+  .rv-chunk-list,
+  .rv-chunk-list li,
+  .rv-chunk-table,
+  .rv-chunk-table td,
+  .rv-chunk-table th,
+  .rv-chunk-quote,
+  .rv-chunk-headline-text,
+  .rv-chunk-headline-text p { font-size: 12.5px; line-height: 1.75; }
+  .rv-preface, .rv-preface p { font-size: 13.5px; line-height: 1.78; }
+  .rv-chunk-prose p { margin: 0 0 10px; }
   body {
     overflow: auto !important; overflow-x: hidden !important;
     display: block !important; height: auto !important; min-height: 100vh !important;
@@ -164,6 +183,7 @@
 </div>
 
 <script src="/static/vendor/marked.min.js"></script>
+<script src="/static/vendor/marked-cjk-fix.js"></script>
 <script src="/static/ticnote-renderer.js"></script>
 <script>
 const R = typeof TicNoteRenderer !== 'undefined' ? TicNoteRenderer : null;
@@ -652,6 +672,7 @@ async function init() {
     document.title = (title) + ' · Ome365';
     document.getElementById('loading').style.display = 'none';
     content.style.display = '';
+    applyTocMode();
     requestAnimationFrame(() => applyEntranceAnimations());
   } catch (e) {
     showError('网络错误: ' + e.message);
@@ -682,16 +703,16 @@ function showLockCard(user, slug) {
   input.addEventListener('input', () => {
     input.classList.remove('err');
     submit.disabled = !input.value.trim();
-    // auto-submit on paste-like full passphrase (word-word-word-NN, min 12 chars incl. 3 dashes)
+    // auto-submit on paste-like full passphrase (word-word-word)
     const v = input.value.trim();
-    if (/^[a-z]{3,12}-[a-z]{3,12}-[a-z]{3,12}-\d{2}$/.test(v)) {
+    if (/^[a-z]{3,12}-[a-z]{3,12}-[a-z]{3,12}$/.test(v)) {
       if (!submit.classList.contains('loading')) submitLock();
     }
   });
   input.addEventListener('paste', () => {
     setTimeout(() => {
       const v = input.value.trim();
-      if (/^[a-z]{3,12}-[a-z]{3,12}-[a-z]{3,12}-\d{2}$/.test(v)) submitLock();
+      if (/^[a-z]{3,12}-[a-z]{3,12}-[a-z]{3,12}$/.test(v)) submitLock();
     }, 10);
   });
   setTimeout(() => input.focus(), 50);
@@ -786,21 +807,32 @@ async function submitLock(ev) {
   return false;
 }
 
-let _tocMode = 'full'; // 'full' | 'slim' | 'hidden'
-function cycleTocMode() {
-  const order = ['full', 'slim', 'hidden'];
-  _tocMode = order[(order.indexOf(_tocMode) + 1) % order.length];
+// 新用户默认 slim（2 字缩写），用户窄屏友好；切换后持久化到 sh-toc-mode
+let _tocMode = (function(){
+  try {
+    const v = localStorage.getItem('sh-toc-mode');
+    if (v === 'full' || v === 'slim' || v === 'hidden') return v;
+  } catch(_){}
+  return 'slim';
+})();
+function applyTocMode() {
   const toc = document.getElementById('rv-toc');
   if (!toc) return;
   toc.classList.remove('rv-toc--slim', 'rv-toc--hidden');
   if (_tocMode !== 'full') toc.classList.add('rv-toc--' + _tocMode);
   const btn = document.getElementById('toc-toggle-btn');
   if (btn) btn.innerHTML = _tocMode === 'hidden' ? '<span>☰</span>' : _tocMode === 'slim' ? '<span>◀</span>' : '<span>✕</span>';
-  btn.title = _tocMode === 'full' ? '收起目录' : _tocMode === 'slim' ? '隐藏目录' : '展开目录';
+  if (btn) btn.title = _tocMode === 'full' ? '收起目录' : _tocMode === 'slim' ? '隐藏目录' : '展开目录';
   const label = document.getElementById('toc-label');
   if (label) label.style.display = _tocMode === 'full' ? '' : 'none';
   toc.querySelectorAll('.rv-toc-txt--full').forEach(el => { el.style.display = _tocMode === 'full' ? '' : 'none'; });
   toc.querySelectorAll('.rv-toc-txt--abbr').forEach(el => { el.style.display = _tocMode === 'slim' ? '' : 'none'; });
+}
+function cycleTocMode() {
+  const order = ['full', 'slim', 'hidden'];
+  _tocMode = order[(order.indexOf(_tocMode) + 1) % order.length];
+  try { localStorage.setItem('sh-toc-mode', _tocMode); } catch(_){}
+  applyTocMode();
 }
 
 function applyEntranceAnimations() {
@@ -819,24 +851,29 @@ function applyEntranceAnimations() {
 function toggleTheme() {
   const html = document.documentElement;
   const isLight = html.getAttribute('data-theme') === 'light';
-  const next = isLight ? '' : 'light';
+  const next = isLight ? 'dark' : 'light';
   html.setAttribute('data-theme', next);
   document.getElementById('theme-toggle').textContent = isLight ? '☀️' : '🌙';
   // Use same storage key as share_home.html so theme persists across share pages
   localStorage.setItem('sh-theme', next);
 }
 (function(){
-  // Migrate legacy 'share-theme' (values 'light'/'dark') to 'sh-theme' (values 'light'/'')
+  // 迁移老 key：'share-theme'('light'/'dark') → 'sh-theme'
   const legacy = localStorage.getItem('share-theme');
   if (legacy !== null && localStorage.getItem('sh-theme') === null) {
-    localStorage.setItem('sh-theme', legacy === 'light' ? 'light' : '');
+    localStorage.setItem('sh-theme', legacy === 'light' ? 'light' : 'dark');
     localStorage.removeItem('share-theme');
   }
+  // 老版本 dark 存成 ''，一次性迁移到 'dark'，便于区分"未选过"与"选过 dark"
+  if (localStorage.getItem('sh-theme') === '') localStorage.setItem('sh-theme', 'dark');
   const saved = localStorage.getItem('sh-theme');
-  if (saved === 'light') {
+  // 默认白主题：新用户（null）或显式 'light' 都走 light；'dark' 保持 dark
+  const useLight = saved === null || saved === 'light';
+  if (useLight) {
     document.documentElement.setAttribute('data-theme', 'light');
-    const t = document.getElementById('theme-toggle'); if (t) t.textContent = '🌙';
   }
+  const tgl = document.getElementById('theme-toggle');
+  if (tgl) tgl.textContent = useLight ? '🌙' : '☀️';
 })();
 
 init();

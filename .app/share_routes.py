@@ -31,6 +31,11 @@ from share_auth import (
     make_public_policy,
     cookie_name,
     _iso_after_seconds,
+    ensure_master_key,
+    encrypt_password,
+    decrypt_password,
+    make_stateless_sid,
+    verify_stateless_sid,
 )
 
 
@@ -105,12 +110,34 @@ def build_router(
 
     # ── Privacy tier 2: 密码保护 · AuthStore 懒初始化 ──
     _auth_ref = [None]  # type: List[Optional[AuthStore]]
+    _auth_err = [None]  # type: List[Optional[str]]
+    _master_key_err = [None]  # type: List[Optional[str]]
+
+    def _master_key_path():
+        return get_registry_path().parent / "master.key"
+
+    def _master_key() -> Optional[bytes]:
+        """服务端 master.key · 失败返回 None 并记 err，不 500。"""
+        try:
+            return ensure_master_key(_master_key_path())
+        except Exception as e:
+            _master_key_err[0] = "{}: {}".format(type(e).__name__, e)
+            return None
 
     def auth_store() -> AuthStore:
+        """失败会抛 —— happy path 用此。不想让 SQLite 异常 500 整条请求时用 safe_auth_store()。"""
         if _auth_ref[0] is None:
             db_path = get_registry_path().parent / "share_auth.db"
             _auth_ref[0] = AuthStore(db_path)
         return _auth_ref[0]
+
+    def safe_auth_store() -> Optional[AuthStore]:
+        """AuthStore 初始化失败 → 返回 None + 记 _auth_err，调用方降级，不要 500。"""
+        try:
+            return auth_store()
+        except Exception as e:
+            _auth_err[0] = "{}: {}".format(type(e).__name__, e)
+            return None
 
     _SESSION_TTL_SECONDS = 30 * 86400  # 30 天滚动
 
@@ -149,13 +176,37 @@ def build_router(
 
     def _valid_session_for(req: Request, user: str, slug: str) -> Optional[dict]:
         """
-        读 cookie → 查 session → 校验归属 + 未过期 + 未 revoke。
-        命中 → touch 续期（rolling），返回 session row dict；否则 None。
+        读 cookie → 校验归属 + 未过期。两路接受：
+          1) v2.<fernet>  stateless 签名 sid（DB 挂也能认）
+          2) SQLite session row（支持 revoke + rolling touch）
+        命中 → 返回 {sid, user, slug, expires_at, stateless?}；否则 None。
         """
         sid = req.cookies.get(cookie_name(user, slug))
         if not sid:
             return None
-        row = auth_store().get_session(sid)
+        # 1) stateless 签名 sid —— Fernet 自带 MAC + 内置 ttl
+        if sid.startswith("v2."):
+            mk = _master_key()
+            if mk is None:
+                return None
+            left = verify_stateless_sid(sid, user, slug, mk)
+            if left is None:
+                return None
+            return {
+                "sid": sid,
+                "user": user,
+                "slug": slug,
+                "expires_at": _iso_after_seconds(left),
+                "stateless": True,
+            }
+        # 2) SQLite-backed sid
+        store = safe_auth_store()
+        if store is None:
+            return None
+        try:
+            row = store.get_session(sid)
+        except Exception:
+            return None
         if not row:
             return None
         if row["user"] != user or row["slug"] != slug:
@@ -165,7 +216,10 @@ def build_router(
         if row["expires_at"] <= _iso_after_seconds(0):
             return None
         new_exp = _iso_after_seconds(_SESSION_TTL_SECONDS)
-        auth_store().touch_session(sid, new_exp)
+        try:
+            store.touch_session(sid, new_exp)
+        except Exception:
+            pass
         return {"sid": sid, "user": user, "slug": slug, "expires_at": new_exp}
 
     # ── Registry helpers（闭包内） ──
@@ -252,7 +306,12 @@ def build_router(
         if not title:
             title = _extract_title(fp)
         from datetime import date
-        ns[slug] = {"path": path, "title": title, "created": date.today().isoformat()}
+        existing = ns.get(slug, {}) if isinstance(ns.get(slug), dict) else {}
+        entry = {"path": path, "title": title, "created": existing.get("created") or date.today().isoformat()}
+        for k in ("policy", "folder", "updated"):
+            if k in existing:
+                entry[k] = existing[k]
+        ns[slug] = entry
         save_registry(reg)
         base = get_base_url().rstrip("/")
         return {"url": f"{base}{prefix}/{user}/{slug}", "slug": slug, "user": user}
@@ -322,13 +381,17 @@ def build_router(
         if not title:
             title = existing.get("title") or _extract_title(doc_abs)
         from datetime import date
-        ns[slug] = {
+        new_entry = {
             "path": path,
             "title": title,
             "created": existing.get("created") or date.today().isoformat(),
             "updated": date.today().isoformat(),
             "folder": existing.get("folder", ""),
         }
+        # 保留 password policy —— "更新内容" 不能擦掉访客已知道的密码
+        if "policy" in existing:
+            new_entry["policy"] = existing["policy"]
+        ns[slug] = new_entry
         save_registry(reg)
 
         base = get_base_url().rstrip("/")
@@ -408,6 +471,29 @@ def build_router(
             written.append({"path": str(rel), "size": len(data)})
         return {"ok": True, "written": written}
 
+    # ── Cockpit config publish channel（远端 .app/cockpit_config.json 热更）──
+    #   与 publish_static 同一把 publish_token，写入路径锁死为 app_dir / cockpit_config.json。
+    #   本地改完组织数据 → --with-config 推过来 → 远端驾舱立即刷新（无需重启）。
+    @r.post("/api/publish_config")
+    async def api_publish_config(
+        file: UploadFile = File(...),
+        x_publish_token: Optional[str] = Header(None, alias="X-Publish-Token"),
+    ):
+        expected = load_publish_token()
+        if not expected:
+            raise HTTPException(501, "publish disabled (no token configured on server)")
+        if not x_publish_token or not hmac.compare_digest(expected, x_publish_token):
+            raise HTTPException(401, "bad or missing X-Publish-Token")
+        data = await file.read()
+        # Validate JSON before writing — refuse to corrupt remote config on bad upload.
+        try:
+            json.loads(data.decode("utf-8"))
+        except Exception as e:
+            raise HTTPException(400, f"invalid JSON: {e}")
+        target = Path(__file__).parent / "cockpit_config.json"
+        target.write_bytes(data)
+        return {"ok": True, "size": len(data), "path": "cockpit_config.json"}
+
     @r.delete("/api/register")
     async def api_unregister(user: str, slug: str):
         reg = load_registry()
@@ -428,7 +514,9 @@ def build_router(
         if not entry:
             raise HTTPException(404, "Not found")
         # T2：密码保护门禁。未解锁 → 401 + WWW-Authenticate 指示前端上锁屏。
-        if is_password_protected(entry):
+        protected = is_password_protected(entry)
+        view_sid = None
+        if protected:
             sess = _valid_session_for(request, user, slug)
             if not sess:
                 return JSONResponse(
@@ -436,14 +524,30 @@ def build_router(
                     status_code=401,
                     headers={"WWW-Authenticate": 'OmePassphrase realm="share"'},
                 )
-            auth_store().log(user, slug, "view", sid=sess["sid"],
-                             ip=_client_ip(request), ua=_client_ua(request))
+            view_sid = sess["sid"]
+        # 2026-04-23：未加密文档也要留访问统计（设置页 chip 需要 total_views / last_view）
+        _s = safe_auth_store()
+        if _s is not None:
+            try:
+                _s.log(user, slug, "view", sid=view_sid,
+                       ip=_client_ip(request), ua=_client_ua(request))
+            except Exception:
+                pass
         fp = get_vault() / entry["path"]
         if not fp.exists():
             raise HTTPException(404, "File missing from vault")
+        # 2026-04-25 · 大文档 ETag/304：分享端公网更怕慢。
+        # ETag 只看文件 mtime+size；密码会话状态不进 ETag（304 走相同会话才命中）
+        st = fp.stat()
+        etag = f'W/"{int(st.st_mtime)}-{st.st_size}"'
+        if request.headers.get("if-none-match") == etag:
+            return JSONResponse(None, status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache, private"})
         raw = fp.read_text("utf-8")
         meta = _parse_frontmatter(raw)
-        return {"raw": raw, "meta": meta, "title": entry["title"], "slug": slug, "user": user}
+        return JSONResponse(
+            {"raw": raw, "meta": meta, "title": entry["title"], "slug": slug, "user": user},
+            headers={"ETag": etag, "Cache-Control": "no-cache, private"},
+        )
 
     # ── T2 · 访客解锁 ──
     @r.post("/unlock/{user}/{slug}")
@@ -460,16 +564,23 @@ def build_router(
 
         ip = _client_ip(request)
         ua = _client_ua(request)
-        store = auth_store()
+        store = safe_auth_store()  # AuthStore 挂也要能验密码——解锁不能因 SQLite 死全站
 
-        # 速率限制在先（防止慢密码验证被当作放大器）
-        reason = store.check_rate_limit(user, slug, ip)
-        if reason:
-            store.log(user, slug, "rate_block_" + reason, ip=ip, ua=ua)
-            return JSONResponse(
-                {"error": "rate_limited", "reason": reason},
-                status_code=429,
-            )
+        # 速率限制在先（防止慢密码验证被当作放大器）。store 挂 → 跳过限速（本地主站可接受）。
+        if store is not None:
+            try:
+                reason = store.check_rate_limit(user, slug, ip)
+            except Exception:
+                reason = None
+            if reason:
+                try:
+                    store.log(user, slug, "rate_block_" + reason, ip=ip, ua=ua)
+                except Exception:
+                    pass
+                return JSONResponse(
+                    {"error": "rate_limited", "reason": reason},
+                    status_code=429,
+                )
 
         try:
             body = await request.json()
@@ -481,30 +592,65 @@ def build_router(
 
         stored_hash = ((entry.get("policy") or {}).get("password_hash") or "")
         if not verify_password(password, stored_hash):
-            store.record_fail(user, slug, ip)
-            store.log(user, slug, "unlock_fail", ip=ip, ua=ua)
-            # 再读一次看是否这一击触发锁
-            new_reason = store.check_rate_limit(user, slug, ip)
-            snap = store.rate_limit_snapshot(user, slug, ip)
+            fails_ip_10min = None
+            locked = None
+            if store is not None:
+                try:
+                    store.record_fail(user, slug, ip)
+                except Exception:
+                    pass
+                try:
+                    store.log(user, slug, "unlock_fail", ip=ip, ua=ua)
+                except Exception:
+                    pass
+                try:
+                    locked = store.check_rate_limit(user, slug, ip)
+                except Exception:
+                    locked = None
+                try:
+                    snap = store.rate_limit_snapshot(user, slug, ip)
+                    fails_ip_10min = snap.get("ip_10min")
+                except Exception:
+                    fails_ip_10min = None
             return JSONResponse(
-                {"error": "invalid_password", "locked": new_reason,
-                 "fails_ip_10min": snap["ip_10min"]},
+                {"error": "invalid_password", "locked": locked,
+                 "fails_ip_10min": fails_ip_10min},
                 status_code=401,
             )
 
-        sid, expires_at = store.create_session(user, slug, ip, ua, _SESSION_TTL_SECONDS)
-        store.log(user, slug, "unlock_ok", sid=sid, ip=ip, ua=ua)
+        # 密码对了 → 优先 SQLite session；失败 → 降级到 Fernet 签名 stateless sid（DB 死也能保持会话）。
+        sid = None
+        expires_at = _iso_after_seconds(_SESSION_TTL_SECONDS)
+        stateless = False
+        if store is not None:
+            try:
+                sid, expires_at = store.create_session(user, slug, ip, ua, _SESSION_TTL_SECONDS)
+            except Exception:
+                sid = None
+            try:
+                store.log(user, slug, "unlock_ok", sid=sid, ip=ip, ua=ua)
+            except Exception:
+                pass
+        if sid is None:
+            mk = _master_key()
+            if mk is not None:
+                sid = make_stateless_sid(user, slug, mk, _SESSION_TTL_SECONDS)
+                expires_at = _iso_after_seconds(_SESSION_TTL_SECONDS)
+                stateless = True
 
-        resp = JSONResponse({"ok": True, "expires_at": expires_at})
-        resp.set_cookie(
-            cookie_name(user, slug),
-            sid,
-            max_age=_SESSION_TTL_SECONDS,
-            path="/",
-            httponly=True,
-            samesite="lax",
-            secure=request.url.scheme == "https",
-        )
+        resp = JSONResponse({"ok": True, "expires_at": expires_at,
+                             "store_degraded": store is None,
+                             "stateless": stateless})
+        if sid:
+            resp.set_cookie(
+                cookie_name(user, slug),
+                sid,
+                max_age=_SESSION_TTL_SECONDS,
+                path="/",
+                httponly=True,
+                samesite="lax",
+                secure=request.url.scheme == "https",
+            )
         return resp
 
     # ── T2 · 管理 API（需要 X-Publish-Token） ──
@@ -517,16 +663,27 @@ def build_router(
         entry = _get_entry(user, slug)
         pol = entry.get("policy") or {}
         protected = is_password_protected(entry)
-        snap = auth_store().rate_limit_snapshot(user, slug, _client_ip(request))
-        sess_count = len(auth_store().list_sessions(user, slug))
+        # AuthStore 可能初始化失败（远端文件权限等）→ 降级返回，不影响核心字段。
+        store = safe_auth_store()
+        snap = None
+        sess_count = None
+        store_err = _auth_err[0] if store is None else None
+        if store is not None:
+            try:
+                snap = store.rate_limit_snapshot(user, slug, _client_ip(request))
+                sess_count = len(store.list_sessions(user, slug))
+            except Exception as e:
+                store_err = "{}: {}".format(type(e).__name__, e)
         return {
             "user": user,
             "slug": slug,
             "visibility": pol.get("visibility", "public"),
             "protected": protected,
             "password_set_at": pol.get("password_set_at"),
+            "can_reveal": bool(protected and pol.get("password_enc")),
             "active_sessions": sess_count,
             "rate_limit": snap,
+            "store_error": store_err,
         }
 
     @r.post("/api/share/{user}/{slug}/password/enable")
@@ -544,9 +701,18 @@ def build_router(
             raise HTTPException(409, "already password-protected; use rotate to change")
         plain = generate_passphrase()
         h = hash_password(plain)
-        entry["policy"] = make_password_policy(h)
+        mk = _master_key()
+        enc = encrypt_password(plain, mk) if mk else None
+        entry["policy"] = make_password_policy(h, password_enc=enc)
         _save_entry(user, slug, entry)
-        auth_store().log(user, slug, "password_enable", ip=_client_ip(request), ua=_client_ua(request))
+        # log 走 AuthStore SQLite，可能在远端失败；绝不能因此把 plain 吞掉。
+        store = safe_auth_store()
+        if store is not None:
+            try:
+                store.log(user, slug, "password_enable",
+                          ip=_client_ip(request), ua=_client_ua(request))
+            except Exception:
+                pass
         base = get_base_url().rstrip("/")
         return {
             "ok": True,
@@ -569,11 +735,23 @@ def build_router(
             raise HTTPException(409, "not protected; use enable")
         plain = generate_passphrase()
         h = hash_password(plain)
-        entry["policy"] = make_password_policy(h)
+        mk = _master_key()
+        enc = encrypt_password(plain, mk) if mk else None
+        entry["policy"] = make_password_policy(h, password_enc=enc)
         _save_entry(user, slug, entry)
-        revoked = auth_store().revoke_all_sessions(user, slug)
-        auth_store().log(user, slug, "password_rotate",
-                         ip=_client_ip(request), ua=_client_ua(request))
+        # SQLite 可能在远端挂（权限/schema）；不能因此把 plain 吞掉。
+        revoked = 0
+        store = safe_auth_store()
+        if store is not None:
+            try:
+                revoked = store.revoke_all_sessions(user, slug)
+            except Exception:
+                revoked = 0
+            try:
+                store.log(user, slug, "password_rotate",
+                          ip=_client_ip(request), ua=_client_ua(request))
+            except Exception:
+                pass
         base = get_base_url().rstrip("/")
         return {
             "ok": True,
@@ -596,10 +774,123 @@ def build_router(
             return {"ok": True, "visibility": "public", "revoked_sessions": 0}
         entry["policy"] = make_public_policy()
         _save_entry(user, slug, entry)
-        revoked = auth_store().revoke_all_sessions(user, slug)
-        auth_store().log(user, slug, "password_disable",
-                         ip=_client_ip(request), ua=_client_ua(request))
+        revoked = 0
+        store = safe_auth_store()
+        if store is not None:
+            try:
+                revoked = store.revoke_all_sessions(user, slug)
+            except Exception:
+                revoked = 0
+            try:
+                store.log(user, slug, "password_disable",
+                          ip=_client_ip(request), ua=_client_ua(request))
+            except Exception:
+                pass
         return {"ok": True, "visibility": "public", "revoked_sessions": revoked}
+
+    # ── T2R · 眼睛按钮：明文回显 ──
+    @r.get("/api/share/{user}/{slug}/password/reveal")
+    async def share_password_reveal(
+        user: str, slug: str, request: Request,
+        x_publish_token: Optional[str] = Header(None, alias="X-Publish-Token"),
+    ):
+        """
+        用服务端 master.key 解密 password_enc，返回明文。
+        老的 hash-only 条目没有 enc，返回 {plain:null, recoverable:false}，前端提示先轮换。
+        """
+        _check_publish_token(x_publish_token)
+        entry = _get_entry(user, slug)
+        pol = entry.get("policy") or {}
+        if not is_password_protected(entry):
+            return {"plain": None, "recoverable": False, "reason": "not_protected"}
+        enc = pol.get("password_enc")
+        if not enc:
+            return {"plain": None, "recoverable": False, "reason": "legacy_hash_only"}
+        mk = _master_key()
+        if not mk:
+            return {"plain": None, "recoverable": False,
+                    "reason": "master_key_error", "error": _master_key_err[0]}
+        try:
+            plain = decrypt_password(enc, mk)
+        except Exception as e:
+            return {"plain": None, "recoverable": False,
+                    "reason": "decrypt_failed", "error": str(e)}
+        # audit log 走 AuthStore 可能失败，不致命。
+        store = safe_auth_store()
+        if store is not None:
+            try:
+                store.log(user, slug, "password_reveal",
+                          ip=_client_ip(request), ua=_client_ua(request))
+            except Exception:
+                pass
+        base = get_base_url().rstrip("/")
+        return {
+            "plain": plain,
+            "recoverable": True,
+            "password_set_at": pol.get("password_set_at"),
+            "url": "{}{}/{}/{}".format(base, prefix, user, slug),
+            "title": entry.get("title") or slug,
+        }
+
+    # ── T2R · 批量轮换：给 user 所有已保护文档一键生成新密码 ──
+    @r.post("/api/share/rotate_all")
+    async def share_rotate_all(
+        user: str, request: Request,
+        x_publish_token: Optional[str] = Header(None, alias="X-Publish-Token"),
+        only_legacy: int = 0,
+    ):
+        """
+        body 不需要。query only_legacy=1 则只轮换「没有 password_enc」的老条目（不影响已能眼睛恢复的）。
+        返回 {items:[{slug,title,url,password,password_set_at,status}], revoked_total}
+        """
+        _check_publish_token(x_publish_token)
+        reg = load_registry()
+        ns = reg.get(user) or {}
+        mk = _master_key()
+        base = get_base_url().rstrip("/")
+        store = safe_auth_store()
+        items = []
+        revoked_total = 0
+        for slug, entry in list(ns.items()):
+            pol = entry.get("policy") or {}
+            if pol.get("visibility") != "password":
+                continue
+            if not pol.get("password_hash"):
+                continue
+            if only_legacy and pol.get("password_enc"):
+                continue
+            plain = generate_passphrase()
+            h = hash_password(plain)
+            enc = encrypt_password(plain, mk) if mk else None
+            entry["policy"] = make_password_policy(h, password_enc=enc)
+            ns[slug] = entry
+            if store is not None:
+                try:
+                    revoked_total += store.revoke_all_sessions(user, slug)
+                except Exception:
+                    pass
+                try:
+                    store.log(user, slug, "password_rotate_batch",
+                              ip=_client_ip(request), ua=_client_ua(request))
+                except Exception:
+                    pass
+            items.append({
+                "slug": slug,
+                "title": entry.get("title") or slug,
+                "url": "{}{}/{}/{}".format(base, prefix, user, slug),
+                "password": plain,
+                "password_set_at": entry["policy"]["password_set_at"],
+                "status": "rotated",
+            })
+        reg[user] = ns
+        save_registry(reg)
+        return {
+            "ok": True,
+            "user": user,
+            "items": items,
+            "count": len(items),
+            "revoked_total": revoked_total,
+        }
 
     @r.get("/api/share/{user}/{slug}/sessions")
     async def share_sessions_list(
@@ -608,7 +899,13 @@ def build_router(
     ):
         _check_publish_token(x_publish_token)
         _get_entry(user, slug)
-        return {"sessions": auth_store().list_sessions(user, slug)}
+        _s = safe_auth_store()
+        if _s is None:
+            return {"sessions": [], "store_degraded": True}
+        try:
+            return {"sessions": _s.list_sessions(user, slug)}
+        except Exception:
+            return {"sessions": [], "store_degraded": True}
 
     @r.post("/api/share/{user}/{slug}/sessions/revoke")
     async def share_sessions_revoke(
@@ -642,7 +939,59 @@ def build_router(
     ):
         _check_publish_token(x_publish_token)
         _get_entry(user, slug)
-        return {"audit": auth_store().tail_audit(user, slug, limit)}
+        _s = safe_auth_store()
+        if _s is None:
+            return {"audit": [], "store_degraded": True}
+        try:
+            return {"audit": _s.tail_audit(user, slug, limit)}
+        except Exception:
+            return {"audit": [], "store_degraded": True}
+
+    @r.get("/api/share/_diag")
+    async def share_diag(
+        x_publish_token: Optional[str] = Header(None, alias="X-Publish-Token"),
+    ):
+        """远端 SQLite / AuthStore 诊断。看 init 成不成、db_path 是啥、权限咋样、traceback。"""
+        import os
+        import traceback
+        _check_publish_token(x_publish_token)
+        try:
+            db_path = get_registry_path().parent / "share_auth.db"
+            parent = db_path.parent
+            parent_info = {
+                "path": str(parent),
+                "exists": parent.exists(),
+                "is_dir": parent.is_dir(),
+                "writable": os.access(str(parent), os.W_OK),
+            }
+        except Exception as e:
+            parent_info = {"error": "{}: {}".format(type(e).__name__, e)}
+        db_info = {}
+        try:
+            db_info["path"] = str(db_path)
+            db_info["exists"] = db_path.exists()
+            if db_path.exists():
+                db_info["size"] = db_path.stat().st_size
+                db_info["writable"] = os.access(str(db_path), os.W_OK)
+        except Exception as e:
+            db_info["error"] = "{}: {}".format(type(e).__name__, e)
+        init_ok = False
+        init_err = None
+        init_tb = None
+        try:
+            _ = auth_store()
+            init_ok = True
+        except Exception as e:
+            init_err = "{}: {}".format(type(e).__name__, e)
+            init_tb = traceback.format_exc()
+        return {
+            "parent": parent_info,
+            "db": db_info,
+            "init_ok": init_ok,
+            "init_error": init_err,
+            "init_traceback": init_tb,
+            "cached_error": _auth_err[0],
+        }
 
     @r.get("/api/share/info_batch")
     async def share_info_batch(
@@ -657,17 +1006,42 @@ def build_router(
         reg = load_registry()
         ns = reg.get(user) or {}
         out = {}
-        store = auth_store()
+        store = safe_auth_store()
+        store_err = _auth_err[0] if store is None else None
         for slug, entry in ns.items():
             pol = entry.get("policy") or {}
             protected = is_password_protected(entry)
+            active = None
+            if protected and store is not None:
+                try:
+                    active = len(store.list_sessions(user, slug))
+                except Exception:
+                    active = None
+            elif not protected:
+                active = 0
+            # 2026-04-23：加/未加密都拉 view stats（未加密也要在设置页露访问数）
+            total_views = 0
+            last_view = ""
+            unique_ips = 0
+            if store is not None:
+                try:
+                    vs = store.view_stats(user, slug)
+                    total_views = vs.get("total", 0)
+                    last_view = vs.get("last_ts", "")
+                    unique_ips = vs.get("unique_ips", 0)
+                except Exception:
+                    pass
             out[slug] = {
                 "protected": protected,
                 "visibility": pol.get("visibility", "public"),
                 "password_set_at": pol.get("password_set_at"),
-                "active_sessions": len(store.list_sessions(user, slug)) if protected else 0,
+                "can_reveal": bool(protected and pol.get("password_enc")),
+                "active_sessions": active,
+                "total_views": total_views,
+                "last_view": last_view,
+                "unique_ips": unique_ips,
             }
-        return {"user": user, "items": out}
+        return {"user": user, "items": out, "store_error": store_err}
 
     @r.get("/api/user/{user}/docs")
     async def api_user_docs(user: str):
