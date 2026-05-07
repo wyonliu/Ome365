@@ -1,0 +1,12 @@
+# /etc/logrotate.d/ome365 — 分享站 + nginx 日志每日切割（generic policy）
+/var/log/ome365-logs/*.log {
+    daily
+    rotate 14
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    dateext
+    dateformat -%Y%m%d
+}

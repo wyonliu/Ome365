@@ -1,0 +1,29 @@
+[Unit]
+Description=Ome365 Share Station (standalone read-only share server)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ome365
+Group=ome365
+WorkingDirectory=/opt/ome365/.app
+Environment=OME365_VAULT=/opt/ome365-share-vault
+Environment=SHARE_PORT=3651
+Environment=SHARE_BASE_URL=https://ome365.example.com
+Environment=NO_PROXY=localhost,127.0.0.1
+ExecStart=/opt/ome365/.venv/bin/python3 share_server.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/opt/ome365-logs/share.log
+StandardError=append:/opt/ome365-logs/share.err.log
+
+# 安全加固
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ome365 /opt/ome365-share-vault /opt/ome365-logs
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
