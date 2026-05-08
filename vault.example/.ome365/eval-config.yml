@@ -1,0 +1,43 @@
+# Per-tenant eval configuration · sample for vault.example
+# Loaded by .app/ome365_eval.py (v1.1)
+
+preset: engineer  # engineer | pm | sales | ops | mixed
+
+# Override (FinOps 2026 命名 · D5 不再 25% baked-in · per-preset 真分)
+weights:
+  delivery: 0.10              # D1
+  cost_per_outcome: 0.15      # D2
+  quality: 0.20               # D3
+  judgment: 0.10              # D4
+  ecosystem: 0.25             # D5 (engineer preset · 鼓励技术贡献)
+  revenue_per_workflow: 0.10  # D6
+  learning: 0.10              # D7
+
+# Window 控制
+default_window_days: 30
+sample_size_min: 5
+
+# 区域合规 (Fix 5)
+region: global  # cn | eu | us | global
+
+# (cn region 时下面 2 字段必填)
+# pipl_notify_acknowledged_by:
+#   alice: 2026-05-08
+#   bob: 2026-05-09
+# opted_out_members:
+#   - charlie
+
+# (eu region 时显式启用 GDPR Art. 22 例外)
+# eval_enabled_eu: false
+
+# 价值锚点 weight (0-90 天 D6 用·之后被 roi_actual USD 替代)
+value_anchor_weights:
+  P: 2.0       # Product growth
+  XL: 3.0
+  L: 2.0
+  M: 1.0
+  维护性: -0.5  # 引入维护成本
+  Revert: -2.0  # 被回滚
+
+# Performance cache (Fix 3 · team-distribution.json)
+team_distribution_cache_max_age_hours: 168  # 1 week
