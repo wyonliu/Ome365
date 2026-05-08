@@ -55,6 +55,13 @@ prompts:
   user_bio: "regional VP at a head life insurer · responsible for premium growth and compliance"
 ```
 
+## Sample entities
+
+- [`entities/Underwriter-Example.md`](entities/Underwriter-Example.md) — senior commercial-lines underwriter · authority limits · decision patterns
+- [`entities/Auto-Comprehensive-Coverage.md`](entities/Auto-Comprehensive-Coverage.md) — coverage-type term · ISO form reference · auto-extracted claim categories
+
+⚠️ Policy-holder PII NEVER lives in entity files — stays in policy admin system.
+
 ## Key principles (sample — see `principles.yml`)
 
 - 银保监 letter: 5-day initial response + 14-day full plan

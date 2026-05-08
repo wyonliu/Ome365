@@ -61,6 +61,13 @@ prompts:
   user_bio: "department chair · academic medical center · interested in clinical AI augmentation (NOT diagnosis automation)"
 ```
 
+## Sample entities
+
+- [`entities/Hospital-Example.md`](entities/Hospital-Example.md) — facility entity with v0.2 schema (NPI / accreditation / service-lines)
+- [`entities/MM-Review-Process.md`](entities/MM-Review-Process.md) — process term · privilege-aware · auto-extracted decision themes
+
+⚠️ Patient-level data NEVER lives in entity files — see Privacy / HIPAA note above.
+
 ## Sample principles (see `principles.yml`)
 
 - M&M finding: 30-day cross-unit read-across mandatory

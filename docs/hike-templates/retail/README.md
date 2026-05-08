@@ -45,6 +45,11 @@ prompts:
   user_bio: "regional ops manager · 38 stores in East region"
 ```
 
+## Sample entities
+
+- [`entities/Store-Example.md`](entities/Store-Example.md) — flagship store organization · KPIs · auto-extracted decisions
+- [`entities/SKU-Family-Example.md`](entities/SKU-Family-Example.md) — product family · lifecycle · cross-store performance signals
+
 ## Sample principles (see `principles.yml`)
 
 - OOS > 5%: same-week category review · cross-store check

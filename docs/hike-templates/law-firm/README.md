@@ -64,6 +64,13 @@ prompts:
   user_bio: "senior associate · M&A practice · cross-border transactions"
 ```
 
+## Sample entities
+
+- [`entities/Matter-Example.md`](entities/Matter-Example.md) — engagement term · privilege-aware · phase progression
+- [`entities/Conflicts-Clearance-Process.md`](entities/Conflicts-Clearance-Process.md) — pre-engagement screening process · ABA Model Rule 1.7 governance
+
+⚠️ Privileged communication NEVER lives in entity files — only metadata + decision themes.
+
 ## Sample principles (see `principles.yml`)
 
 - Pitch acceptance: triple-check fee structure consistency vs precedent

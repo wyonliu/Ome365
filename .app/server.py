@@ -79,6 +79,13 @@ try:
 except ImportError as _e:
     logging.getLogger("ome365").warning(f"ome365.id/a2a routers not loaded: {_e}")
 
+# ── ome365.cost · per-tenant LLM budget + usage cap (patch r1.0 §六 D-2) ──
+try:
+    from ome365_cost import router as cost_router
+    app.include_router(cost_router)
+except ImportError as _e:
+    logging.getLogger("ome365").warning(f"ome365.cost router not loaded: {_e}")
+
 
 # ── T1 Privacy headers · 仅作用于 /s 前缀（share 路由）──
 # 主站驾舱走 AuthProvider 自己的门禁，头部要保持干净；
