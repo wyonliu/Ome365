@@ -233,4 +233,126 @@ __all__ = [
     "transition_task",
     "FederationEntry",
     "FederationRegistry",
+    "router",
+    "well_known_router",
 ]
+
+
+# ── HTTP routers (mounted by .app/server.py · v3.6 §九 V5 真空带) ────────────
+# Status: v0.1 stub · trust check + lifecycle state machine · NO signing crypto
+# Real DID verification + agent-card signing integrate with mindos.protocol.a2a
+# in D+5 ~ D+12 · full Federation discovery + 3-tier trust enforcement D+14 ~ D+45
+from fastapi import APIRouter, HTTPException
+
+# Process-singleton federation registry (v0.1 in-memory · v1.x backed by signed JSON-LD)
+_REGISTRY = FederationRegistry()
+
+router = APIRouter(prefix="/api/a2a", tags=["a2a"])
+
+
+@router.get("/trust/tiers")
+def list_trust_tiers():
+    """List the 3 trust tiers (T1 Public · T2 Pinned · T3 Internal · v3.6 §5.2 line 226)."""
+    return {"tiers": TRUST_TIER_DEFINITIONS, "version": "0.1-stub"}
+
+
+@router.post("/trust/check")
+def check_trust(payload: dict):
+    """Check whether a caller (DID) is allowed at requested tier."""
+    caller = payload.get("caller_did", "")
+    tier = payload.get("tier", "T1")
+    pinlist = payload.get("tenant_pinlist") or None
+    same_tenant = payload.get("same_tenant_did") or None
+    allowed, reason = check_trust_tier(caller, tier, tenant_pinlist=pinlist, same_tenant_did=same_tenant)
+    return {"allowed": allowed, "reason": reason, "tier": tier, "version": "0.1-stub"}
+
+
+@router.post("/task/create")
+def create_task_endpoint(payload: dict):
+    """Create an A2A task (v0.1 stub · returns id + state · NO actual execution)."""
+    caller = payload.get("caller_did")
+    callee = payload.get("callee_did")
+    capability = payload.get("capability")
+    sla = payload.get("sla", "near_realtime")
+    if not caller or not callee or not capability:
+        raise HTTPException(400, "caller_did + callee_did + capability required")
+    if sla not in ("immediate", "near_realtime", "async"):
+        raise HTTPException(400, "sla must be immediate/near_realtime/async")
+    task = make_task(caller, callee, capability, payload.get("payload", {}), sla=sla)
+    return {
+        "task_id": task.task_id,
+        "state": task.state,
+        "deadline": task.deadline(),
+        "sla_seconds": SLA_SECONDS[sla],
+        "version": "0.1-stub",
+    }
+
+
+@router.get("/sla")
+def get_sla():
+    """SLA segments (v3.6 §9.3 line 487)."""
+    return {"sla_seconds": SLA_SECONDS, "version": "0.1-stub"}
+
+
+@router.get("/federation/list")
+def federation_list():
+    """List federated tenants (v0.1 in-memory)."""
+    return {
+        "peers": [
+            {
+                "tenant_did": e.tenant_did,
+                "label": e.tenant_label,
+                "capabilities": e.public_capabilities,
+            }
+            for e in _REGISTRY.all()
+        ],
+        "version": "0.1-stub",
+    }
+
+
+@router.post("/federation/register")
+def federation_register(payload: dict):
+    """Register a tenant in the federation (v0.1 stub · in-memory)."""
+    tenant_did = payload.get("tenant_did", "")
+    label = payload.get("tenant_label", "")
+    contact = payload.get("contact_email", "")
+    caps = payload.get("public_capabilities") or []
+    if not tenant_did or not label:
+        raise HTTPException(400, "tenant_did + tenant_label required")
+    entry = FederationEntry(
+        tenant_did=tenant_did,
+        tenant_label=label,
+        contact_email=contact,
+        public_capabilities=list(caps),
+    )
+    added = _REGISTRY.register(entry)
+    return {"added": added, "tenant_did": tenant_did}
+
+
+# ── /.well-known/agent-card.json (A2A v1.0 well-known endpoint · separate router)
+well_known_router = APIRouter(tags=["a2a"])
+
+
+@well_known_router.get("/.well-known/agent-card.json")
+def agent_card_well_known():
+    """A2A v1.0 well-known agent card · v0.1 stub (no signing yet · capabilities advertised)."""
+    return {
+        "name": "Ome365",
+        "did": "did:web:omnity.ai:default",
+        "version": "0.1-stub",
+        "protocol": "a2a/1.0",
+        "capabilities": [
+            "hike.entities",
+            "hike.lookup",
+            "hike.asr",
+            "share.read",
+            "memory.recall",
+            "identity.whoami",
+        ],
+        "auth": {
+            "supported_methods": ["bearer", "did-pinned", "tenant-internal"],
+            "tier": ["T1", "T2", "T3"],
+        },
+        "signed_by": None,
+        "signing": "no signing yet · pending mindos.protocol integration D+5~D+12",
+    }

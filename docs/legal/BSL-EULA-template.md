@@ -1,5 +1,7 @@
 # Business Source License 1.1 — End User License Agreement (Template)
 
+> **🔄 Status (2026-05-08)**: Ome365 v1.0 ships under **Apache License 2.0** single-license. This BSL 1.1 template is **reserved for v1.1+ enterprise track** if/when Ome365 introduces a separate commercial Enterprise tier (PG+RLS / FinOps / decision-distillation UI / SOC2 / audit modules). HashiCorp pattern: BSL → 4-year auto-Apache for Enterprise modules only · **OSS main always Apache 2.0**.
+
 > ⚠️ This is a **template** for the planned Ome365 Enterprise modules. The current Ome365 release ships under MIT (`./LICENSE`); this document describes the license that will apply to specific Enterprise-only modules (PG+RLS / FinOps / decision-distillation UI / SOC2 / audit) once that tier is published.
 >
 > Aligned with: BSL 1.1 (MariaDB Corporation Ab) · pattern used by Sentry / GitLab / CockroachDB / Couchbase / Materialize.

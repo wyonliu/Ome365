@@ -13,16 +13,22 @@ This directory contains **template** legal documents for self-host operators of 
 | [`AGPL-Compliance-Letter.md`](./AGPL-Compliance-Letter.md) | AGPLv3 enterprise legal review primer | Internal legal/compliance teams (especially 央企 / regulated industries) |
 | [`BSL-EULA-template.md`](./BSL-EULA-template.md) | Business Source License 1.1 EULA template | Future Ome365 Enterprise tier users |
 
-## License posture
+## License posture (v1.0 · 2026-05-08)
 
-Ome365 currently ships under **MIT License** (see top-level `./LICENSE`).
+Ome365 v1.0 ships under **Apache License 2.0** (single-license · see top-level [`../../LICENSE`](../../LICENSE) and [`../../NOTICE`](../../NOTICE)).
 
-The project's planned migration ahead of v1.1 is a dual-tier model:
+**Why Apache 2.0 over the previously-considered AGPL+BSL dual-tier**:
+- Same license as Mindos / Ome SDK / ome-server / memorybench across the Omnity matrix (one-license policy · zero confusion for contributors)
+- Aligned with 2026 Chinese open-source agent ecosystem fact: DeepSeek MIT · Qwen3 Apache · Coze Apache · AgentScope Apache · ModelScope-Agent Apache (BSL has only EMQX adoption in China · and EMQX is MQTT broker not agent/knowledge tool)
+- 央企/金融法务零摩擦 (vs AGPL near-zero adoption in 央企)
+- HashiCorp pattern (Aug 2023 MPL → BSL): keep main Apache · switch *only Enterprise modules* to BSL **if hyperscaler appropriation becomes a real threat** post-launch
 
-- **OSS main**: AGPLv3 (defends against hyperscaler appropriation)
-- **Enterprise modules** (PG+RLS / FinOps / SOC2 / decision-distillation UI / audit): BSL 1.1 (4-year auto-conversion to Apache 2.0)
+**v1.1+ enterprise track (reserved · not active in v1.0)**:
+- The `AGPL-Compliance-Letter.md` and `BSL-EULA-template.md` in this directory are **templates reserved for v1.1+** when/if Ome365 introduces a separate Enterprise tier
+- **OSS main will always remain Apache 2.0** — no bait-and-switch
+- Enterprise modules (PG+RLS / FinOps / decision-distillation UI / SOC2 / audit) MAY adopt BSL 1.1 with 4-year auto-Apache conversion if needed
 
-See [`AGPL-Compliance-Letter.md`](./AGPL-Compliance-Letter.md) for the full rationale and how this affects internal enterprise deployments (spoiler: AGPL doesn't restrict internal use).
+See [`AGPL-Compliance-Letter.md`](./AGPL-Compliance-Letter.md) for v1.1+ AGPL legal review (reserved · explains AGPL internal-use freedoms in case future modules adopt copyleft).
 
 ## Compliance frameworks aligned
 

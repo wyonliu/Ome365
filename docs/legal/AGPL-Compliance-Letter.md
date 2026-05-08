@@ -1,5 +1,9 @@
 # AGPLv3 Compliance Letter (for Enterprise Legal Review)
 
+> **🔄 Status (2026-05-08)**: Ome365 v1.0 ships under **Apache License 2.0** (single-license OSS main · matrix-aligned with Mindos / Ome SDK / ome-server / memorybench). This document is **reserved for v1.1+ enterprise track** if/when Ome365 introduces a separate commercial license tier (HashiCorp pattern: BSL 1.1 → 4-year auto-Apache for Enterprise modules only · OSS main always Apache).
+>
+> The OSS main will **always remain Apache 2.0** — no bait-and-switch.
+
 > Audience: Enterprise legal / compliance / IT-security teams reviewing whether to deploy Ome365 internally.
 >
 > ⚠️ Ome365 currently ships under **MIT License**. This letter documents the planned migration to AGPLv3 + BSL 1.1 ahead of v1.1, and addresses common AGPL concerns from enterprise counsel (especially in 央企 / regulated industries / legal departments unfamiliar with copyleft).

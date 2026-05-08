@@ -279,4 +279,79 @@ __all__ = [
     "make_skill_vc",
     "make_agent_card",
     "plan_tenant_did_rotation",
+    "router",
 ]
+
+
+# ── HTTP router (mounted by .app/server.py · Hike v0.1 stub level) ───────────
+# Status: v0.1 stub · returns schema + helpers · NO signing crypto yet
+# Real signing (Ed25519/RSA) integrates with mindos.protocol.a2a in D+5 ~ D+12
+from fastapi import APIRouter, HTTPException
+
+router = APIRouter(prefix="/api/identity", tags=["identity"])
+
+
+@router.get("/whoami")
+def whoami():
+    """Return current member identity from session.
+    v0.1 stub: returns placeholder · session-aware version pending tenant ctx wiring."""
+    return {
+        "tenant_did": "did:web:omnity.ai:default",
+        "member_id": "tenant:default/member:demo",
+        "version": "0.1-stub",
+        "signing": "no signing yet · pending mindos.protocol integration",
+    }
+
+
+@router.get("/tenant/{tenant_slug}")
+def get_tenant_did_endpoint(tenant_slug: str):
+    """Construct a tenant DID for a given slug."""
+    try:
+        return {"tenant_did": make_tenant_did("omnity.ai", tenant_slug), "version": "0.1-stub"}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/agent/{tenant_slug}/{agent_name}")
+def get_agent_did_endpoint(tenant_slug: str, agent_name: str):
+    """Construct an agent DID for a given (tenant, agent) pair."""
+    try:
+        return {"agent_did": make_agent_did("omnity.ai", tenant_slug, agent_name), "version": "0.1-stub"}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/skill-vc/types")
+def list_skill_vc_types():
+    """List the 4 Skill VC types (a/b/c/d · v3.6 §6.2 line 339-348)."""
+    return {"types": SKILL_VC_DEFINITIONS, "version": "0.1-stub"}
+
+
+@router.post("/skill-vc/issue")
+def issue_skill_vc(payload: dict):
+    """Issue an unsigned Skill VC (v0.1 stub · signing pending)."""
+    vc_type = payload.get("type")
+    subject_did = payload.get("subject_did", "did:omnity:demo")
+    issuer_did = payload.get("issuer_did", "did:web:omnity.ai:default")
+    skill_name = payload.get("skill_name", "")
+    if vc_type not in ("a", "b", "c", "d"):
+        raise HTTPException(400, "type must be one of a/b/c/d (see /api/identity/skill-vc/types)")
+    if not skill_name:
+        raise HTTPException(400, "skill_name required")
+    try:
+        vc = make_skill_vc(vc_type, subject_did, issuer_did, skill_name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"vc": vc, "note": "v0.1 stub · _unsigned=True · signing pending mindos.protocol D+5~D+12"}
+
+
+@router.post("/rotation/plan")
+def plan_rotation_endpoint(payload: dict):
+    """Plan a tenant DID rotation (acquisition / split / rename · v3.6 §6.3 line 350)."""
+    old = payload.get("old_did", "")
+    new = payload.get("new_did", "")
+    grace_days = int(payload.get("grace_days", 30))
+    try:
+        return plan_tenant_did_rotation(old, new, grace_days)
+    except ValueError as e:
+        raise HTTPException(400, str(e))

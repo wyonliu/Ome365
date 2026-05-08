@@ -30,6 +30,12 @@ logging.getLogger("mindos").setLevel(logging.ERROR)
 VAULT = Path(os.environ.get("OME365_VAULT", Path(__file__).parent.parent)).resolve()
 MEDIA = Path(__file__).parent / "media"
 PORT = int(os.environ.get("OME365_PORT", "3650"))
+
+# ── Embedding backend (PIPL §38: default local · cloud opt-in via .env) ──
+# Options: bge-local (default · BAAI/bge-small-zh-v1.5 · ~90MB CPU)
+#          openai · cohere · qwen (each requires its own API key env)
+EMBEDDING_BACKEND = os.environ.get("EMBEDDING_BACKEND", "bge-local")
+EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5")
 WEEKDAYS = ["周一","周二","周三","周四","周五","周六","周日"]
 DIMS = ["职业产出","创作事业","能力提升","社会影响力","生活品质","AI集成"]
 DIM_ICONS = {"职业产出":"💼","创作事业":"✍️","能力提升":"📚","社会影响力":"📢","生活品质":"🥊","AI集成":"🤖"}
@@ -61,6 +67,17 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 # 2026-04-25 · 大文档加载提速：JSON/HTML 响应自动 gzip（client 必带 Accept-Encoding: gzip）
 # 178KB markdown 实测 → ~20KB（~9x 压缩），远端首屏立竿见影
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+# ── ome365.id (V1 真空带 · DID + Skill VC) + ome365.a2a (V5 真空带 · A2A Gateway)
+# v3.6 §六 line 328 + §九 line 466 · v0.1 stub · 真签名集成 D+5~D+12
+try:
+    from ome365_id import router as identity_router
+    from ome365_a2a import router as a2a_router, well_known_router as a2a_wellknown_router
+    app.include_router(identity_router)
+    app.include_router(a2a_router)
+    app.include_router(a2a_wellknown_router)
+except ImportError as _e:
+    logging.getLogger("ome365").warning(f"ome365.id/a2a routers not loaded: {_e}")
 
 
 # ── T1 Privacy headers · 仅作用于 /s 前缀（share 路由）──
@@ -2062,6 +2079,46 @@ async def eeg_get(type: str, id: str):
     if e["type"] != type_norm and type_norm not in ("*", "any"):
         raise HTTPException(404, f"entity {id} exists but type={e['type']} not {type_norm}")
     return e
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Hike v0.1 endpoint aliases (forward to /api/entities/* · v3.6 §7.1 line 378)
+#
+# Hike (Hive Intelligence Knowledge Engine) = Ome365 王牌产品·v0.1 ships as EEG.
+# These aliases make the public Hike API discoverable while preserving
+# /api/entities/* for backward compatibility. v2 endpoints (lookup with scope/RBAC,
+# get_person_profile, get_decision_chain, distilled_principles, detect_cross_bu_signals,
+# sanitize_export) land in D+1 ~ D+45 alpha · see docs/hike.md
+# ──────────────────────────────────────────────────────────────────────
+
+@app.get("/api/hike/entities")
+async def hike_list_entities(type: Optional[str] = None, tenant: Optional[str] = None):
+    """Hike v0.1 alias for /api/entities · L1 Entity layer."""
+    return await eeg_list(type=type, tenant=tenant)
+
+
+@app.get("/api/hike/stats")
+async def hike_stats():
+    """Hike v0.1 alias for /api/entities/stats."""
+    return await eeg_stats()
+
+
+@app.get("/api/hike/asr")
+async def hike_asr(tenant: Optional[str] = None):
+    """Hike v0.1 alias for /api/entities/asr · L3 Rule layer (47 ASR rules)."""
+    return await eeg_asr_rules(tenant=tenant)
+
+
+@app.post("/api/hike/lookup")
+async def hike_lookup(body: dict):
+    """Hike v0.1 alias for /api/entities/resolve · L1 Entity recognition."""
+    return await eeg_resolve(body)
+
+
+@app.get("/api/hike/{type}/{id}")
+async def hike_get(type: str, id: str):
+    """Hike v0.1 alias for /api/entities/{type}/{id} · L1 Entity get."""
+    return await eeg_get(type=type, id=id)
 
 
 @app.get("/api/cockpit/config")

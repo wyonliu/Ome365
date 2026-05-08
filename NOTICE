@@ -1,0 +1,17 @@
+Ome365 — Open-Source Enterprise AI Platform
+Copyright 2026 wyonliu and Ome365 contributors
+
+This product includes software developed as part of the Omnity matrix:
+  - Mindos / Ome SDK (Apache License 2.0)
+  - mindos.protocol.a2a / mindos.protocol.mcp (Apache License 2.0)
+  - omnity-soap (Apache License 2.0)
+  - memorybench (Apache License 2.0)
+
+Frontend dependencies (their respective licenses):
+  - Vue 3 (MIT)
+  - marked (MIT)
+  - force-graph (MIT)
+
+For details on each, see the dependency manifests and respective LICENSE files.
+
+License inquiries: see docs/legal/AGPL-Compliance-Letter.md (reserved for v1.1+ enterprise track) and docs/legal/BSL-EULA-template.md (reserved for v1.1+ commercial Enterprise modules).

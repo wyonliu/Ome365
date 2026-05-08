@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/vue-3.x-green" alt="Vue 3">
   <img src="https://img.shields.io/badge/storage-markdown-orange" alt="Markdown">
   <img src="https://img.shields.io/badge/AI-Omnity--Ome%20SDK-purple" alt="Omnity Ome">
-  <img src="https://img.shields.io/badge/license-MIT-brightgreen" alt="MIT">
+  <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="Apache 2.0">
 </p>
 
 ---
@@ -22,6 +22,8 @@
 **Ome365** is the open-source enterprise AI platform: file-first multi-tenant Markdown vault, self-learning **Hike** (Hive Intelligence Knowledge Engine) for organizational memory + decision distillation, and cross-company portability via W3C DID. FastAPI backend + Vue 3 CDN frontend (zero build step).
 
 > **🌐 LLM defaults to local Ollama** — DeepSeek / OpenAI / Claude / Gemini / Qwen / Doubao / 智谱 / OpenRouter (9 backends) are opt-in via `.env`. PIPL §38 compliant by default — no data leaves your machine unless you flip the switch.
+>
+> **🔒 Embedding defaults to local `BAAI/bge-small-zh-v1.5`** (90 MB CPU model) — OpenAI / Cohere / Qwen embeddings are opt-in via `.env`. Embeddings stay on your machine.
 
 ```bash
 # One-line install (macOS / Linux / WSL):
@@ -52,7 +54,7 @@ See [docs/hike.md](docs/hike.md) for the flagship sub-project.
 | Data-hygiene lint (truthguard) | ✅ | — | plugins | — | — |
 | No-build frontend | ✅ Vue CDN | — | n/a | n/a | — |
 | Cross-meeting entity graph (Hike) | ✅ v0.1 / v2 alpha | — | — | partial | — |
-| License | MIT | proprietary | proprietary | AGPL | proprietary |
+| License | Apache 2.0 | proprietary | proprietary | AGPL | proprietary |
 
 ---
 
@@ -226,7 +228,17 @@ Ome365/
 
 ## License
 
-MIT
+**Apache License 2.0** — see [`LICENSE`](LICENSE) for the full text and [`NOTICE`](NOTICE) for attribution.
+
+Why Apache 2.0:
+- Same license as Mindos / Ome SDK / ome-server / memorybench across the Omnity matrix (one-license policy · zero confusion)
+- Aligned with 2026 Chinese open-source agent ecosystem (Coze / AgentScope / ModelScope-Agent / Qwen3 / DeepSeek)
+- Patent grant + trademark protection without copyleft burden
+- 央企/金融法务零摩擦（vs AGPL 在中国央企采用率几乎 0）
+
+**v1.1+ enterprise track**: Future Enterprise modules (PG+RLS / FinOps / decision-distillation UI / SOC2 / audit) may adopt a separate commercial license (BSL 1.1 → Apache 2.0 4-year auto-conversion · HashiCorp pattern). Templates are reserved at [`docs/legal/`](docs/legal/) for that future track. **The OSS main will always remain Apache 2.0**.
+
+> *Strategy*: open-source main抢心智 (Apache 2.0) → if hyperscaler appropriation becomes a real threat post-launch, switch Enterprise modules to BSL 1.1 (HashiCorp Aug 2023 pattern · 4 years to auto-conversion). Path is open. **No bait-and-switch on the OSS main.**
 
 ---
 
