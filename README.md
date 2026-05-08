@@ -56,6 +56,23 @@ See [docs/hike.md](docs/hike.md) for the flagship sub-project.
 | Cross-meeting entity graph (Hike) | ✅ v0.1 / v2 alpha | — | — | partial | — |
 | License | Apache 2.0 | proprietary | proprietary | AGPL | proprietary |
 
+### vs Glean / Microsoft Copilot Studio / Cohere North
+
+| Need | Ome365 | Glean | Copilot Studio | Cohere North |
+|:---|:---:|:---:|:---:|:---:|
+| Self-hosted (your data, your machine) | ✅ | ❌ SaaS | ❌ Azure | ❌ SaaS |
+| File-first vault (git-diffable markdown) | ✅ | ❌ vector | ❌ vector | ❌ vector |
+| Open source | ✅ Apache 2.0 | ❌ | ❌ | ❌ |
+| Personal AI follows employee (W3C DID) | ✅ ome.id | ❌ | ❌ | ❌ |
+| Multi-tenant (team / org) | ✅ | ✅ | ✅ | ✅ |
+| Cross-org A2A federation | ✅ ome365.a2a (v0.1 stub) | ❌ | ❌ | ❌ |
+| Decision distillation (6-stage cognition) | ✅ Hike L4 (v2 alpha) | ❌ retrieval-only | ❌ | ❌ |
+| Pricing | Self-host free / ¥10-30 万 enterprise | $40-50/seat/mo | $200/user/mo | $30+/user/mo |
+
+**Why Ome365 over Glean**: Glean optimizes search retrieval; Ome365 optimizes **organizational memory + decision distillation**. Glean's $200M ARR is built on enterprise vector search — but it has no personal layer that follows the employee, no file-first transparency, no cross-org federation, no open source.
+
+**Why Ome365 over Copilot Studio**: Copilot Studio binds to M365 / Azure ecosystem; Ome365 is **vendor-neutral file-first** — your vault lives wherever you put it, your AI runs on your machine, and the protocol is open (W3C DID + A2A v1.0).
+
 ---
 
 ## 为什么需要 Ome365？

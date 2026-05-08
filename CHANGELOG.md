@@ -1,11 +1,34 @@
 # Changelog
 
-## v1.0.0-rc1 — 顶级企业 AI 平台开源·12-round 迭代收口 (2026-05-07 evening)
+## v1.0.0-rc1 — 顶级企业 AI 平台开源·阶段 1 launch 准备 19-round 收口 (2026-05-07 → 2026-05-08)
 
 **Tagline**: Run your company on agents, not org charts.
 **Sub**: Your AI follows the employee, not the employer.
 
-12-round iterative push for "the open-source enterprise AI platform" positioning. Zero regression across 14 GET endpoints + 4 share slugs throughout all rounds. 62 contract tests added.
+> ⚠️ **诚实表述**: 这是 v3.6 §10 **阶段 1 launch 准备的 19-round 收口**·**不等于 v3.6 整体完工**。阶段 2 alpha (Hike L2 Event / L4 Cognition / L6 Swarm + PG+RLS + ome365.id/a2a 真签名) 计划 D+1 ~ D+45 (5-14 起) 实施。当前 ome365.id / ome365.a2a 是 v0.1 stub (schema + helpers + HTTP 路由 / 无签名 crypto) · 真签名集成与 mindos.protocol.a2a 在 D+5~D+12。
+
+19-round iterative push. Zero regression across 14 GET endpoints + 4 share slugs throughout. **106 pytest tests passing** (was 62 before httpx fix). External AI patch r1.0 review (H1+H2+H4+H5) all addressed in Round 14-19.
+
+### v1.0 ships (today · ready for 5-13 Show HN)
+- Markdown vault + multi-tenant + 5 AuthProvider (none/basic/magic_link/oidc/wecom)
+- Hike v0.1 entity graph (8 entity types · 9 + 5 alias endpoints · schema v0.2 五字段 forward-compatible)
+- Share station with argon2 + Fernet + 3-word access codes + rename-resilient share_id
+- ome365.id v0.1 stub (W3C DID + 4 Skill VC types · 6 endpoints · NO signing yet)
+- ome365.a2a v0.1 stub (3-tier trust + SLA + Federation · 6 endpoints + /.well-known/agent-card.json · NO signing yet)
+- 4 道 PII 防线 + 47-item fixture + GitHub Actions CI 5 jobs
+- Apache License 2.0 (single-license · matrix-aligned)
+- 4 法务 templates (DCO + DPA + AGPL Letter reserved + BSL EULA reserved)
+- 5 行业 Hike starter (manufacturing / insurance / law-firm / retail / healthcare)
+- 三平台 install (macOS/Linux/WSL) + --dry-run
+
+### v2 lands (D+1 ~ D+45 · 5-14 ~ 6-30)
+- Hike L2 Event Layer (meeting_dedupe_hash + actions)
+- Hike L4 Cognition Layer (decision_chains + distilled.principles · 6-stage)
+- Hike L6 Swarm (discover→suggest→review→adopt)
+- HikeClient SDK + UI 4 page (Review queue / Distillation editor / Person profile / Decision timeline)
+- PG+RLS Ome365 (import ome-server schema · multi-tenant e2e)
+- ome365.id 真签名 (与 mindos.protocol.a2a 集成 · D+5~D+12)
+- ome365.a2a Federation discovery + signed agent card (D+14~D+45)
 
 ### Highlights
 - **Hike alias** (王牌产品收口): docs/hike.md + server.py docstring + README 顶级定位
