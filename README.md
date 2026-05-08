@@ -42,6 +42,35 @@ single-binary deploy via systemd / Docker / Compose · ~6000 LOC backend + ~2000
 A2A federation (3 tier trust + Signed Agent Card) · ome365.id (tenant DID + 4 Skill VC types).
 See [docs/hike.md](docs/hike.md) for the flagship sub-project.
 
+## See it in action
+
+```
+$ curl -fsSL https://raw.githubusercontent.com/wyonliu/Ome365/main/install.sh | sh
+
+[install] Platform: macOS (arm64)
+[ok] Python 3.11.5
+[install] Cloning https://github.com/wyonliu/Ome365.git → ~/Ome365
+[install] First run: ./ome365 (installs deps, starts service, opens browser)
+✓ Browser opens at http://localhost:3650
+✓ Hike entity graph ready (8 entity types · /api/hike/*)
+✓ Share station ready (argon2 + Fernet · /share/<user>/<slug>)
+✓ ome365.id ready (DID + 4 Skill VC types · /api/identity/*)
+✓ ome365.a2a ready (3-tier trust + /.well-known/agent-card.json)
+```
+
+**Try without installing**:
+- 🤗 [HuggingFace Space sandbox](https://huggingface.co/spaces/wyonliu/ome365-demo) (read-only · resets every restart)
+- 🌐 [try.omnity.ai](https://try.omnity.ai) (custom domain · same demo)
+
+**Self-host smoke** (verify your install in 30 seconds):
+
+```bash
+./ome365 doctor                              # 12-check diagnostic (platform / deps / config / runtime)
+curl -fsS http://localhost:3650/api/dashboard | jq .day  # → today's date
+curl -fsS http://localhost:3650/api/hike/entities | jq '. | length'  # → entity count
+curl -fsS http://localhost:3650/.well-known/agent-card.json | jq .name  # → "Ome365"
+```
+
 **vs Notion / Obsidian / Mem / Logseq:**
 
 | Need | Ome365 | Notion | Obsidian | Logseq | Mem |

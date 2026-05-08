@@ -1,0 +1,54 @@
+# Dockerfile · Ome365 demo for HuggingFace Spaces / Replicate / Modal
+# Goal: 30-second taste of Ome365 · no installation · no real PII
+#
+# Build: docker build -t ome365-demo -f infra/Dockerfile.demo .
+# Run:   docker run -p 7860:7860 ome365-demo
+#
+# HuggingFace Spaces auto-deploys this when pushed to a Space repo.
+
+FROM python:3.11-slim
+
+# System deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git curl tini \
+    && rm -rf /var/lib/apt/lists/*
+
+# Working directory + non-root user (HF Spaces best practice)
+RUN useradd -m -u 1000 user
+USER user
+ENV HOME=/home/user PATH=/home/user/.local/bin:$PATH
+WORKDIR /home/user/app
+
+# Clone Ome365 (HF Space build doesn't have repo context · fetch from GitHub)
+RUN git clone --depth 1 https://github.com/wyonliu/Ome365.git /home/user/app
+
+# Install Python deps
+RUN pip install --user --no-cache-dir -r requirements.txt \
+    && pip install --user --no-cache-dir httpx pytest
+
+# Demo configuration (DO NOT change for production · this is demo-only)
+ENV OME365_PORT=7860 \
+    OME365_VAULT=/tmp/demo-vault \
+    OME365_AUTH_PROVIDER=none \
+    LLM_BACKEND=disabled \
+    EMBEDDING_BACKEND=disabled \
+    OME365_DEMO=1
+
+# Pre-create demo vault with curated sample content
+RUN mkdir -p /tmp/demo-vault \
+    && cp -r docs/hike-templates/manufacturing/entities /tmp/demo-vault/Knowledge_entities \
+    && mkdir -p /tmp/demo-vault/Knowledge \
+    && mv /tmp/demo-vault/Knowledge_entities /tmp/demo-vault/Knowledge/entities \
+    && echo '# Demo Vault\nThis is a public demo. Data resets every restart. Do not store real PII.' \
+        > /tmp/demo-vault/README.md
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD curl -fsS http://localhost:7860/api/dashboard || exit 1
+
+# HF Spaces uses port 7860
+EXPOSE 7860
+
+# tini = signal-safe PID 1
+ENTRYPOINT ["tini", "--"]
+CMD ["python3", ".app/server.py"]
