@@ -86,6 +86,13 @@ try:
 except ImportError as _e:
     logging.getLogger("ome365").warning(f"ome365.cost router not loaded: {_e}")
 
+# ── ome365.decisions · v1.1 W2 · 8-step Decision lifecycle (Karpathy + Kevin) ──
+try:
+    from ome365_decisions import router as decisions_router
+    app.include_router(decisions_router)
+except ImportError as _e:
+    logging.getLogger("ome365").warning(f"ome365.decisions router not loaded: {_e}")
+
 
 # ── T1 Privacy headers · 仅作用于 /s 前缀（share 路由）──
 # 主站驾舱走 AuthProvider 自己的门禁，头部要保持干净；

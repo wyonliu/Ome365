@@ -199,13 +199,14 @@ def test_d2_cost_per_outcome_zero_value_zero_score():
 
 def test_d5_ecosystem_anti_self_gaming():
     """edge case #6: D5 must exclude actor=author trace from adopters."""
-    # alice authored 3 skills (meeting-summarize / hike-wiki-update / hike-wiki-query)
-    # trace shows: alice uses own 3 (excluded) · bob uses code-review (NOT alice's·skip) ·
+    # alice authored 4 skills (meeting-summarize / hike-wiki-update / hike-wiki-query /
+    # dev-decision-workflow added in W2)
+    # trace shows: alice uses own (excluded) · bob uses code-review (NOT alice's·skip) ·
     # carol uses meeting-summarize (alice's·counted)
-    # → distinct adopters = {carol} = 1 · raw = 3 × 1 = 3
+    # → distinct adopters = {carol} = 1 · raw = 4 × 1 = 4
     s = D5_ecosystem("alice", date.today() - timedelta(days=365), VAULT_EXAMPLE)
-    assert s.n == 3
-    assert s.raw == 3  # 3 skills × 1 adopter (carol) · alice self excluded
+    assert s.n == 4
+    assert s.raw == 4
 
 
 def test_d7_learning_first_use_in_window():

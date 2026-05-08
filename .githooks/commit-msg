@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# .githooks/commit-msg · Kevin "先文件再代码" rule (v1.1 W2)
+#
+# Per Skill: dev-decision-workflow
+#   "All git commits touching code (.app/ + scripts/) MUST cite a Decision via
+#    [decision: <id>] tag in commit message."
+#
+# Bypass for:
+#   - chore / docs / merge / revert commits
+#   - tag-only commits (no file changes)
+#   - opt-out via OME365_NO_DECISION=1 env var
+#
+# Install:
+#   git config core.hooksPath .githooks
+# Or per-repo:
+#   ln -s ../../.githooks/commit-msg .git/hooks/commit-msg
+
+set -euo pipefail
+
+COMMIT_MSG_FILE="${1:-}"
+[[ -z "$COMMIT_MSG_FILE" ]] && exit 0
+
+# Read commit message
+msg=$(cat "$COMMIT_MSG_FILE" 2>/dev/null || echo "")
+
+# Opt-out via env
+if [[ "${OME365_NO_DECISION:-0}" == "1" ]]; then
+    exit 0
+fi
+
+# Bypass for chore / docs / merge / revert / fixup / amend
+if [[ "$msg" =~ ^(chore|docs|merge|revert|fixup|amend|test|ci|build|style|refactor)(\(.+\))?:|^Merge\ |^Revert\  ]]; then
+    exit 0
+fi
+
+# Bypass if no staged code files (Kevin rule only applies to code)
+staged=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
+code_files=$(echo "$staged" | grep -E '^(\.app/|scripts/|tests/)' | grep -v '^tests/.*\.md$' || true)
+if [[ -z "$code_files" ]]; then
+    exit 0
+fi
+
+# Check for [decision: <id>] tag
+if echo "$msg" | grep -qE '\[decision: ?[a-z0-9_-]+\]'; then
+    exit 0
+fi
+
+# Reject with helpful message
+cat >&2 <<EOF
+ERROR: Kevin rule (先文件再代码 · v1.1 W2):
+  Code commit must cite a Decision via [decision: <id>] in commit message.
+
+Your commit touches:
+$(echo "$code_files" | head -5 | sed 's/^/  · /')
+
+Fix one of:
+  1. Add [decision: 2026-MM-DD-<slug>] to commit message
+     (create the decision file first via:  ./ome365 decision new "<title>" --owner you)
+  2. Mark as non-feature work: prefix with chore: / docs: / refactor: / ci:
+  3. Bypass once (only if you really mean it):  OME365_NO_DECISION=1 git commit ...
+
+Why: every code change must be traceable to a Decision context · so 6 months later
+you (or your replacement) can read 'why was this changed' from git log + Decisions/.
+
+Doc: vault/Skills/dev-decision-workflow.md
+Spec: docs/strategy/v1.1-team-brain-design.md §3.2.3 (Kevin 规范强制)
+EOF
+exit 1
