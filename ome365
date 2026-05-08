@@ -193,48 +193,128 @@ def run_server(port: int, open_browser: bool) -> int:
 
 # ── 子命令：doctor 自检 ─────────────────────
 def cmd_doctor() -> int:
+    """Multi-platform diagnostic · checks 12 things across 4 dimensions."""
+    import platform as _platform
     ok = True
-    print("─" * 50)
-    print(f"  Python : {sys.version.split()[0]} ({sys.executable})")
-    print(f"  项目根  : {ROOT}")
+    warnings = []
+    print("─" * 60)
+    print(f"  Ome365 doctor · diagnostic 12 checks")
+    print("─" * 60)
 
+    # ── Dim 1: Platform & Python ──
+    sys_name = _platform.system()
+    is_wsl = False
+    try:
+        with open("/proc/version", "r") as f:
+            is_wsl = "microsoft" in f.read().lower() or "wsl" in f.read().lower()
+    except Exception:
+        pass
+    plat = "WSL" if is_wsl else sys_name
+    print(f"  [1/12] Platform     : {plat} ({_platform.machine()})")
+    print(f"  [2/12] Python       : {sys.version.split()[0]} ({sys.executable})")
+    py_ver = sys.version_info
+    if py_ver < (3, 9):
+        print(f"          → \033[31m需 Python 3.9+\033[0m"); ok = False
+    elif py_ver >= (3, 13):
+        warnings.append("Python 3.13+ · 部分依赖可能未适配")
+
+    # ── Dim 2: Core deps ──
     missing = missing_core_pkgs()
     if missing:
-        print(f"  依赖    : \033[31m缺{missing}\033[0m → 跑 ./ome365 --setup")
+        print(f"  [3/12] Core deps    : \033[31m缺 {missing}\033[0m → 跑 ./ome365 --setup")
         ok = False
     else:
-        print(f"  依赖    : \033[32m核心包齐\033[0m")
+        print(f"  [3/12] Core deps    : \033[32m fastapi/uvicorn/yaml/pydantic 齐全\033[0m")
 
+    # ── Optional but recommended deps ──
+    optional_status = []
+    for pkg, hint in [("httpx", "测试套件"), ("sentence_transformers", "本地 embedding"), ("cryptography", "share Fernet")]:
+        try:
+            __import__(pkg.replace("-", "_"))
+            optional_status.append(f"\033[32m✓\033[0m {pkg}")
+        except ImportError:
+            optional_status.append(f"\033[33m○\033[0m {pkg} ({hint})")
+    print(f"  [4/12] Optional     : {' · '.join(optional_status)}")
+
+    # ── Dim 3: Config files ──
     if ENV_FILE.exists():
-        print(f"  .env    : \033[32m存在\033[0m")
+        print(f"  [5/12] .env         : \033[32m存在\033[0m")
     else:
-        print(f"  .env    : \033[33m缺失\033[0m（首跑会自动复制）")
+        print(f"  [5/12] .env         : \033[33m缺失\033[0m（首跑自动复制）")
 
     tc_live = APP / "tenant_config.json"
     tc_sample = APP / "tenant_config.sample.json"
     if tc_live.exists():
-        print(f"  租户配置 : live（{tc_live.name}）")
+        print(f"  [6/12] tenant_config: live · {tc_live.stat().st_size}B")
     elif tc_sample.exists():
-        print(f"  租户配置 : sample 兜底（solo/demo 默认 OK）")
+        print(f"  [6/12] tenant_config: sample 兜底 · {tc_sample.stat().st_size}B（solo/demo OK）")
     else:
-        print(f"  租户配置 : \033[31m两个都缺\033[0m")
-        ok = False
+        print(f"  [6/12] tenant_config: \033[31m两个都缺\033[0m"); ok = False
 
+    cc_sample = APP / "cockpit_config.sample.json"
+    if cc_sample.exists():
+        print(f"  [7/12] cockpit_config sample: \033[32m✓\033[0m")
+    else:
+        print(f"  [7/12] cockpit_config sample: \033[33m缺\033[0m")
+
+    # ── Dim 4: Runtime ──
     port = int(os.environ.get("OME365_PORT", "3650"))
     if port_is_free(port):
-        print(f"  端口 {port} : \033[32m空闲\033[0m")
+        print(f"  [8/12] Port {port}    : \033[32m空闲\033[0m")
     else:
-        print(f"  端口 {port} : \033[33m被占\033[0m（lsof -ti:{port}）")
+        print(f"  [8/12] Port {port}    : \033[33m被占\033[0m → lsof -ti:{port} | xargs kill")
+        warnings.append(f"port {port} busy")
+
+    share_port = int(os.environ.get("SHARE_PORT", "3651"))
+    if port_is_free(share_port):
+        print(f"  [9/12] Port {share_port}    : \033[32m空闲\033[0m (share_server)")
+    else:
+        print(f"  [9/12] Port {share_port}    : \033[33m被占\033[0m (share_server)")
 
     home = Path(os.environ.get("OME365_HOME", Path.home() / ".ome365"))
     tenants = home / "tenants"
     if tenants.exists():
         n = len([p for p in tenants.iterdir() if p.is_dir()])
-        print(f"  多租户  : {n} 个（{tenants}）")
+        print(f"  [10/12] Multi-tenant: {n} 个 ({tenants})")
     else:
-        print(f"  多租户  : 未启用（legacy 单用户）")
+        print(f"  [10/12] Multi-tenant: 未启用（legacy 单用户·OK）")
 
-    print("─" * 50)
+    # ── Git status ──
+    git_dir = ROOT / ".git"
+    if git_dir.exists():
+        try:
+            head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"],
+                                  capture_output=True, text=True, timeout=5)
+            branch = subprocess.run(["git", "-C", str(ROOT), "branch", "--show-current"],
+                                    capture_output=True, text=True, timeout=5)
+            print(f"  [11/12] Git         : {head.stdout.strip()} on {branch.stdout.strip() or 'detached'}")
+        except Exception:
+            print(f"  [11/12] Git         : \033[33mgit cmd failed\033[0m")
+    else:
+        print(f"  [11/12] Git         : not a git repo (downloaded zip OK)")
+
+    # ── Disk space ──
+    try:
+        st = shutil.disk_usage(str(ROOT))
+        free_gb = st.free / (1024**3)
+        if free_gb < 1:
+            print(f"  [12/12] Disk free   : \033[31m{free_gb:.1f} GB\033[0m → 至少 1 GB")
+            ok = False
+        elif free_gb < 5:
+            print(f"  [12/12] Disk free   : \033[33m{free_gb:.1f} GB\033[0m (建议 ≥ 5 GB)")
+        else:
+            print(f"  [12/12] Disk free   : \033[32m{free_gb:.1f} GB\033[0m")
+    except Exception:
+        print(f"  [12/12] Disk free   : ?")
+
+    print("─" * 60)
+    if ok and not warnings:
+        print(f"  \033[32m✓ All green\033[0m · 可启动 ./ome365")
+    elif ok:
+        print(f"  \033[33m! {len(warnings)} warnings\033[0m: {' · '.join(warnings)}")
+    else:
+        print(f"  \033[31m✗ Doctor failed\033[0m · 修上面 ✗ 项后再启动")
+    print("─" * 60)
     return 0 if ok else 1
 
 
