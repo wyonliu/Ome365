@@ -2100,19 +2100,19 @@ async def hike_list_entities(type: Optional[str] = None, tenant: Optional[str] =
 @app.get("/api/hike/stats")
 async def hike_stats():
     """Hike v0.1 alias for /api/entities/stats."""
-    return await eeg_stats()
+    return await eeg_stats_api()
 
 
 @app.get("/api/hike/asr")
 async def hike_asr(tenant: Optional[str] = None):
     """Hike v0.1 alias for /api/entities/asr · L3 Rule layer (47 ASR rules)."""
-    return await eeg_asr_rules(tenant=tenant)
+    return await eeg_asr(tenant=tenant)
 
 
 @app.post("/api/hike/lookup")
 async def hike_lookup(body: dict):
     """Hike v0.1 alias for /api/entities/resolve · L1 Entity recognition."""
-    return await eeg_resolve(body)
+    return await eeg_resolve_api(body)
 
 
 @app.get("/api/hike/{type}/{id}")
