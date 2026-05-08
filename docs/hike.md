@@ -35,7 +35,7 @@ Knowledge/entities/        # markdown source-of-truth (8 entity types)
 | **L1·Entity** | 8 types · markdown SoT | + schema v0.2 fields: `parent_id` / `validity_period` / `external_ids` / `multilingual` / `disambiguation_hint` |
 | **L2·Event** | (none) | 🆕 meetings / decisions / milestones / actions · `meeting_dedupe_hash` |
 | **L3·Rule** | 47 ASR rules | + `persona_playbook` 7-step speaker identification |
-| **L4·Cognition** | (none) | 🆕 `decision_chains` + `distilled.principles` + `reflections`（replaces standalone `DISTILL`）|
+| **L4·Wiki Maintainer** | (none) | 🆕 `decision_chains` + `distilled.principles` + `reflections` · 致敬 [Karpathy LLM Wiki Pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)："The wiki is the artifact, not the chat" · 命令模式 `/wiki-update` + `/wiki-query`（兼容 `Ar9av/obsidian-wiki` 生态） |
 | **L5·Graph** | `entity_registry.resolve(text)` | + cross-meeting timeline + `cross_bu_signals` |
 | **L6·Swarm** | (none) | 🆕 `discover → suggest → review → adopt` |
 

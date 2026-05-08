@@ -19,7 +19,9 @@
 > **Tagline**: Run your company on agents, not org charts.
 > **Sub-tagline**: Your AI follows the employee, not the employer.
 
-**Ome365** is the open-source enterprise AI platform: file-first multi-tenant Markdown vault, self-learning **Hike** (Hive Intelligence Knowledge Engine) for organizational memory + decision distillation, and cross-company portability via W3C DID. FastAPI backend + Vue 3 CDN frontend (zero build step).
+**Ome365** is **the file-first vault for the Agentic Web** — your team reads the same `SKILL.md` that 32 tools read (Claude Code · Codex · Cursor · Gemini CLI · JetBrains Junie · AWS Kiro · Block Goose · etc · all [Anthropic Agent Skills](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills) open standard adopters). Multi-tenant Markdown vault · self-learning **Hike** (Hive Intelligence Knowledge Engine · L4 Wiki Maintainer follows [Karpathy's LLM Wiki Pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)) · cross-company portability via W3C DID. FastAPI + Vue 3 CDN (zero build).
+
+> **Anti-Tokenmaxxing**: Ome365 measures **outcomes**, not tokens. We deliberately avoid token-leaderboard metrics (cf. [Meta 2026-04 incident](https://fortune.com/2026/04/09/meta-killed-employee-ai-token-dashboard/) · [Pinnacle critique](https://www.heypinnacle.com/blog/tokenmaxxing-performative-ai-hr-strategy-2026)) because performative AI usage corrupts the measurement. Member scores use **value/cost ratio** with FinOps-2026-aligned `cost_per_outcome` / `revenue_per_workflow` (see [v1.1 Team Brain design](docs/strategy/v1.1-team-brain-design.md)).
 
 > **🌐 LLM defaults to local Ollama** — DeepSeek / OpenAI / Claude / Gemini / Qwen / Doubao / 智谱 / OpenRouter (9 backends) are opt-in via `.env`. PIPL §38 compliant by default — no data leaves your machine unless you flip the switch.
 >
