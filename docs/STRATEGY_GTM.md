@@ -4,6 +4,14 @@
 > 前置阅读：`docs/EEG.md`（企业实体知识图谱）、`docs/ARCHITECTURE.md`（技术架构）
 > 核心命题：企业智能体平台为何 Glean / Mem / Notion AI 没爆、Ome365 凭什么能爆。
 
+> **🔄 2026-05-08 update · v1.0-rc1 战略锁定**:
+> - **Tagline**: Run your company on agents, not org charts.
+> - **Sub**: Your AI follows the employee, not the employer.
+> - **5 真空带 V1-V5** 已验证（V1 跨公司可携带 · V2 file-first 多租户 + 自学习 · V3 三层并存 · V4 决策蒸馏 · V5 跨企业一体协同 = Ome365 王牌主战场）
+> - **协议分层**: AGPLv3 OSS + BSL 1.1 Enterprise（防 hyperscaler 白嫖 · MongoDB/Elastic/Sentry 模式）
+> - **5 灯塔客户**: example-corp集团 + 连锁零售 + 头部寿险 + 一线 PE + 工业制造（vs Glean 真空带）
+> - 完整 v1.0 战略 见 [`../README.md`](../README.md) + 90-day roadmap
+
 ---
 
 ## 一 · 现状诊断：为什么"企业 AI 知识库"赛道没爆

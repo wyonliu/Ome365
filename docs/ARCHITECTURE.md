@@ -3,6 +3,8 @@
 > 2026-04-15 · 作者 & AI 助手
 > 目标：把当前单用户私人工具，推进为"同事可装可用"的 AI 原生 PKM 平台。
 
+> **🔄 2026-05-08 update**: Ome365 已升级为 **the open-source enterprise AI platform** (file-first multi-tenant + self-learning Hike + cross-company portability). 本文描述 v0.8 阶段架构演进过程·**现行 v1.0-rc1 顶级定位** 见 [`../README.md`](../README.md) + [`hike.md`](./hike.md) + 90-day roadmap。**新增 v1.0 模块**: `ome365_id` (V1 真空带 · DID + Skill VC) + `ome365_a2a` (V5 真空带 · 3-tier trust + Federation)。
+
 ---
 
 ## 一 · 当前架构速览

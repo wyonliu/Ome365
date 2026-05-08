@@ -1,8 +1,22 @@
 # Ome365 v1.0 Roadmap · 2026 Q2 → 2026 Q4
 
-**Status:** Draft · 2026-04-19
-**Current version:** v0.9.7 (multi-tenant + zero-friction install, 2026-04-18)
+**Status:** v1.0.0-rc1 (12-round 迭代收口) · 2026-05-08 update
+**Current version:** **v1.0.0-rc1** · ready for Show HN 5-13
 **Target:** v1.0 GA · 2026 Q4
+
+> **🔄 2026-05-08 v1.0-rc1 顶级化升级（自 v0.9.7 起）**:
+> - Hike alias 植入（王牌产品收口 · docs/hike.md）
+> - Hike v2 schema v0.2 五字段（向后兼容）
+> - PII 4 道防线 + 47-item fixture
+> - install.sh 三平台（macOS/Linux/WSL）+ --dry-run
+> - GitHub Actions CI 5 jobs
+> - docs/legal/ 4 模板（DCO/DPA/AGPL Letter/BSL EULA · ~600 行）
+> - 5 行业 starter（manufacturing/insurance/law-firm/retail/healthcare）
+> - **ome365.id v0.1 stub**（V1 真空带 · W3C DID + 4 Skill VC types）
+> - **ome365.a2a v0.1 stub**（V5 真空带 · 3-tier trust + SLA + Federation）
+> - 62 contract tests
+>
+> 完整 12-round 详情见 [`../CHANGELOG.md`](../CHANGELOG.md)。
 
 **Guiding principle — the 2026 Q1 consensus:**
 1. `Agent = Model + Harness` (Hashimoto, Feb 2026)

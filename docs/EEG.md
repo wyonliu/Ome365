@@ -3,6 +3,8 @@
 > 2026-04-17 · 作者 & AI 助手
 > 目标：让 Ome365 内部的**企业术语 / 人名 / 组织 / 产品**作为精准常识，任何生成、检索、展示都基于统一事实源。
 
+> **🔄 2026-05-08 update**: EEG 现在公开身份是 **Hike v0.1** (Hive Intelligence Knowledge Engine · Ome365 王牌子项目)。本文档描述 v0.1 已 ship 状态。**v2 升级路径** (schema v0.2 五字段 + L2 Event + L4 Cognition + L6 Swarm + UI 4 page + 5 行业 starter) 见 [`hike.md`](./hike.md) · 是 v1.0 后 D+1 ~ D+45 的 alpha 主线。本文保留作 historical reference。
+
 ---
 
 ## 一 · 为什么这是 Ome365 的一级能力
