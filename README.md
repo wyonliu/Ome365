@@ -23,6 +23,19 @@
 
 > **Anti-Tokenmaxxing**: Ome365 measures **outcomes**, not tokens. We deliberately avoid token-leaderboard metrics (cf. [Meta 2026-04 incident](https://fortune.com/2026/04/09/meta-killed-employee-ai-token-dashboard/) · [Pinnacle critique](https://www.heypinnacle.com/blog/tokenmaxxing-performative-ai-hr-strategy-2026)) because performative AI usage corrupts the measurement. Member scores use **value/cost ratio** with FinOps-2026-aligned `cost_per_outcome` / `revenue_per_workflow` (see [v1.1 Team Brain design](docs/strategy/v1.1-team-brain-design.md)).
 
+### 💼 How CIOs explain Ome365 to their CEO
+
+Anti-Tokenmaxxing is a stance · here's how it translates to **dollars-out / dollars-in**
+language any CFO can sign off on. Compare your team to industry P50 (data:
+[`docs/strategy/industry-benchmarks.yml`](docs/strategy/industry-benchmarks.yml) ·
+sourced from Salesforce / NavyaAI / Forrester 2026 Q1):
+
+- "Each AI-resolved decision costs **$12** (industry P50: $35) — we save **$XX/month** vs hiring contractors."
+- "Each hour our team spends with AI replaces **$80** of contractor time."
+- "Each AI workflow generates **$1200** in tracked revenue."
+
+No token leaderboards · no performative AI usage · just a [`cost_per_resolved_decision`](docs/strategy/v1.1-team-brain-design.md) you can put in next quarter's board slide. The cockpit FinOps card shows "your team vs P25/P50/P75" with source citation on hover.
+
 > **🌐 LLM defaults to local Ollama** — DeepSeek / OpenAI / Claude / Gemini / Qwen / Doubao / 智谱 / OpenRouter (9 backends) are opt-in via `.env`. PIPL §38 compliant by default — no data leaves your machine unless you flip the switch.
 >
 > **🔒 Embedding defaults to local `BAAI/bge-small-zh-v1.5`** (90 MB CPU model) — OpenAI / Cohere / Qwen embeddings are opt-in via `.env`. Embeddings stay on your machine.

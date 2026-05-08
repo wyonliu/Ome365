@@ -1,0 +1,52 @@
+# Cost-per-Outcome Industry Benchmarks · 2026 Q1-Q2
+#
+# Sources:
+#   - Salesforce 2026-04-15 "Tokenmaxxing AI ROI metrics" (Axios)
+#   - NavyaAI 2026 Q1 enterprise AI cost report
+#   - FinOps Foundation "FinOps for AI" 2026-Q1
+#   - Forrester "End of AI Pilot Era" 2026-04 (Google Cloud Next)
+#
+# These figures are aggregated from public reports · use for cockpit FinOps
+# dashboard comparisons. Refresh monthly via 2026-industry-survey.md.
+#
+# Path: vault/Eval/industry-benchmarks.yml (loaded by ome365_eval.py)
+
+cost_per_resolved_decision:
+  industry_p25_usd: 50
+  industry_p50_usd: 35
+  industry_p75_usd: 20
+  unit: "USD per closed decision"
+  context: "Includes LLM cost + reviewer time"
+  source: "Salesforce + NavyaAI 2026 Q1"
+  refreshed: 2026-04-15
+
+human_equivalent_hourly:
+  industry_p25_usd: 120
+  industry_p50_usd: 80
+  industry_p75_usd: 50
+  unit: "USD per human hour replaced by AI"
+  context: "Avg US contractor hourly rate baseline"
+  source: "NavyaAI 2026 + BLS hourly wage data"
+  refreshed: 2026-04-15
+
+revenue_per_workflow:
+  industry_p25_usd: 800
+  industry_p50_usd: 1200
+  industry_p75_usd: 2500
+  unit: "USD revenue tracked per AI-driven workflow"
+  context: "Sales / contract / decision-driven workflow only"
+  source: "Forrester End of AI Pilot Era 2026-04"
+  refreshed: 2026-04-23
+
+# Notes for cockpit FinOps card:
+#   - Display "your team vs P25/P50/P75"
+#   - Show direction: lower-is-better for cost_per_resolved_decision
+#                     higher-is-better for human_equivalent_hourly + revenue_per_workflow
+#   - Compute % savings or improvement vs P50
+#   - Cite source on hover
+#
+# CIO Translation Layer:
+#   - Generate one-line for CEO report:
+#     "Each AI-resolved decision costs $X (industry P50: $Y) → save $Z/month vs contractor"
+#   - Generate quarterly board slide:
+#     "Cost-per-Outcome trend · Q1 vs Q2 · vs industry baseline"

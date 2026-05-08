@@ -18,9 +18,14 @@
 
 ### 1.1 Anthropic Agent Skills 已是跨厂商开放标准（震级最大）
 
+> ⚠️ **Spec maturity vs production adoption gap**：以下数字是"声称兼容 spec"·不是
+> "production 部署成熟度"。Spec adoption ≠ runtime 可靠性·尤其 IDE 类工具的实际
+> SKILL load + execute 流程·**多数没在 GitHub Actions 真跑过**。我们 CI 拆 spec lint
+> (32/32) vs runtime test (3-4 headless CLI) 就是为了不混淆这两层（见 Fix 1）。
+
 **Dec 18 2025**：Anthropic 发布 SKILL.md spec
-**48 小时内**：Microsoft 集成进 VS Code · OpenAI 集成进 ChatGPT + Codex CLI
-**90 天内 (Mar 2026)**：32 个工具兼容同一 SKILL.md 格式
+**48 小时内**：Microsoft 集成进 VS Code · OpenAI 集成进 ChatGPT + Codex CLI（spec 接入·非 production GA）
+**90 天内 (Mar 2026)**：32 个工具**声称 spec-compatible**·实际生产级稳定运行的是 4-6 个 headless CLI
 - Google Gemini CLI
 - JetBrains Junie
 - AWS Kiro
@@ -130,6 +135,10 @@
 
 ### 1.6 Memory 生态多层栈格局明确
 
+> ⚠️ **adoption maturity caveat**：以下 5 个产品都在 alpha-beta · production GA
+> 真正稳定的只有 Letta + Mem0 两家·**SuperLocalMemory / Cognee 是 early adopter
+> 阶段·真用 < 100 家**。spec 完成度 ≠ 生产可靠。
+
 **生产 2026 用法**：不是单一架构·是组合栈：
 - **Vector layer**（fuzzy recall · sqlite-vec / pgvector / Qdrant）
 - **Episodic layer**（短期 coherence · 像我们 Trace/）
@@ -155,7 +164,11 @@
 
 ### 1.7 Decision Intelligence 已成 Gartner 大类
 
-**预测**：**75% 企业 2026 采纳 Decision Intelligence**
+> ⚠️ **prediction vs production gap**：Gartner "75% 采纳" 是包括 PoC + 试点·
+> 真 production scale-out 估测 < 20%（per Stanford EnterpriseAIPlaybook 2026-03·
+> "95% pilots fail to production" 行业数据互证）。"DI 大类已建" ≠ 客户真上线。
+
+**预测**：**75% 企业 2026 采纳 Decision Intelligence**（含 PoC + 试点）
 
 **核心叙事变化**：
 - 旧：dashboards need interpretation

@@ -145,9 +145,17 @@ principles work globally — we have OpenAI/Anthropic/Cohere adapters and the DA
 runs on Postgres just fine. Apache 2.0 means no jurisdiction is locked out.
 
 **Q10. Roadmap?**
-A: docs/ROADMAP_v1.md. Top items: Hike L2 Event layer + L4 Cognition (decision
-chain extraction) + 5 industry starters with design-partner data (D+7 ~ D+30).
+A: docs/ROADMAP_v1.md. Top items: Hike L2 Event layer + L4 Wiki Maintainer (Karpathy-style
+distillation) + 5 industry starters with design-partner data (D+7 ~ D+30).
 ome365.id signing crypto + ome365.a2a federation registry (D+14 ~ D+45).
+
+**Q11. How do CIOs adopt Anti-Tokenmaxxing in conservative orgs?**
+A: Translate the stance into dollar language. Don't tell the CFO "we're against token
+leaderboards" — tell them "each AI-resolved decision costs $12 (industry P50: $35),
+saves $XX/month vs contractors." We ship `docs/strategy/industry-benchmarks.yml`
+with Salesforce / NavyaAI / Forrester 2026 Q1 P25/P50/P75 baselines so your team's
+`cost_per_resolved_decision` becomes a board-ready number. Anti-Tokenmaxxing is a
+**product principle**; the **cockpit dashboard** speaks CFO. Both true.
 
 ---
 
