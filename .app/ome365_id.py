@@ -2,6 +2,9 @@
 ome365.id · Tenant DID + Member ID + Agent DID + Signed Agent Card
 v3.6 §六 line 328-374 · V1 真空带 Ome365 侧实现
 
+⚠️ v0.1 PREVIEW · real signing crypto lands in v1.2 (2026-09-01)
+Endpoints return mock JSON with `_preview: true` · safe to integrate against the contract.
+
 This module implements W3C DID Core 1.0 + W3C VC Data Model 2.0 patterns for:
   - tenant DID:  did:web:omnity.ai:<tenant-slug>
   - member ID:   tenant:<tenant-slug>/member:<member-slug>
@@ -288,6 +291,15 @@ __all__ = [
 # Real signing (Ed25519/RSA) integrates with mindos.protocol.a2a in D+5 ~ D+12
 from fastapi import APIRouter, HTTPException
 
+# Preview policy (per MASTER-PLAN stub policy A · 2026-05-08):
+# All endpoints in this module return mock JSON with _preview=True · real impl in v1.2.
+PREVIEW_META = {
+    "version": "0.1-stub",
+    "_preview": True,
+    "_real_in_version": "v1.2",
+    "_real_ship_date": "2026-09-01",
+}
+
 router = APIRouter(prefix="/api/identity", tags=["identity"])
 
 
@@ -298,7 +310,7 @@ def whoami():
     return {
         "tenant_did": "did:web:omnity.ai:default",
         "member_id": "tenant:default/member:demo",
-        "version": "0.1-stub",
+        **PREVIEW_META,
         "signing": "no signing yet · pending mindos.protocol integration",
     }
 

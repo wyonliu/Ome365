@@ -19,7 +19,7 @@
 > **Tagline**: Run your company on agents, not org charts.
 > **Sub-tagline**: Your AI follows the employee, not the employer.
 
-**Ome365** is **the file-first vault for the Agentic Web** — your team reads the same `SKILL.md` that 32 tools read (Claude Code · Codex · Cursor · Gemini CLI · JetBrains Junie · AWS Kiro · Block Goose · etc · all [Anthropic Agent Skills](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills) open standard adopters). Multi-tenant Markdown vault · self-learning **Hike** (Hive Intelligence Knowledge Engine · L4 Wiki Maintainer follows [Karpathy's LLM Wiki Pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)) · cross-company portability via W3C DID. FastAPI + Vue 3 CDN (zero build).
+**Ome365** is **the file-first vault for the Agentic Web** — your team's `SKILL.md` is **spec-compatible** with 32 tools that adopted [Anthropic's open Agent Skills standard](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills) (Claude Code · Codex · Cursor · Gemini CLI · JetBrains Junie · AWS Kiro · Block Goose · etc). **Runtime-tested** in CI on 3-4 headless CLIs (Claude Code · Codex CLI · Gemini CLI · Continue.dev) — IDE hosts are community-verified, not CI-gated (we don't pretend to spin up GUIs in GitHub Actions). Multi-tenant Markdown vault · self-learning **Hike** (Hive Intelligence Knowledge Engine · L4 Wiki Maintainer follows [Karpathy's LLM Wiki Pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)) · cross-company portability via W3C DID. FastAPI + Vue 3 CDN (zero build).
 
 > **Anti-Tokenmaxxing**: Ome365 measures **outcomes**, not tokens. We deliberately avoid token-leaderboard metrics (cf. [Meta 2026-04 incident](https://fortune.com/2026/04/09/meta-killed-employee-ai-token-dashboard/) · [Pinnacle critique](https://www.heypinnacle.com/blog/tokenmaxxing-performative-ai-hr-strategy-2026)) because performative AI usage corrupts the measurement. Member scores use **value/cost ratio** with FinOps-2026-aligned `cost_per_outcome` / `revenue_per_workflow` (see [v1.1 Team Brain design](docs/strategy/v1.1-team-brain-design.md)).
 
@@ -40,9 +40,26 @@ truthguard data-hygiene linter · **Hike v0.1** entity graph (8 entity types · 
 GZipped responses · multi-tenant auth (none / basic / magic_link / oidc / wecom) ·
 single-binary deploy via systemd / Docker / Compose · ~6000 LOC backend + ~2000 LOC frontend.
 
-**Roadmap (90 days)**: Hike v2 (L2 Event + L4 Cognition + L6 Swarm + UI 4 page) · PG+RLS multi-tenant ·
+**Roadmap (90 days)**: Hike v2 (L2 Event + L4 Wiki Maintainer + L6 Swarm + UI 4 page) · PG+RLS multi-tenant ·
 A2A federation (3 tier trust + Signed Agent Card) · ome365.id (tenant DID + 4 Skill VC types).
 See [docs/hike.md](docs/hike.md) for the flagship sub-project.
+
+### 🔬 Preview features (mock responses · real implementation in v1.1-v1.3)
+
+We deliberately ship **mock-but-stable contract endpoints** for features whose real
+implementation lands in upcoming releases. This lets you integrate against the contract
+today without waiting · responses are flagged `_preview: true` so you never confuse
+mock with production:
+
+| Endpoint | Real ship | Mock today | Real then |
+|:---|:---:|:---|:---|
+| `/api/cost/*` (per-tenant LLM budget cap · Cost-per-Outcome FinOps) | **v1.1** (2026-07-14) | in-memory budget + warn/throttle/block enum | real LLM call interception via `LLMBackend` |
+| `/api/identity/*` (W3C DID + 4 Skill VC types) | **v1.2** (2026-09-01) | placeholder DIDs + schema | real ed25519 signing + cross-instance verify |
+| `/api/a2a/*` (3-tier trust + federation) | **v1.3** (2026-11-01) | trust-tier state machine | real Signed Agent Card + 2-instance demo |
+
+Why we ship preview not vapor: 1238 lines of v0.1 stubs already exist · we mark them
+honestly as `_preview` rather than hide them, so v1.2-v1.3 implementers have framework
+to build on. See [`docs/strategy/MASTER-PLAN.md`](docs/strategy/MASTER-PLAN.md) for stub policy.
 
 ## See it in action
 

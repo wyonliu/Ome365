@@ -186,17 +186,23 @@
 
 ## 四 · 当前完成度（5-08 实测）
 
-### 4.1 ✅ 已完成（24 round + 计划文档）
+### 4.1 ✅ 已完成（24 round + 计划文档 + Review-Fix r2.1）
 
 ```
 代码:
   · server.py:           6126 行
-  · ome365_id.py:         357 行 stub
-  · ome365_a2a.py:        358 行 stub
-  · ome365_cost.py:       234 行 stub
+  · ome365_id.py:         357 行 PREVIEW (v0.1 mock · _preview=True · v1.2 真签名)
+  · ome365_a2a.py:        358 行 PREVIEW (v0.1 mock · _preview=True · v1.3 真联邦)
+  · ome365_cost.py:       234 行 PREVIEW (v0.1 mock · _preview=True · v1.1 真拦截)
   · hike_schema.py:       227 行 validator
   · dao/__init__.py:      289 行 (SQLite + PG/Kingbase 适配)
-  · 测试:                161 passed
+  · skill_lint.py:        ~250 行 (Anthropic SKILL.md spec 静态校验 · 32 tools 兼容)
+  · 测试:                161+ passed (含 5 skill lint)
+
+stub 政策（5-08 r2.1 拍板·方案 A 保留 mock 化）：
+  · 所有 stub endpoint 返 `_preview: true` + `_real_in_version` + `_real_ship_date`
+  · README 加 "Preview features" 段·不藏 stub
+  · 1238 行 stub 不浪费·v1.1-v1.3 实施有 contract framework
 
 数据:
   · PII scan:            0 hits / 149 tracked files
@@ -220,7 +226,7 @@
 
 | Day | 任务 | 工时 | 责任 |
 |:---:|:---|:---:|:---:|
-| 5-09 | 砍 stub 暴露面（id/a2a/cost/dao-PG 从主 README 下掉）+ README 削到 80 行 | 3h | AI |
+| 5-09 | **stub 政策方案 A**（mock 化保留 · 不藏 · 标 _preview）+ README 加 "Preview features" 段（已落 5-08 r2.1） + README 主体瘦身 60% | 3h | AI |
 | 5-10 | 5 行业 starter 合并 vault.example/ 1 文件夹 + doctor 12 → 4 check | 2h | AI |
 | 5-11 | show-hn-draft v0.2 重写"folder of markdown files"（保留反 Tokenmaxxing 段）| 2h | AI |
 | 5-12 | fresh ubuntu + Mac + WSL 装 install.sh + 60s 启动验证 + 录 gif | 4h | **爸爸 + AI** |

@@ -152,6 +152,15 @@ def reset_period(slug: str) -> None:
 # ── HTTP router (mounted by .app/server.py) ───────────────────────────────────
 from fastapi import APIRouter, HTTPException
 
+# Preview policy (per MASTER-PLAN stub policy A · 2026-05-08):
+# All endpoints in this module return mock JSON with _preview=True · real LLM 拦截 in v1.1.
+PREVIEW_META = {
+    "version": "0.1-stub",
+    "_preview": True,
+    "_real_in_version": "v1.1",
+    "_real_ship_date": "2026-07-14",
+}
+
 router = APIRouter(prefix="/api/cost", tags=["cost"])
 
 
@@ -167,7 +176,7 @@ def get_budget(tenant: str = "default"):
         "current_pct": pct,
         "remaining_usd": max(0.0, b.monthly_usd - _get_or_init_usage(tenant).dollars_spent),
         "period_start": b.period_start,
-        "version": "0.1-stub",
+        **PREVIEW_META,
     }
 
 
@@ -182,7 +191,7 @@ def post_budget(payload: dict):
         b = set_budget(tenant, float(monthly_usd), policy)
     except ValueError as e:
         raise HTTPException(400, str(e))
-    return {"tenant": tenant, "monthly_usd": b.monthly_usd, "policy": b.policy, "version": "0.1-stub"}
+    return {"tenant": tenant, "monthly_usd": b.monthly_usd, "policy": b.policy, **PREVIEW_META}
 
 
 @router.get("/usage")
@@ -196,7 +205,7 @@ def get_usage(tenant: str = "default"):
         "dollars_spent": u.dollars_spent,
         "last_call_at": u.last_call_at,
         "current_pct": compute_pct(tenant),
-        "version": "0.1-stub",
+        **PREVIEW_META,
     }
 
 
@@ -208,7 +217,7 @@ def get_alerts(tenant: str = "default"):
         "thresholds_pct": b.thresholds_pct,
         "fired_thresholds": b.fired_thresholds,
         "current_pct": compute_pct(tenant),
-        "version": "0.1-stub",
+        **PREVIEW_META,
     }
 
 
@@ -224,11 +233,11 @@ def post_policy(payload: dict):
         "tenant": tenant,
         "policy": b.policy,
         "definitions": POLICY_DEFINITIONS,
-        "version": "0.1-stub",
+        **PREVIEW_META,
     }
 
 
 @router.get("/policy/definitions")
 def get_policy_definitions():
     """Reference: 3 enforcement policies + when to use each."""
-    return {"policies": POLICY_DEFINITIONS, "version": "0.1-stub"}
+    return {"policies": POLICY_DEFINITIONS, **PREVIEW_META}

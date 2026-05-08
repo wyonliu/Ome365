@@ -247,13 +247,22 @@ from fastapi import APIRouter, HTTPException
 # Process-singleton federation registry (v0.1 in-memory · v1.x backed by signed JSON-LD)
 _REGISTRY = FederationRegistry()
 
+# Preview policy (per MASTER-PLAN stub policy A · 2026-05-08):
+# All endpoints in this module return mock JSON with _preview=True · real federation in v1.3.
+PREVIEW_META = {
+    "version": "0.1-stub",
+    "_preview": True,
+    "_real_in_version": "v1.3",
+    "_real_ship_date": "2026-11-01",
+}
+
 router = APIRouter(prefix="/api/a2a", tags=["a2a"])
 
 
 @router.get("/trust/tiers")
 def list_trust_tiers():
     """List the 3 trust tiers (T1 Public · T2 Pinned · T3 Internal · v3.6 §5.2 line 226)."""
-    return {"tiers": TRUST_TIER_DEFINITIONS, "version": "0.1-stub"}
+    return {"tiers": TRUST_TIER_DEFINITIONS, **PREVIEW_META}
 
 
 @router.post("/trust/check")
@@ -264,7 +273,7 @@ def check_trust(payload: dict):
     pinlist = payload.get("tenant_pinlist") or None
     same_tenant = payload.get("same_tenant_did") or None
     allowed, reason = check_trust_tier(caller, tier, tenant_pinlist=pinlist, same_tenant_did=same_tenant)
-    return {"allowed": allowed, "reason": reason, "tier": tier, "version": "0.1-stub"}
+    return {"allowed": allowed, "reason": reason, "tier": tier, **PREVIEW_META}
 
 
 @router.post("/task/create")
@@ -284,14 +293,14 @@ def create_task_endpoint(payload: dict):
         "state": task.state,
         "deadline": task.deadline(),
         "sla_seconds": SLA_SECONDS[sla],
-        "version": "0.1-stub",
+        **PREVIEW_META,
     }
 
 
 @router.get("/sla")
 def get_sla():
     """SLA segments (v3.6 §9.3 line 487)."""
-    return {"sla_seconds": SLA_SECONDS, "version": "0.1-stub"}
+    return {"sla_seconds": SLA_SECONDS, **PREVIEW_META}
 
 
 @router.get("/federation/list")
@@ -306,7 +315,7 @@ def federation_list():
             }
             for e in _REGISTRY.all()
         ],
-        "version": "0.1-stub",
+        **PREVIEW_META,
     }
 
 
@@ -339,7 +348,7 @@ def agent_card_well_known():
     return {
         "name": "Ome365",
         "did": "did:web:omnity.ai:default",
-        "version": "0.1-stub",
+        **PREVIEW_META,
         "protocol": "a2a/1.0",
         "capabilities": [
             "hike.entities",

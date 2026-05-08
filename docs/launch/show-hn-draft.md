@@ -85,11 +85,12 @@ Happy to answer anything in the comments.
 
 **Q0. What's actually new vs Letta / Mem0 / Coze / Dify / Khoj?**
 A: One sentence — **Ome365 is the file-first vault for the Agentic Web**. Three concrete
-implications they don't have: (1) every Skill is a `SKILL.md` that 32 tools already read
-(Claude Code, Codex CLI, Cursor, Gemini CLI, JetBrains Junie, AWS Kiro, Block Goose, etc
-— Anthropic donated Skills to AAIF Dec 2025); (2) member evaluation uses **Cost-per-Outcome**,
-not Cost-per-Token (FinOps-2026 aligned · we deliberately reject Tokenmaxxing — see
-[Meta's 2026-04 token leaderboard incident](https://fortune.com/2026/04/09/meta-killed-employee-ai-token-dashboard/));
+implications they don't have: (1) every Skill is a `SKILL.md` that's **spec-compatible with 32 tools**
+(Claude Code, Codex CLI, Cursor, Gemini CLI, JetBrains Junie, AWS Kiro, Block Goose, etc — all
+Anthropic Agent Skills open-standard adopters · AAIF Dec 2025) and **runtime-tested in CI on
+3-4 headless CLIs** (we don't claim to spin up GUIs in GitHub Actions for IDE hosts);
+(2) member evaluation uses **Cost-per-Outcome**, not Cost-per-Token (FinOps-2026 aligned · we
+deliberately reject Tokenmaxxing — see [Meta's 2026-04 token leaderboard incident](https://fortune.com/2026/04/09/meta-killed-employee-ai-token-dashboard/));
 (3) every decision is an 8-step markdown file with `value_anchors` (P/XL/L/M/维护性/Revert)
 that you can `git diff` 6 months later — not a black-box memory block.
 
