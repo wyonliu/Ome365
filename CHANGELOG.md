@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.1.17 — `doctor --json` ops contract pinned (2026-05-09)
+
+### What v1.1.17 ships
+
+- **`tests/test_doctor_json.py`** · 8 tests pinning the public ops contract
+  emitted by `./ome365 doctor --json`. Monitoring/alerting parses this output;
+  a silent shape change breaks dashboards. Tests pin: top-level keys, value
+  types, ports/files sub-shapes, all 12 v1.1 module names, `ok` flag logic,
+  vault state when `OME365_VAULT` exists, and basic JSON parseability.
+
+### Why this matters
+
+- Ops integration was the missing piece. v1.1.x added `--json` for
+  machine-readable doctor output, but no tests pinned the schema. A future
+  refactor could rename `v1_1_modules` → `modules` and we'd only notice via
+  customer pages. Now CI fails first.
+
+### Quality gates
+
+- 460 tests · 0 PII · 269 tracked files
+
+---
+
 ## v1.1.16 — Audit endpoint tests + CONTRIBUTING v1.1 essentials (2026-05-09)
 
 ### What v1.1.16 ships
