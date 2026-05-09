@@ -390,6 +390,40 @@ def agent_card_well_known():
             "archive": [
                 {"name": "archive.gzip",   "cli": "ome365 archive",        "tier": "T2"},
                 {"name": "archive.recall", "cli": "ome365 archive recall", "tier": "T2"},
+                {"name": "archive.list",   "cli": "ome365 archive list",   "tier": "T2"},
+            ],
+            "backup": [
+                {"name": "backup.create",  "cli": "ome365 backup create",                "tier": "T3"},
+                {"name": "backup.restore", "cli": "ome365 backup restore <tarball>",     "tier": "T3"},
+                {"name": "backup.list",    "cli": "ome365 backup list",                  "tier": "T2"},
+            ],
+            "audit": [
+                {"name": "audit.log",  "cli": "ome365 audit log",  "tier": "T3"},
+                {"name": "audit.grep", "cli": "ome365 audit grep", "tier": "T3"},
+                {"name": "audit.recent", "endpoint": "GET /api/eval/audit/recent", "tier": "T3"},
+            ],
+            "metrics": [
+                {"name": "metrics.scrape", "cli": "ome365 metrics", "tier": "T2"},
+                {"name": "metrics.http",   "endpoint": "GET /metrics", "tier": "T1"},
+            ],
+            "notify": [
+                {"name": "notify.list", "cli": "ome365 notify list", "tier": "T3"},
+                {"name": "notify.test", "cli": "ome365 notify test", "tier": "T3"},
+            ],
+            "rbac": [
+                {"name": "rbac.who",   "cli": "ome365 rbac who <actor>",          "tier": "T2"},
+                {"name": "rbac.list",  "cli": "ome365 rbac list",                 "tier": "T3"},
+                {"name": "rbac.check", "cli": "ome365 rbac check <actor> <action>", "tier": "T2"},
+                {"name": "rbac.role",  "endpoint": "GET /api/eval/role/{actor}",  "tier": "T2"},
+            ],
+            "ops": [
+                {"name": "ops.doctor", "cli": "ome365 doctor",        "tier": "T2"},
+                {"name": "ops.status", "cli": "ome365 status",        "tier": "T2"},
+                {"name": "ops.verify", "cli": "ome365 verify <url>",  "tier": "T1"},
+            ],
+            "actors": [
+                {"name": "actors.list",  "endpoint": "GET /api/eval/actors",  "tier": "T2"},
+                {"name": "actors.whoami", "endpoint": "GET /api/eval/whoami", "tier": "T1"},
             ],
         },
         "compliance": {

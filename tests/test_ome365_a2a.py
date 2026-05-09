@@ -260,7 +260,8 @@ def _normalize_path(path: str) -> str:
 
 
 def _registered_route_set():
-    """Set of (method, normalized_path) tuples across all v1.1 routers."""
+    """Set of (method, normalized_path) tuples for v1.1 routers + known
+    top-level routes mounted directly on the FastAPI app in server.py."""
     from ome365_decisions import router as dec_router
     from ome365_eval import router as eval_router
     out = set()
@@ -270,6 +271,13 @@ def _registered_route_set():
                 if m in ("HEAD",):
                     continue
                 out.add((m, _normalize_path(r.path)))
+    # Known top-level routes (defined directly on FastAPI app in server.py · not
+    # on a sub-router). Keep this list small and explicit; if it grows, refactor
+    # to import server.py app or split into routers.
+    out.update({
+        ("GET", "/metrics"),
+        ("GET", "/.well-known/agent-card.json"),
+    })
     return out
 
 

@@ -1,5 +1,34 @@
 # Changelog
 
+## v1.1.41 — agent-card capabilities catch up with v1.1.24-37 CLIs (2026-05-09)
+
+### What v1.1.41 ships
+
+- **Real interop bug fix**: agent-card `capabilities_v1_1` was frozen at the
+  v1.1.0 surface (decisions/eval/wiki/trace/archive). Federation peers
+  querying it would not see the 7 new module CLIs we shipped since v1.1.24:
+  backup / audit / metrics / notify / rbac / ops (doctor/status/verify) /
+  actors. They couldn't discover or call them.
+- 7 new capability groups added to the card with appropriate trust tiers
+  (T1 read-mostly · T2 default · T3 destructive/sensitive).
+- Regression test `test_agent_card_advertised_http_endpoints_exist` (v1.1.38)
+  caught one mid-edit `metrics.http: GET /metrics` not on a sub-router;
+  whitelisted top-level routes (`/metrics`,
+  `/.well-known/agent-card.json`) with explicit comment about when to
+  refactor.
+
+### Why this matters
+
+- This is the v1.1.36 bug class on a different surface: silently advertised
+  versus reality. Federation interop only works if peers can see what we
+  expose. Without this, Multi-Hike federation in v1.2 starts on a lie.
+
+### Quality gates
+
+- 524 tests · 0 PII · 274 tracked files
+
+---
+
 ## v1.1.40 — README ↔ CHANGELOG version sync regression (2026-05-09)
 
 ### What v1.1.40 ships
