@@ -5,6 +5,24 @@
 
 Thanks for your interest in Ome365! This doc is the fast-track for external contributors. If you're the project author, see [`DEV_WORKFLOW.md`](./DEV_WORKFLOW.md) for the dual-repo discipline.
 
+> **v1.1 contributor essentials** (added 2026-05-09 with v1.1.x series):
+>
+> 1. **Kevin "先文件再代码" rule**: every code commit must cite a Decision via
+>    `[decision: <id>]` in the commit message. Create the decision file FIRST in
+>    `vault.example/Decisions/<id>.md`, then write code. Hook in `.githooks/`
+>    will reject commits without the tag (bypass: `OME365_NO_DECISION=1`).
+> 2. **Run `./ome365 doctor`** before opening a PR — it shows all 12 v1.1
+>    modules loaded and surfaces any vault state issues.
+> 3. **Run `python3 -m pytest tests/ -q`** locally — should be 449/449 green.
+>    CI also runs the full suite via `.github/workflows/ci.yml`.
+> 4. **Run `python3 scripts/scan_pii.py`** — must be `0 hits`. PII gates the
+>    commit; the scanner walks tracked files for leak patterns.
+> 5. **Use `--dry-run` flags** when adding mutating CLIs (we have it on
+>    `wiki update`, `archive`, `backup create`). It's the team's preferred
+>    "preview before commit" pattern.
+> 6. **No emojis in committed files** unless explicitly requested. Comments
+>    in code: only when the WHY is non-obvious. No "what" comments.
+
 ## Project positioning
 
 Ome365 is the **open-source enterprise AI platform** — file-first multi-tenant Markdown vault, self-learning **Hike** (Hive Intelligence Knowledge Engine, see [`docs/hike.md`](./docs/hike.md)) for organizational memory + decision distillation, and cross-company portability via W3C DID.
