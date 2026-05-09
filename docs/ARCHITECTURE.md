@@ -3,7 +3,71 @@
 > 2026-04-15 · 作者 & AI 助手
 > 目标：把当前单用户私人工具，推进为"同事可装可用"的 AI 原生 PKM 平台。
 
-> **🔄 2026-05-08 update**: Ome365 已升级为 **the open-source enterprise AI platform** (file-first multi-tenant + self-learning Hike + cross-company portability). 本文描述 v0.8 阶段架构演进过程·**现行 v1.0-rc1 顶级定位** 见 [`../README.md`](../README.md) + [`hike.md`](./hike.md) + 90-day roadmap。**新增 v1.0 模块**: `ome365_id` (V1 真空带 · DID + Skill VC) + `ome365_a2a` (V5 真空带 · 3-tier trust + Federation)。
+> **🔄 2026-05-09 update · v1.1.6 shipped**: Ome365 has shipped 12 v1.1 modules
+> turning the vault into a Team Brain. Below this banner is the v0.8 historical
+> context. The current architecture (v1.1.x) is summarized here.
+>
+> ## v1.1.x · Team Brain modules (file-first · 0 deps for core path)
+>
+> ```
+> .app/
+>   ome365_eval.py       · 7-dim D1-D7 + region-aware (EU/CN/US) + dashboard_data
+>   ome365_decisions.py  · 8-step lifecycle + value_anchors + .calibration/
+>   ome365_trace.py      · jsonl SDK + monthly rollup + log_async (P2 #11)
+>   ome365_wiki.py       · Karpathy distill (rule-based + opt-in LLM/sqlite-vec)
+>   ome365_archive.py    · Moxt 95/5 nightly gzip
+>   ome365_backup.py     · tarball create/restore (path-traversal safe)
+>   ome365_audit.py      · GDPR Art. 30 / SOC2 / ISO27001 audit log
+>   ome365_metrics.py    · Prometheus /metrics · 12 metric families
+>   ome365_notify.py     · Slack/Lark/Teams/generic webhook (3 events)
+>   ome365_rbac.py       · 3 roles · roles.yml config
+>   ome365_signing.py    · ed25519 agent-card real signing
+>   ome365_cli_extras.py · ./ome365 verify | status | eval (CLI mirror)
+> ```
+>
+> ## v1.1 routes mounted in server.py
+>
+> ```
+> /api/decision/{list,new,close,calibration,*}    (W2)
+> /api/eval/{member,finops,skills,whoami,actors,role}  (W4 + v1.1.2 + v1.1.4)
+> /metrics                                          (P2 #12 · Prom text format)
+> /.well-known/agent-card.json                      (ed25519 signed)
+> /v1_1.html                                        (Vue 3 CDN cockpit)
+> ```
+>
+> ## v1.1 file invariants (file-first · grep-friendly)
+>
+> ```
+> $VAULT/Decisions/<id>.md            ← 8-step decisions (5 AI + 3 human)
+> $VAULT/Trace/<date>.jsonl           ← append-only · 11-field schema
+> $VAULT/Trace/monthly/<YYYY-MM>.summary.json    ← rollup cache
+> $VAULT/Trace/archive/<YYYY-MM>.jsonl.gz        ← Moxt 95/5 cold storage
+> $VAULT/Skills/<name>.md             ← Anthropic SKILL.md spec
+> $VAULT/Knowledge/L2-distilled/<cat>.md  ← Karpathy wiki output (auto)
+> $VAULT/Audit/<date>.jsonl           ← who-did-what (compliance)
+> $VAULT/Backups/vault-<ts>.tar.gz    ← `ome365 backup create`
+> $VAULT/.ome365/eval-config.yml      ← weights + region + sample_min
+> $VAULT/.ome365/roles.yml            ← RBAC (gitignored)
+> $VAULT/.ome365/keys/agent-card.ed25519  ← signing key (gitignored)
+> $VAULT/.ome365/notify_webhooks.json ← Slack/Lark/Teams urls (gitignored)
+> ```
+>
+> ## v1.1 quality gates (live in CI)
+>
+> - `tests/` : 441/441 pytest pass (was 161 at v1.0.0-rc1)
+> - `scripts/scan_pii.py` : 0 hits across 266 tracked files
+> - `.githooks/commit-msg` : Kevin "先文件再代码" rule enforced
+> - `.github/workflows/ci.yml` :
+>     · pii-scan · syntax-check · unit-tests (full pytest) · install-sh-test ·
+>     · v1_1-cockpit-e2e (server boot + 10 endpoint smoke + signature verify)
+> - `scripts/perf_bench.py` : 1000 decisions / 50 members / 194× cache speedup
+>
+> The v0.8 historical content below is preserved for context. **For current
+> architecture, read this banner top-down.**
+
+---
+
+## Historical context (v0.8 · 2026-04-15)
 
 ---
 

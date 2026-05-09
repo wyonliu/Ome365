@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.1.7 — ARCHITECTURE v1.1 + install.sh hints + Show HN v0.3 (2026-05-09)
+
+### What v1.1.7 ships
+
+- **`docs/ARCHITECTURE.md` v1.1 banner** · top-of-file map of all 12 v1.1
+  modules, mounted routes, file invariants, quality gates · "for current
+  architecture, read this banner top-down" preserves v0.8 history below.
+- **`install.sh` enhancement** · post-install hint surfaces optional v1.1
+  features (LLM-distilled wiki / semantic search) and post-boot quick-start
+  commands (`/v1_1.html` / `./ome365 status` / `./ome365 doctor`).
+- **README v1.1 highlights box refreshed** · 9-line `quick tour` showing
+  every shipped v1.1 surface as a one-liner command.
+- **Show HN draft v0.3** (`docs/launch/show-hn-draft-v0_3.md`) · titled
+  "Cost-per-Outcome team brain · ed25519 signed · 0 deps", 1500-char body,
+  5 anticipated comments with prepared answers.
+
+### Quality gates
+
+- 441 pytest tests · 100% pass
+- 0 PII hits · 267 tracked files
+- bash -n install.sh OK
+- All 7 micro-releases (v1.1.0 through v1.1.7) tagged on GitHub mirror
+
+---
+
 ## v1.1.6 — Perf smoke pytest + RBAC sample (2026-05-09)
 
 ### What v1.1.6 ships

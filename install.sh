@@ -146,9 +146,20 @@ fi
 if [ "$NO_START" = "1" ]; then
   ok "Installed to $DIR"
   say "Start: cd $DIR && ./ome365"
+  say ""
+  say "Optional v1.1 features (gated by env flags · install only what you need):"
+  say "  · LLM-distilled wiki:  pip install anthropic && export OME365_WIKI_LLM=1"
+  say "  · Semantic search:     pip install sqlite-vec sentence-transformers && export OME365_WIKI_VEC=1"
+  say "  · See $DIR/requirements-optional.txt for details"
   exit 0
 fi
 
 # ── First run ─────────────────────────────────────────────
 say "First run: ./ome365 (installs deps, starts service, opens browser)"
+say ""
+say "After server starts:"
+say "  · Open http://localhost:3650/v1_1.html  (4-card team-brain cockpit)"
+say "  · Run ./ome365 status    (vault overview)"
+say "  · Run ./ome365 doctor    (12-check + 12 v1.1 module health)"
+say ""
 exec ./ome365
