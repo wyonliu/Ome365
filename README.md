@@ -21,15 +21,27 @@
 
 **Ome365** is **the file-first vault for the Agentic Web** — your team's `SKILL.md` is **spec-compatible** with 32 tools that adopted [Anthropic's open Agent Skills standard](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills) (Claude Code · Codex · Cursor · Gemini CLI · JetBrains Junie · AWS Kiro · Block Goose · etc). **Runtime-tested** in CI on 3-4 headless CLIs (Claude Code · Codex CLI · Gemini CLI · Continue.dev) — IDE hosts are community-verified, not CI-gated (we don't pretend to spin up GUIs in GitHub Actions). Multi-tenant Markdown vault · self-learning **Hike** (Hive Intelligence Knowledge Engine · L4 Wiki Maintainer follows [Karpathy's LLM Wiki Pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)) · cross-company portability via W3C DID. FastAPI + Vue 3 CDN (zero build).
 
-> **🎯 v1.1.0 just shipped (2026-05-09) — Team Brain layer.**
-> 8 modules from plain markdown: 8-step **Decisions** (`/api/decision`) · **Trace** SDK
-> + monthly rollup (`./ome365 trace`) · **Eval** 7-dim with region-aware GDPR/PIPL
-> enforcement (`/api/eval/*`) · **Cost-per-Outcome** dashboard (`/v1_1.html`) ·
-> **Wiki** maintainer Karpathy-style (`./ome365 wiki update`) · **Archive** Moxt 95/5
-> nightly gzip (`./ome365 archive`) · `/.well-known/agent-card.json` advertises v1.1
-> capabilities. 250/250 tests · 0 PII · every commit cites a [decision]. Read the
-> [HR usage policy](docs/policies/EVAL_USAGE_POLICY.md) before you wire eval to
-> compensation; the answer is "don't, it's a hint, not a verdict."
+> **🚀 v1.1.x ships team-brain + productization (2026-05-09).**
+>
+> 12 modules · 441 pytest tests · 0 PII · ed25519-signed agent-card · RBAC ·
+> i18n · async trace · perf 194× cache speedup proven.
+>
+> Quick tour:
+> ```bash
+> ./ome365                 # boot at localhost:3650
+> open http://localhost:3650/v1_1.html  # 4-card cockpit (Decisions/Skills/FinOps/Eval)
+> ./ome365 status          # one-glance vault overview
+> ./ome365 doctor          # 12-check diagnostic + 12 v1.1 module health table
+> ./ome365 eval member alice --window-days 90   # CLI 7-dim eval
+> ./ome365 verify <agent-card-url>              # ed25519 verify
+> ./ome365 wiki update     # Karpathy distill Decisions → Knowledge/L2-distilled/
+> ./ome365 backup create   # tar.gz the vault (data-portable)
+> ./ome365 audit grep --actor alice  # SOC2/ISO27001-grade audit log
+> ```
+>
+> Read the [HR usage policy](docs/policies/EVAL_USAGE_POLICY.md) before wiring
+> eval to compensation; the answer is *"don't · it's a hint, not a verdict."*
+> See [TEAM_ONBOARDING.md](docs/TEAM_ONBOARDING.md) for a 5-minute walkthrough.
 
 > **Anti-Tokenmaxxing**: Ome365 measures **outcomes**, not tokens. We deliberately avoid token-leaderboard metrics (cf. [Meta 2026-04 incident](https://fortune.com/2026/04/09/meta-killed-employee-ai-token-dashboard/) · [Pinnacle critique](https://www.heypinnacle.com/blog/tokenmaxxing-performative-ai-hr-strategy-2026)) because performative AI usage corrupts the measurement. Member scores use **value/cost ratio** with FinOps-2026-aligned `cost_per_outcome` / `revenue_per_workflow` (see [v1.1 Team Brain design](docs/strategy/v1.1-team-brain-design.md)).
 
