@@ -38,15 +38,49 @@ revenue_per_workflow:
   source: "Forrester End of AI Pilot Era 2026-04"
   refreshed: 2026-04-23
 
+# Sector breakdown (P50 only · for industry-specific dashboards) ────────────
+sectors:
+  fintech:
+    cost_per_resolved_decision_p50_usd: 28
+    revenue_per_workflow_p50_usd: 3500
+    note: "high-revenue per workflow · regulatory review increases per-decision cost"
+  saas_b2b:
+    cost_per_resolved_decision_p50_usd: 32
+    revenue_per_workflow_p50_usd: 1800
+    note: "Salesforce/NavyaAI baseline cohort"
+  manufacturing:
+    cost_per_resolved_decision_p50_usd: 45
+    revenue_per_workflow_p50_usd: 900
+    note: "longer review cycles · higher elapsed_days"
+  consulting:
+    cost_per_resolved_decision_p50_usd: 22
+    revenue_per_workflow_p50_usd: 4200
+    note: "billable-hour replacement is direct ROI"
+  healthcare:
+    cost_per_resolved_decision_p50_usd: 55
+    revenue_per_workflow_p50_usd: 1100
+    note: "compliance review adds 30-40% time"
+  retail:
+    cost_per_resolved_decision_p50_usd: 18
+    revenue_per_workflow_p50_usd: 700
+    note: "high decision volume · low per-decision cost"
+
 # Notes for cockpit FinOps card:
 #   - Display "your team vs P25/P50/P75"
 #   - Show direction: lower-is-better for cost_per_resolved_decision
 #                     higher-is-better for human_equivalent_hourly + revenue_per_workflow
 #   - Compute % savings or improvement vs P50
 #   - Cite source on hover
+#   - If tenant_config.sector is set, use that row from sectors:
 #
 # CIO Translation Layer:
 #   - Generate one-line for CEO report:
 #     "Each AI-resolved decision costs $X (industry P50: $Y) → save $Z/month vs contractor"
 #   - Generate quarterly board slide:
 #     "Cost-per-Outcome trend · Q1 vs Q2 · vs industry baseline"
+#
+# Refresh SOP (monthly):
+#   1. Re-pull Salesforce / NavyaAI / Forrester / FinOps Foundation reports
+#   2. Update P25/P50/P75 + refreshed: date
+#   3. Add anomaly note if numbers shifted >15% MoM
+#   4. Commit with [decision: 2026-MM-industry-benchmarks-refresh-MMDD]

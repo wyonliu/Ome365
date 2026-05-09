@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.1.12 — Industry benchmarks · sector breakdown (2026-05-09)
+
+### What v1.1.12 ships
+
+- **`docs/strategy/industry-benchmarks.yml` enriched** · added `sectors:`
+  block with P50 numbers for 6 verticals (fintech / saas_b2b / manufacturing
+  / consulting / healthcare / retail) · cockpit can now use
+  `tenant_config.sector` to show industry-specific comparisons.
+- **Refresh SOP** documented (monthly · re-pull Salesforce/NavyaAI/Forrester ·
+  decision-cite the refresh).
+
+### Quality gates
+
+- 443 tests · 0 PII · 269 tracked files
+
+---
+
 ## v1.1.11 — Audit demo data · cockpit lit up (2026-05-09)
 
 ### What v1.1.11 ships
