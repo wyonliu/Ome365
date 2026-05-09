@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.1.19 — `ome365 metrics` CLI (offline Prometheus scrape) (2026-05-09)
+
+### What v1.1.19 ships
+
+- **`./ome365 metrics`** · dump Prometheus text-format metrics from the vault
+  without booting the FastAPI server. Useful for cron-driven scrapes,
+  air-gapped environments, and ad-hoc debugging.
+- **`./ome365 metrics --vault PATH`** · point at any vault for ad-hoc
+  inspection (overrides `$OME365_VAULT`).
+- **3 new tests** in `tests/test_ome365_backup_metrics.py` (now 24 tests):
+  help, basic dump, --vault flag override.
+
+### Why this matters
+
+- Until now, `/metrics` required an HTTP server. Operators in restricted
+  environments (no port binding, no daemon) had no way to scrape vault
+  state. CLI mode bridges that gap with stdlib only.
+
+### Quality gates
+
+- 467 tests · 0 PII · 270 tracked files
+
+---
+
 ## v1.1.18 — `backup restore --dry-run` (preview before destructive restore) (2026-05-09)
 
 ### What v1.1.18 ships

@@ -141,4 +141,24 @@ def render(vault: Optional[Path] = None) -> str:
 _PROCESS_START = time.time()
 
 
-__all__ = ["render", "inc"]
+def cli_main(argv: list[str]) -> int:
+    """`./ome365 metrics` · dump Prometheus text without booting server.
+
+    Useful for cron-driven scrapes, debugging, and air-gapped environments.
+    """
+    if argv and argv[0] in ("-h", "--help", "help"):
+        print(
+            "usage:\n"
+            "  ome365 metrics             # dump Prometheus text from $OME365_VAULT\n"
+            "  ome365 metrics --vault DIR # dump from specific vault\n",
+            flush=True,
+        )
+        return 0
+    vault = None
+    if argv and argv[0] == "--vault" and len(argv) >= 2:
+        vault = Path(argv[1])
+    print(render(vault=vault), end="", flush=True)
+    return 0
+
+
+__all__ = ["render", "inc", "cli_main"]

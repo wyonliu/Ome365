@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / ".app"))
 
 from ome365_backup import cli_main as backup_cli  # noqa: E402
 from ome365_backup import create, list_backups, restore  # noqa: E402
+from ome365_metrics import cli_main as metrics_cli  # noqa: E402
 from ome365_metrics import inc, render  # noqa: E402
 
 
@@ -196,6 +197,39 @@ def test_metrics_via_http(tmp_path, monkeypatch):
     r = client.get("/metrics")
     assert r.status_code == 200
     assert "ome365_decisions_total" in r.text
+
+
+# ── v1.1.19 metrics CLI (offline scrape) ────────────────────────────────────
+
+
+def test_metrics_cli_help(capsys):
+    rc = metrics_cli(["--help"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "ome365 metrics" in out
+
+
+def test_metrics_cli_dumps_prometheus_text(tmp_path, monkeypatch, capsys):
+    _seed_min_vault(tmp_path)
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+    rc = metrics_cli([])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "ome365_decisions_total" in out
+    assert "# HELP" in out
+    assert out.endswith("\n")
+
+
+def test_metrics_cli_vault_flag_overrides_env(tmp_path, monkeypatch, capsys):
+    """--vault PATH should win over $OME365_VAULT for ad-hoc inspection."""
+    other = tmp_path / "other-vault"
+    _seed_min_vault(other)
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path / "ignored"))
+    rc = metrics_cli(["--vault", str(other)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    # decisions_total reflects the seeded vault, not the env one
+    assert "ome365_decisions_total" in out
 
 
 # ── v1.1.15 backup --dry-run ─────────────────────────────────────────────────
