@@ -307,6 +307,33 @@
 
   </div>
 
+  <!-- ⑤ Audit log (full-width) -->
+  <div class="card" style="margin-top: 16px">
+    <h2>
+      ⑤ Audit · who-did-what (last {{ audit.days }}d)
+      <span class="actions">
+        <button @click="copyCurl('/api/eval/audit/recent?days=' + audit.days + '&limit=20')" title="copy curl">curl</button>
+      </span>
+    </h2>
+    <div class="sub">SOC2 CC7.2 · ISO27001 A.12.4.1 · GDPR Art. 30 — append-only</div>
+
+    <div v-if="audit.loading" class="skel" style="height: 60px"></div>
+    <div v-else-if="audit.err" class="err">
+      <button @click="reload('audit')">retry</button>
+      {{ audit.err }}
+    </div>
+    <div v-else-if="!audit.events.length" class="empty">
+      No audit events in last {{ audit.days }}d · close a decision or update wiki to fire one
+    </div>
+    <div v-else>
+      <div class="row" v-for="(e, i) in audit.events.slice(0, 10)" :key="i">
+        <span class="num" style="flex: 0 0 90px">{{ (e.ts || '').slice(11, 19) }}</span>
+        <span class="pill" :class="auditPillClass(e.action)">{{ e.action }}</span>
+        <span class="name">{{ e.actor }} → {{ e.target_id || '—' }}</span>
+      </div>
+    </div>
+  </div>
+
   <footer>
     Ome365 v1.1 · Team Brain · GDPR Art. 22 + PIPL §13/§24 enforced ·
     <a href="/docs/TEAM_ONBOARDING.md">5-min onboarding</a> ·
@@ -384,6 +411,7 @@ createApp({
       skills:    { loading: true, list: [], count: 0, authors: new Set(), err: null },
       finops:    { loading: true, data: null, err: null },
       eval_:     { loading: true, data: null, err: null },
+      audit:     { loading: true, events: [], days: 7, err: null },
       toast:     { show: false, kind: 'ok', text: '', timer: null },
     });
 
@@ -457,6 +485,16 @@ createApp({
       finally { state.eval_.loading = false; }
     }
 
+    async function loadAudit() {
+      state.audit.loading = true;
+      try {
+        const j = await fetchJson(`/api/eval/audit/recent?days=${state.audit.days}&limit=20`);
+        state.audit.events = j.events || [];
+        state.audit.err = null;
+      } catch (e) { state.audit.err = e.message; state.audit.events = []; }
+      finally { state.audit.loading = false; }
+    }
+
     async function loadAll() {
       state.loading = true;
       // Persist user prefs
@@ -475,7 +513,7 @@ createApp({
         state.role = r.role || '';
       } catch { state.role = ''; }
 
-      await Promise.all([loadDecisions(), loadSkills(), loadFinops(), loadEval()]);
+      await Promise.all([loadDecisions(), loadSkills(), loadFinops(), loadEval(), loadAudit()]);
       state.lastLoaded = Date.now();
       state.loading = false;
     }
@@ -485,6 +523,17 @@ createApp({
       if (which === 'skills')    return loadSkills();
       if (which === 'finops')    return loadFinops();
       if (which === 'eval_')     return loadEval();
+      if (which === 'audit')     return loadAudit();
+    }
+
+    function auditPillClass(action) {
+      if (!action) return '';
+      if (action.startsWith('decision.')) return 'P';
+      if (action.startsWith('wiki.'))     return 'L';
+      if (action.startsWith('trace.'))    return 'M';
+      if (action.startsWith('backup.'))   return 'XL';
+      if (action.startsWith('share.') || action === 'config.change') return 'Revert';
+      return '';
     }
 
     function exportCsv(which) {
@@ -575,7 +624,7 @@ createApp({
       ...state,
       ago,
       loadAll, reload, exportCsv, copyCurl, toggleTheme, toggleLang, t,
-      humanScope, humanDim, scoreClass,
+      humanScope, humanDim, scoreClass, auditPillClass,
       JSON,
     };
   },

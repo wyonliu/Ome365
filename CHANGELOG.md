@@ -1,5 +1,47 @@
 # Changelog
 
+## v1.1.10 — 5th cockpit card · Audit visibility (2026-05-09)
+
+### What v1.1.10 ships
+
+- **`/api/eval/audit/recent?days=N&limit=M`** · new endpoint surfacing
+  recent audit log entries (decision.close / wiki.update / backup.create /
+  etc) for cockpit visibility.
+- **5th cockpit card · Audit log** · full-width card under the 4-card
+  grid showing the last 10 events with timestamp · action pill · actor →
+  target. Empty-state is friendly ("close a decision or update wiki to
+  fire one"). Curl button copies the API call.
+- **Action pills** · color-coded by action group (decision=P/blue,
+  wiki=L/green, trace=M/yellow, backup=XL/green, share+config=Revert/red).
+
+### Quality gates
+
+- 443 pytest tests · 100% pass
+- 0 PII hits · 268 tracked files
+- audit endpoint smoke: 200 with `events` array (empty on virgin vault.example)
+
+### v1.1.x series complete (2026-05-09 · single-day sprint)
+
+Ten micro-releases · v1.1.0 → v1.1.10 · 250 → 443 pytest tests · 12 v1.1
+modules shipped · 0 PII through every step · every code commit cited a
+`[decision: <id>]` tag.
+
+| Tag | Highlight |
+|:---|:---|
+| v1.1.0  | Team Brain · 8-week file-first design ships |
+| v1.1.1  | Productization · demo seed + UI + onboarding + webhooks + backup + metrics + audit + perf bench |
+| v1.1.2  | Final batch · multi-user / RBAC / i18n / LLM wiki / sqlite-vec / ed25519 |
+| v1.1.3  | CLI polish · verify / status / eval / requirements-optional |
+| v1.1.4  | Doctor v1.1 + cockpit role badge + v1.2 preview |
+| v1.1.5  | CI green for full pytest + 5th SKILL.md (cost-per-outcome) |
+| v1.1.6  | Perf smoke pytest budgets + RBAC sample yml |
+| v1.1.7  | ARCHITECTURE v1.1 banner + install.sh hints + Show HN draft v0.3 |
+| v1.1.8  | Full lifecycle integration test (12 modules cooperating) |
+| v1.1.9  | Cockpit keyboard shortcuts + doctor --json |
+| v1.1.10 | 5th cockpit card · Audit visibility |
+
+---
+
 ## v1.1.9 — Cockpit shortcuts + doctor --json (2026-05-09)
 
 ### What v1.1.9 ships

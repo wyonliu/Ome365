@@ -857,6 +857,16 @@ try:
                 return {"actor": most_common[0][0], "source": "vault_inferred"}
         return {"actor": "alice", "source": "default"}
 
+    @router.get("/audit/recent")
+    def http_audit_recent(days: int = Query(7, ge=1, le=365),
+                          limit: int = Query(20, ge=1, le=200)):
+        """Recent audit log entries · cockpit Audit card."""
+        try:
+            from ome365_audit import grep_recent
+            return {"events": grep_recent(days=days, limit=limit, vault=_vault_root())}
+        except ImportError:
+            return {"events": [], "error": "ome365_audit not loaded"}
+
     @router.get("/role/{actor}")
     def http_role(actor: str):
         """Resolve actor's role · cockpit displays role badge based on this."""
