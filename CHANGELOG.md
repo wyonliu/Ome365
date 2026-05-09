@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.1.39 — cockpit i18n key symmetry regression (2026-05-09)
+
+### What v1.1.39 ships
+
+- **`tests/test_v1_1_i18n.py`** · 5 regression tests parsing
+  `.app/static/v1_1.html` to assert the I18N block: en/zh keys symmetric, no
+  empty translations, dim.* keys match the 7 spec dimensions.
+
+### Why this matters
+
+- The cockpit uses `t(key)` lookups; if a key is added in `en` but forgotten
+  in `zh`, Chinese users see raw keys like
+  "scope.cost_per_resolved_decision" on the page. Same blast radius as
+  v1.1.36 (real interop bug shipped silently). Now CI fails first.
+
+### Quality gates
+
+- 521 tests · 0 PII · 272 tracked files
+
+---
+
 ## v1.1.38 — agent-card advertised endpoints must really exist (regression) (2026-05-09)
 
 ### What v1.1.38 ships
