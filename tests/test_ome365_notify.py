@@ -17,6 +17,7 @@ from ome365_notify import (  # noqa: E402
     _fmt_lark,
     _fmt_slack,
     _fmt_teams,
+    cli_main as notify_cli,
     notify,
 )
 
@@ -200,3 +201,59 @@ def test_decision_close_fires_webhook(mock_httpd, monkeypatch, tmp_path):
     decision_events = [r for r in _Capture.received if r["body"].get("event") == "decision.closed"]
     assert len(decision_events) >= 1
     assert decision_events[0]["body"]["payload"]["outcome"] == "shipped"
+
+
+# ── v1.1.24 notify CLI · list / test ────────────────────────────────────────
+
+
+def test_notify_cli_help(capsys):
+    rc = notify_cli([])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "ome365 notify" in out
+    assert "list" in out and "test" in out
+
+
+def test_notify_cli_list_empty(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("OME365_WEBHOOKS", raising=False)
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+    rc = notify_cli(["list"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "no webhooks" in out
+
+
+def test_notify_cli_list_shows_host_only(tmp_path, monkeypatch, capsys):
+    """`notify list` must NOT print full URL — security/PII concern."""
+    cfg = json.dumps([{"platform": "slack",
+                        "url": "https://hooks.slack.com/services/SECRET/TOKEN/HERE"}])
+    monkeypatch.setenv("OME365_WEBHOOKS", cfg)
+    rc = notify_cli(["list"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "hooks.slack.com" in out
+    assert "SECRET" not in out  # full path/token must NOT leak
+    assert "TOKEN" not in out
+
+
+def test_notify_cli_test_fires_event(mock_httpd, monkeypatch, capsys):
+    cfg = json.dumps([{"platform": "generic", "url": mock_httpd["url"]}])
+    monkeypatch.setenv("OME365_WEBHOOKS", cfg)
+    rc = notify_cli(["test", "--event", "decision.close"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert '"sent": 1' in out
+    # Verify the mock server received the event
+    assert any(r["body"].get("event") == "decision.close" for r in _Capture.received)
+
+
+def test_notify_cli_test_when_no_webhooks(tmp_path, monkeypatch, capsys):
+    """Empty config returns sent=0 with note · scripts can rely on this."""
+    monkeypatch.delenv("OME365_WEBHOOKS", raising=False)
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+    rc = notify_cli(["test"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    parsed = json.loads(out)
+    assert parsed["sent"] == 0
+    assert "note" in parsed

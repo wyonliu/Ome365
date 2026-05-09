@@ -202,4 +202,74 @@ def _host(url: str) -> str:
         return "?"
 
 
-__all__ = ["notify", "FORMATTERS"]
+def cli_main(argv: list[str]) -> int:
+    """`./ome365 notify list | test` · inspect / fire test events."""
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(
+            "usage:\n"
+            "  ome365 notify list                 # show configured webhooks (host only)\n"
+            "  ome365 notify test [--event E]     # fire a fake event to all webhooks\n"
+            "                     [--platform P]   filter by platform · slack/lark/teams/generic\n"
+            "                     [--vault DIR]    use webhooks from this vault\n",
+            flush=True,
+        )
+        return 0
+
+    cmd = argv[0]
+    rest = argv[1:]
+    args: dict = {}
+    i = 0
+    while i < len(rest):
+        tok = rest[i]
+        if tok.startswith("--") and i + 1 < len(rest):
+            args[tok.lstrip("-").replace("-", "_")] = rest[i + 1]
+            i += 2
+        else:
+            i += 1
+
+    vault = Path(args["vault"]) if args.get("vault") else None
+
+    if cmd == "list":
+        webhooks = _load_webhooks(vault)
+        if not webhooks:
+            print("no webhooks configured", flush=True)
+            return 0
+        for w in webhooks:
+            host = _host(w.get("url", ""))
+            events = w.get("events") or "(all events)"
+            print(f"  {w.get('platform', 'generic'):<10} {host:<40} {events}")
+        print(f"--- {len(webhooks)} webhook(s)", flush=True)
+        return 0
+
+    if cmd == "test":
+        event = args.get("event", "decision.close")
+        platform_filter = args.get("platform")
+        webhooks = _load_webhooks(vault)
+        if platform_filter:
+            webhooks = [w for w in webhooks
+                        if (w.get("platform") or "generic").lower() == platform_filter.lower()]
+        if not webhooks:
+            print(json.dumps({"sent": 0, "failed": 0, "skipped": 0,
+                              "note": "no webhooks matched"}, indent=2))
+            return 0
+        # Patch _load_webhooks for this single call so platform filter works
+        original = globals()["_load_webhooks"]
+        try:
+            globals()["_load_webhooks"] = lambda *_, **__: webhooks
+            payload = {
+                "id": "test-event",
+                "owner": "ome365-notify-test",
+                "outcome": "this is a test event from `ome365 notify test`",
+                "value_anchors": ["P"],
+            }
+            result = notify(event, payload, vault=vault)
+        finally:
+            globals()["_load_webhooks"] = original
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 0 if result["failed"] == 0 else 1
+
+    print(f"ERROR: unknown subcommand '{cmd}' (try list | test)", flush=True)
+    return 2
+
+
+__all__ = ["notify", "FORMATTERS", "cli_main"]

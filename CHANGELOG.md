@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.1.24 — `ome365 notify list / test` CLI for webhook ops (2026-05-09)
+
+### What v1.1.24 ships
+
+- **`./ome365 notify list`** · prints configured webhooks with **host only**
+  (URL paths/tokens never logged · PII safety).
+- **`./ome365 notify test [--event E] [--platform P]`** · fires a fake event
+  payload to all (or filtered) webhooks. Returns `{sent, failed, skipped,
+  results}` JSON. Exit code 1 if any webhook failed.
+- **5 new tests** (now 19 total in test_ome365_notify.py): help · list-empty ·
+  list-host-only-no-token-leak · test-fires-event · test-empty-config-with-note.
+
+### Why this matters
+
+- Until now, operators configuring webhooks had no built-in way to verify
+  delivery. They'd close a fake decision via API to trigger one, with no
+  visibility into delivery success. `notify test` is the missing diagnostic.
+- The `list` command's host-only output is a security feature — Slack/Lark
+  webhook URLs contain the auth token in the path. Logging them would leak.
+
+### Quality gates
+
+- 476 tests · 0 PII · 271 tracked files
+
+---
+
 ## v1.1.23 — `wiki query --json` for scriptable knowledge search (2026-05-09)
 
 ### What v1.1.23 ships
