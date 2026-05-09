@@ -100,3 +100,24 @@ def test_cli_help_returns_0(capsys):
     rc = cli_main([])
     assert rc == 0
     assert "ome365 archive" in capsys.readouterr().out
+
+
+# ── v1.1.14 dry-run ────────────────────────────────────────────────────────
+
+
+def test_archive_dry_run_no_disk_writes(tmp_path):
+    today = date(2026, 5, 9)
+    _seed_jsonl(tmp_path, today - timedelta(days=60))
+    _seed_jsonl(tmp_path, today - timedelta(days=45))
+    _seed_jsonl(tmp_path, today - timedelta(days=10))  # recent
+
+    result = archive(vault=tmp_path, older_than_days=30, today=today, dry_run=True)
+    assert result["dry_run"] is True
+    assert result["moved"] == 0
+    assert result["would_move"] == 2
+    assert result["would_archive"]
+    # Old jsonl files still present
+    assert (tmp_path / "Trace" / f"{(today - timedelta(days=60)).isoformat()}.jsonl").exists()
+    # No archive .gz created
+    arc_dir = tmp_path / "Trace" / "archive"
+    assert not arc_dir.exists() or not list(arc_dir.glob("*.jsonl.gz"))

@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.1.14 — archive --dry-run (consistency with wiki) (2026-05-09)
+
+### What v1.1.14 ships
+
+- **`./ome365 archive --dry-run`** · preview which jsonl files WOULD be
+  gzipped without touching disk. Same pattern as `wiki update --dry-run`.
+  Returns `{dry_run: true, moved: 0, would_move: N, would_archive: [...]}`.
+- **1 new test** (`test_archive_dry_run_no_disk_writes`).
+
+### Quality gates
+
+- 447 tests · 0 PII · 269 tracked files
+
+---
+
 ## v1.1.13 — wiki update --dry-run + 3 new tests (2026-05-09)
 
 ### What v1.1.13 ships

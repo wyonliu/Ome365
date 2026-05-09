@@ -35,14 +35,17 @@ def archive(
     vault: Optional[Path] = None,
     older_than_days: int = 30,
     today: Optional[date] = None,
+    dry_run: bool = False,
 ) -> dict:
     """
     Move per-day Trace/<YYYY-MM-DD>.jsonl files older than `older_than_days`
     into Trace/archive/<YYYY-MM>.jsonl.gz · concatenated by month bucket.
     Idempotent: re-running on same input is a no-op.
 
+    dry_run=True: report what WOULD be moved without touching disk.
+
     Returns:
-      {"moved": int, "skipped_recent": int, "archived": [<rel-path>...]}
+      {"moved": int, "skipped_recent": int, "archived": [<rel-path>...], "dry_run": bool}
     """
     v = _vault_root(vault)
     trace_dir = v / "Trace"
@@ -71,6 +74,21 @@ def archive(
 
     archived: list[str] = []
     moved = 0
+    if dry_run:
+        for period, files in sorted(by_month.items()):
+            target = arc_dir / f"{period}.jsonl.gz"
+            archived.append(str(target.relative_to(v)))
+            moved += len(files)
+        return {
+            "moved": 0,
+            "would_move": moved,
+            "skipped_recent": skipped_recent,
+            "archived": [],
+            "would_archive": archived,
+            "older_than_days": older_than_days,
+            "dry_run": True,
+        }
+
     for period, files in sorted(by_month.items()):
         target = arc_dir / f"{period}.jsonl.gz"
         # Append mode for gzip concatenation works (gzip handles multi-member transparently)
@@ -114,7 +132,7 @@ def cli_main(argv: list[str]) -> int:
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(
             "usage:\n"
-            "  ome365 archive [--older-than 30]\n"
+            "  ome365 archive [--older-than 30] [--dry-run]\n"
             "  ome365 archive recall --period YYYY-MM\n"
         )
         return 0
@@ -122,10 +140,14 @@ def cli_main(argv: list[str]) -> int:
     rest = argv[:]
     args: dict = {}
     positional: list[str] = []
+    dry_run = False
     i = 0
     while i < len(rest):
         tok = rest[i]
-        if tok.startswith("--") and i + 1 < len(rest):
+        if tok == "--dry-run":
+            dry_run = True
+            i += 1
+        elif tok.startswith("--") and i + 1 < len(rest):
             args[tok.lstrip("-").replace("-", "_")] = rest[i + 1]
             i += 2
         else:
@@ -145,7 +167,7 @@ def cli_main(argv: list[str]) -> int:
         return 0
 
     older = int(args.get("older_than", "30"))
-    result = archive(older_than_days=older)
+    result = archive(older_than_days=older, dry_run=dry_run)
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
 
