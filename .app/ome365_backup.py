@@ -135,9 +135,14 @@ def restore(
     vault: Optional[Path] = None,
     *,
     safe: bool = True,
+    dry_run: bool = False,
 ) -> dict:
     """
     Restore tarball into vault. Safe mode (default) backs up existing vault first.
+
+    dry_run=True: validates tarball + returns preview without extracting.
+        Returns {dry_run, n_files, total_bytes, sample_files, would_restore_to,
+                 would_backup_prior}.
 
     Returns: {restored_to, prior_backup, n_files}
     """
@@ -145,6 +150,29 @@ def restore(
     src = Path(tarball).resolve()
     if not src.exists():
         raise FileNotFoundError(f"backup tarball not found: {src}")
+
+    if dry_run:
+        n_files = 0
+        total_bytes = 0
+        sample = []
+        with tarfile.open(src, "r:gz") as tar:
+            for member in tar.getmembers():
+                if member.name.startswith("/") or ".." in member.name.split("/"):
+                    raise ValueError(f"unsafe member path in tarball: {member.name}")
+                n_files += 1
+                total_bytes += member.size
+                if len(sample) < 10:
+                    sample.append(member.name)
+        would_backup_prior = bool(safe and v.exists() and any(v.iterdir()))
+        return {
+            "dry_run": True,
+            "tarball": str(src),
+            "n_files": n_files,
+            "total_bytes": total_bytes,
+            "sample_files": sample,
+            "would_restore_to": str(v),
+            "would_backup_prior": would_backup_prior,
+        }
 
     prior_backup = None
     if safe and v.exists() and any(v.iterdir()):
@@ -199,7 +227,7 @@ def cli_main(argv: list[str]) -> int:
         print(
             "usage:\n"
             "  ome365 backup create [--dest DIR] [--dry-run]\n"
-            "  ome365 backup restore <tarball> [--unsafe]\n"
+            "  ome365 backup restore <tarball> [--unsafe] [--dry-run]\n"
             "  ome365 backup list [--dir DIR]\n"
         )
         return 0
@@ -239,7 +267,11 @@ def cli_main(argv: list[str]) -> int:
             print("ERROR: restore needs a tarball path", flush=True)
             return 2
         try:
-            result = restore(Path(positional[0]), safe=not args.get("unsafe", False))
+            result = restore(
+                Path(positional[0]),
+                safe=not args.get("unsafe", False),
+                dry_run=dry_run,
+            )
             print(json.dumps(result, indent=2))
             return 0
         except (FileNotFoundError, ValueError) as e:

@@ -225,3 +225,73 @@ def test_backup_cli_create_dry_run(tmp_path, monkeypatch, capsys):
     # No tarball created in default Backups/
     assert not (tmp_path / "Backups").exists() or \
            not list((tmp_path / "Backups").glob("vault-*.tar.gz"))
+
+
+# ── v1.1.18 backup restore --dry-run ────────────────────────────────────────
+
+
+def test_backup_restore_dry_run_does_not_extract(tmp_path):
+    """restore(dry_run=True) must not write anything to vault dir."""
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    _seed_min_vault(src)
+    tarball = create(vault=src, dest=tmp_path)
+
+    dst.mkdir()
+    result = restore(tarball, vault=dst, safe=False, dry_run=True)
+
+    assert result["dry_run"] is True
+    assert result["n_files"] >= 2
+    assert result["total_bytes"] > 0
+    assert isinstance(result["sample_files"], list)
+    assert len(result["sample_files"]) <= 10
+    assert result["would_restore_to"] == str(dst.resolve())
+    assert result["would_backup_prior"] is False  # dst is empty
+    # Crucially: nothing was extracted
+    assert not (dst / "Decisions").exists()
+
+
+def test_backup_restore_dry_run_flags_prior_backup(tmp_path):
+    """When dst has data and safe=True, dry-run should flag would_backup_prior."""
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    _seed_min_vault(src)
+    _seed_min_vault(dst)
+    tarball = create(vault=src, dest=tmp_path)
+
+    result = restore(tarball, vault=dst, safe=True, dry_run=True)
+    assert result["would_backup_prior"] is True
+    # Still no actual prior backup file written
+    assert not (dst / "Backups" / "_pre_restore").exists()
+
+
+def test_backup_restore_dry_run_blocks_path_traversal(tmp_path):
+    """Even in dry-run, unsafe tarballs must raise — preview is the safety surface."""
+    bad = tmp_path / "bad.tar.gz"
+    payload = tmp_path / "payload.txt"
+    payload.write_text("evil", "utf-8")
+    with tarfile.open(bad, "w:gz") as tar:
+        ti = tarfile.TarInfo(name="../escape.txt")
+        ti.size = payload.stat().st_size
+        with payload.open("rb") as f:
+            tar.addfile(ti, f)
+
+    with pytest.raises(ValueError, match="unsafe"):
+        restore(bad, vault=tmp_path / "victim", safe=False, dry_run=True)
+
+
+def test_backup_cli_restore_dry_run(tmp_path, monkeypatch, capsys):
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    _seed_min_vault(src)
+    tarball = create(vault=src, dest=tmp_path)
+    dst.mkdir()
+    monkeypatch.setenv("OME365_VAULT", str(dst))
+
+    rc = backup_cli(["restore", str(tarball), "--unsafe", "--dry-run"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert '"dry_run": true' in out
+    assert '"sample_files"' in out
+    # Nothing extracted
+    assert not (dst / "Decisions").exists()

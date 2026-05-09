@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.1.18 — `backup restore --dry-run` (preview before destructive restore) (2026-05-09)
+
+### What v1.1.18 ships
+
+- **`./ome365 backup restore <tarball> --dry-run`** · validates path-traversal
+  safety + previews tarball contents (n_files, total_bytes, sample of first 10
+  files) without extracting anything to the vault. Critically also reports
+  `would_backup_prior: bool` so users know whether `--unsafe` is needed to skip
+  the safety backup.
+- **4 new tests** in `tests/test_ome365_backup_metrics.py` (now 21 tests):
+  no extraction, prior-backup flag, path-traversal blocked even in dry-run, CLI
+  wiring.
+
+### Why this matters
+
+- `restore` overwrites the vault. Until now, the only safety net was `safe=True`
+  (auto-backup before restore). `--dry-run` adds a second safety layer — see
+  what's in the tarball before committing. All three mutating CLIs are now
+  dry-runnable: `wiki update`, `archive`, `backup create/restore`.
+
+### Quality gates
+
+- 464 tests · 0 PII · 269 tracked files
+
+---
+
 ## v1.1.17 — `doctor --json` ops contract pinned (2026-05-09)
 
 ### What v1.1.17 ships
