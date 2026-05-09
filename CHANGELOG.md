@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.1.21 — 6th SKILL.md: audit-incident-response (2026-05-09)
+
+### What v1.1.21 ships
+
+- **`vault.example/Skills/audit-incident-response.md`** · 6-minute drill for
+  vault operators after suspected incident. Covers: scope (1m) → grep audit
+  trail (2m) → cross-reference Decision file (1m) → write 5-bullet
+  postmortem (2m). Validates against `tests/test_skill_lint.py`.
+
+### Why this matters
+
+- v1.1 ships an audit log + audit grep CLI. Without an opinionated workflow,
+  operators won't reach for it. SKILL.md is the productized opinion. 6 SKILLs
+  now cover: meeting summaries, dev decisions, wiki update/query, cost-per-
+  outcome, and incident response.
+
+### Quality gates
+
+- 469 tests · 0 PII · 270 tracked files (skill_lint covers the new file)
+
+---
+
 ## v1.1.20 — `backup list --json` for scriptable retention (2026-05-09)
 
 ### What v1.1.20 ships
