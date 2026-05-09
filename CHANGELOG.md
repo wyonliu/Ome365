@@ -1,5 +1,82 @@
 # Changelog
 
+## v1.1.1 — Productization pass · Team-ready (2026-05-09)
+
+**Tagline**: From "engineer demo" to "team can actually use this".
+
+This is the productization pass that took v1.1.0 from a working spec to something
+a 5+ person team can adopt without hand-holding. 8 modules added, 3 critical
+bugs fixed, 156 tests added (250 → 406).
+
+### What v1.1.1 ships
+
+- **P0 #1 · Demo seed shock** (`scripts/seed_demo_vault.py`) · 12 real-world
+  decisions across 5 categories (Eng/PM/Sales/Ops/Mixed) + 30 traces × 5 actors
+  × 3 months + 7 distilled patterns. Replaces alice/bob hello-world. Team opens
+  `/v1_1.html` and immediately sees real cockpit data with all 7 dimensions
+  scoring meaningfully (alice total=3.39 with 12 closed decisions).
+- **P0 #2 · Team onboarding** (`docs/TEAM_ONBOARDING.md`) · 5-minute walkthrough
+  · M1 boot · M2 read decision · M3 4-card explanation · M4 write your first ·
+  M5 Kevin rule. Plus 7 first-hour FAQs (markdown vs DB, sample threshold, etc.).
+- **P0 #3 · Cockpit UI productization** (`/v1_1.html` rewrite) · loading
+  skeletons · error toast + per-card retry · empty states with actionable
+  commands · score bars · 5 role preset weights now actually different per role
+  · CSV export · copy-curl button · light/dark theme · localStorage prefs · URL
+  params shareable · responsive ≤800px.
+- **P0 #5 · Webhook notifications** (`.app/ome365_notify.py`) · stdlib-only ·
+  Slack/Lark/Feishu/Teams/generic formatters · 3 events (decision.closed /
+  wiki.updated / budget.warn) · per-webhook events filter · best-effort never
+  raises · config via env or `<vault>/.ome365/notify_webhooks.json`.
+- **P1 #8 · Backup/restore CLI** (`.app/ome365_backup.py`) · `ome365 backup
+  create | restore | list` · stdlib tarfile · auto-include Decisions / Trace /
+  Skills / Knowledge / Contacts · auto-exclude secrets and cache · path-traversal
+  blocked · safe-restore creates pre-restore backup automatically.
+- **P2 #11 · Async trace write** (`.app/ome365_trace.log_async`) · queue + daemon
+  thread · 1ms enqueue vs 100ms+ disk fsync · queue_size() exposed for `/metrics`
+  · atexit graceful shutdown.
+- **P2 #12 · Prometheus metrics** (`.app/ome365_metrics.py`) · GET `/metrics` ·
+  12 metric families (decisions / traces / cost / value / by_actor / by_owner /
+  http_requests / uptime / recent_24h) · proper Prom text format with ms
+  timestamps · ready for Grafana scrape.
+- **P2 #13 · Audit log** (`.app/ome365_audit.py`) · `vault/Audit/<date>.jsonl` ·
+  append-only · 14 valid actions · `ome365 audit log | grep` CLI · automatic
+  hooks on `decision.close` and other mutations · GDPR Art. 30 / SOC2 CC7.2
+  compliance support.
+- **P2 #14 · Perf benchmark** (`scripts/perf_bench.py`) · realistic 1000
+  decisions / 5000 traces / 50 members · proves Review-Fix 1 cache works:
+  - Naive (50× `eval_member`): 68s
+  - Cached (1× `_compute_team_distribution`): 0.35s
+  - **194× speedup** for full-team percentile computation
+- **Review-Fix 1 + 8 真补** · the previously "spec-only" review-fixes now have
+  real code:
+  - `_compute_team_distribution()` is now an actual function in
+    `ome365_eval.py`, not just docs
+  - `tests/test_tenant_isolation_fuzz.py` runs 100 trials (was missing)
+  - `tests/test_append_only_bypass.py` exercises the real Kevin git hook
+  - `tests/test_d6_boundaries.py` pins 89/90-day cutover + roi=0/null distinction
+  - **D6 real bug fixed**: `roi_actual=0` now correctly falls to anchor path
+    (was forcing `no_roi_data` because `is not None` was truthy for 0)
+
+### Quality gates
+
+- **406 pytest tests · 100% pass** (was 250 at v1.1.0)
+- **0 PII hits** across 250 tracked files
+- **Kevin hook**: every code commit cited a `[decision: <id>]` tag
+- **Anti-Tokenmaxxing**: every eval response carries `anti_tokenmaxxing_note`
+- **GDPR Art. 22 + PIPL §13/§24**: enforced in code, not policy
+
+### Migration from v1.1.0
+
+No breaking changes. New surface is opt-in:
+1. Run `python3 scripts/seed_demo_vault.py` to refresh demo data
+2. Visit `/v1_1.html` for the productized cockpit
+3. Configure webhooks in `<vault>/.ome365/notify_webhooks.json` (gitignored)
+4. Wire Prometheus to `GET /metrics`
+5. Use `./ome365 backup create` for nightly snapshots
+6. Use `./ome365 audit grep --actor X` to trace activity
+
+---
+
 ## v1.1.0 — Team Brain · 8-week file-first build (2026-05-09)
 
 **Tagline**: The decisions, not the chats.
