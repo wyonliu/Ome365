@@ -39,6 +39,67 @@ L2_DIR_REL = Path("Knowledge") / "L2-distilled"
 KEY_TAG_RE = re.compile(r"<!--\s*key:\s*([^\s>]+)\s*-->")
 
 
+# ── P3 #15 · LLM-distilled mode (opt-in) ─────────────────────────────────────
+
+
+def _llm_enabled() -> bool:
+    return (
+        os.environ.get("OME365_WIKI_LLM", "").strip() in ("1", "true", "yes")
+        and bool(
+            os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        )
+    )
+
+
+def _distill_claim(decision_row, file_path: Path) -> str:
+    """LLM-distill: read full decision body, prompt LLM for 1-3 sentence pattern.
+    Falls back to outcome string on any error."""
+    fallback = (decision_row.outcome or "(no outcome recorded)").strip().strip('"')
+    try:
+        body = file_path.read_text("utf-8")[:3000]  # cap to first 3000 chars
+        prompt = (
+            "Extract a 1-3 sentence reusable pattern from this decision. "
+            "Plain prose, no list. End with a why-it-matters phrase. "
+            "If decision is trivial, return the outcome verbatim.\n\n"
+            f"{body}"
+        )
+
+        # Try Anthropic first
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            try:
+                import anthropic  # type: ignore
+                client = anthropic.Anthropic()
+                resp = client.messages.create(
+                    model=os.environ.get("OME365_WIKI_MODEL", "claude-haiku-4-5-20251001"),
+                    max_tokens=200,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                text = "".join(b.text for b in resp.content if hasattr(b, "text")).strip()
+                if text:
+                    return text
+            except Exception:
+                pass
+
+        # Fall back to OpenAI
+        if os.environ.get("OPENAI_API_KEY"):
+            try:
+                import openai  # type: ignore
+                client = openai.OpenAI()
+                resp = client.chat.completions.create(
+                    model=os.environ.get("OME365_WIKI_MODEL", "gpt-4o-mini"),
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=200,
+                )
+                text = (resp.choices[0].message.content or "").strip()
+                if text:
+                    return text
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return fallback
+
+
 # ── Pattern block format ────────────────────────────────────────────────────
 
 
@@ -109,7 +170,8 @@ def update(vault: Optional[Path] = None, source: str = "Decisions") -> dict:
             skipped_dup += 1
             continue
 
-        claim = (d.outcome or "(no outcome recorded)").strip().strip('"')
+        # P3 #15 · LLM-distilled claim (gated by OME365_WIKI_LLM=1 + ANTHROPIC_API_KEY)
+        claim = _distill_claim(d, fp) if _llm_enabled() else (d.outcome or "(no outcome recorded)").strip().strip('"')
         block = _format_pattern_block(
             decision_id=d.id, category=category, claim=claim,
             source_rel=f"../../{source}/{d.id}.md",
@@ -159,10 +221,97 @@ def update(vault: Optional[Path] = None, source: str = "Decisions") -> dict:
 # ── query · grep over L2-distilled ──────────────────────────────────────────
 
 
+def _semantic_query(q: str, vault: Path, limit: int) -> Optional[list[dict]]:
+    """P3 #16 · sqlite-vec semantic search (opt-in · OME365_WIKI_VEC=1).
+    Returns None to signal caller to fall back to grep."""
+    if os.environ.get("OME365_WIKI_VEC", "").strip() not in ("1", "true", "yes"):
+        return None
+    try:
+        import sqlite3
+        import sqlite_vec  # type: ignore
+        from sentence_transformers import SentenceTransformer  # type: ignore
+    except ImportError:
+        return None
+
+    db_fp = vault / ".ome365" / "wiki_vec.db"
+    db_fp.parent.mkdir(parents=True, exist_ok=True)
+    model = SentenceTransformer(os.environ.get("OME365_WIKI_VEC_MODEL",
+                                                "BAAI/bge-small-zh-v1.5"))
+
+    conn = sqlite3.connect(str(db_fp))
+    conn.enable_load_extension(True)
+    sqlite_vec.load(conn)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS patterns "
+        "(decision_id TEXT PRIMARY KEY, path TEXT, category TEXT, snippet TEXT)"
+    )
+    # Vec table dim = model dim
+    dim = model.get_sentence_embedding_dimension()
+    conn.execute(
+        f"CREATE VIRTUAL TABLE IF NOT EXISTS patterns_vec "
+        f"USING vec0(emb FLOAT[{dim}])"
+    )
+
+    # Index any new patterns
+    l2_dir = vault / L2_DIR_REL
+    if l2_dir.exists():
+        for fp in sorted(l2_dir.glob("*.md")):
+            text = fp.read_text("utf-8")
+            for block in re.split(r"^(?=## Pattern · )", text, flags=re.MULTILINE):
+                if not block.lstrip().startswith("## Pattern"):
+                    continue
+                key_m = KEY_TAG_RE.search(block)
+                cat_m = re.match(r"## Pattern · ([^\s·]+)", block)
+                if not key_m:
+                    continue
+                did = key_m.group(1)
+                exists = conn.execute(
+                    "SELECT 1 FROM patterns WHERE decision_id = ?", (did,)
+                ).fetchone()
+                if exists:
+                    continue
+                snippet = block.strip()[:400]
+                category = cat_m.group(1) if cat_m else None
+                conn.execute(
+                    "INSERT OR REPLACE INTO patterns VALUES (?, ?, ?, ?)",
+                    (did, str(fp.relative_to(vault)), category, snippet),
+                )
+                emb = model.encode(snippet).tolist()
+                rowid = conn.execute(
+                    "SELECT rowid FROM patterns WHERE decision_id = ?", (did,)
+                ).fetchone()[0]
+                conn.execute(
+                    "INSERT OR REPLACE INTO patterns_vec(rowid, emb) VALUES (?, ?)",
+                    (rowid, json.dumps(emb)),
+                )
+        conn.commit()
+
+    # Search
+    q_emb = model.encode(q).tolist()
+    rows = conn.execute(
+        "SELECT p.decision_id, p.path, p.category, p.snippet, v.distance "
+        "FROM patterns p JOIN patterns_vec v ON p.rowid = v.rowid "
+        "WHERE v.emb MATCH ? ORDER BY v.distance LIMIT ?",
+        (json.dumps(q_emb), limit),
+    ).fetchall()
+    conn.close()
+    return [
+        {
+            "decision_id": r[0], "path": r[1], "category": r[2],
+            "snippet": r[3], "distance": float(r[4]),
+            "score": max(0, 5 - float(r[4])),  # display-friendly score
+        } for r in rows
+    ]
+
+
 def query(q: str, vault: Optional[Path] = None, limit: int = 20) -> list[dict]:
     """
-    grep L2-distilled/*.md for `q`. Returns block-level matches.
-    Each result: {path, decision_id, category, score, snippet}
+    Search L2-distilled patterns. Returns block-level matches.
+    Each result: {path, decision_id, category, score, snippet[, distance]}
+
+    Modes:
+    - Default: grep on term frequency (rule-based · 0 deps)
+    - OME365_WIKI_VEC=1 + sqlite-vec + sentence-transformers: semantic search
     """
     v = _vault_root(vault)
     l2_dir = v / L2_DIR_REL
@@ -172,6 +321,11 @@ def query(q: str, vault: Optional[Path] = None, limit: int = 20) -> list[dict]:
     q_lower = q.lower().strip()
     if not q_lower:
         return []
+
+    # P3 #16 · semantic search opt-in
+    sem = _semantic_query(q, v, limit)
+    if sem is not None:
+        return sem
 
     results: list[dict] = []
     for fp in sorted(l2_dir.glob("*.md")):

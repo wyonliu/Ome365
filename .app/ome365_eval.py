@@ -829,6 +829,50 @@ try:
             "count": len(skills),
         }
 
+    @router.get("/whoami")
+    def http_whoami():
+        """P0 #4 · resolve current actor for cockpit auto-select.
+        Tries: env OME365_ACTOR · vault/.ome365/whoami · default 'alice'.
+        Real auth integration is provided by AuthProvider (v0.9.6) when wired.
+        """
+        import os
+        v = _vault_root()
+        # 1. Env var (CI / explicit override)
+        actor = os.environ.get("OME365_ACTOR", "").strip()
+        if actor:
+            return {"actor": actor, "source": "env"}
+        # 2. Vault config
+        whoami_fp = v / ".ome365" / "whoami"
+        if whoami_fp.exists():
+            actor = whoami_fp.read_text("utf-8").strip()
+            if actor:
+                return {"actor": actor, "source": "vault"}
+        # 3. List of decision owners (most recent author)
+        decisions = grep_decisions_all(v)
+        if decisions:
+            owners = [d.owner for d in decisions if d.owner]
+            from collections import Counter
+            most_common = Counter(owners).most_common(1)
+            if most_common:
+                return {"actor": most_common[0][0], "source": "vault_inferred"}
+        return {"actor": "alice", "source": "default"}
+
+    @router.get("/actors")
+    def http_actors():
+        """List all known actors (decision owners + trace actors + skill authors)."""
+        v = _vault_root()
+        actors: set[str] = set()
+        for d in grep_decisions_all(v):
+            if d.owner:
+                actors.add(d.owner)
+        for t in grep_trace_all(v):
+            if t.actor:
+                actors.add(t.actor)
+        for s in grep_skills_all(v):
+            if s.author:
+                actors.add(s.author)
+        return {"actors": sorted(actors), "count": len(actors)}
+
 except ImportError:
     router = None  # type: ignore
 

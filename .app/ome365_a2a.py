@@ -344,8 +344,8 @@ well_known_router = APIRouter(tags=["a2a"])
 
 @well_known_router.get("/.well-known/agent-card.json")
 def agent_card_well_known():
-    """A2A v1.0 well-known agent card · v0.1 stub (no signing yet · capabilities advertised)."""
-    return {
+    """A2A v1.0 well-known agent card · v1.1.2 ed25519 signed (P3 #17)."""
+    body = {
         "name": "Ome365",
         "did": "did:web:omnity.ai:default",
         **PREVIEW_META,
@@ -395,6 +395,14 @@ def agent_card_well_known():
             "supported_methods": ["bearer", "did-pinned", "tenant-internal"],
             "tier": ["T1", "T2", "T3"],
         },
-        "signed_by": None,
-        "signing": "no signing yet · pending mindos.protocol integration D+5~D+12",
     }
+    # P3 #17 · ed25519 sign in-place (requires `cryptography`)
+    try:
+        from ome365_signing import sign as _sign
+        return _sign(body)
+    except Exception:
+        # Falls back to unsigned if cryptography unavailable
+        body["signature"] = None
+        body["signing_alg"] = None
+        body["signing_status"] = "unavailable · install cryptography>=41"
+        return body

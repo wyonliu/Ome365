@@ -1,5 +1,61 @@
 # Changelog
 
+## v1.1.2 — Final batch · enterprise-grade (2026-05-09)
+
+**Tagline**: From team-ready to enterprise-shippable.
+
+Six modules wrapping up everything that was deferred from v1.1.0/v1.1.1.
+
+### What v1.1.2 ships
+
+- **P0 #4 · Multi-user cockpit binding** · `/api/eval/whoami` resolves current
+  actor (env > vault config > inferred from owner counts). `/api/eval/actors`
+  lists all known actors. `/v1_1.html` calls these on boot — no more hard-
+  coded `alice/bob/carol/dan/erin`. Works with any vault.
+- **P1 #7 · RBAC** · `.app/ome365_rbac.py` · 3 roles (owner / contributor /
+  viewer) configured in `vault/.ome365/roles.yml` (gitignored). `can()` /
+  `require()` helpers throw `PermissionError`. Defaults to `contributor`
+  when no config — backward-compatible.
+- **P1 #10 · i18n** · zh-CN / en switcher in cockpit toolbar (中/EN button).
+  Detects `navigator.language` for first-time users; persists to
+  localStorage. `humanScope()` / `humanDim()` translate dimension and
+  finops scope labels.
+- **P3 #15 · LLM-distilled wiki** · gated by `OME365_WIKI_LLM=1` +
+  `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`. When enabled, `wiki update`
+  prompts an LLM to extract a 1-3 sentence pattern from the full decision
+  body. Falls back to outcome-string verbatim on any error. `OME365_WIKI_MODEL`
+  picks the model (default: claude-haiku-4-5-20251001).
+- **P3 #16 · sqlite-vec semantic search** · gated by `OME365_WIKI_VEC=1`. When
+  enabled, `wiki query` indexes patterns into `vault/.ome365/wiki_vec.db` with
+  `BAAI/bge-small-zh-v1.5` (default model · 90MB). Returns nearest-neighbor
+  results by embedding distance instead of term frequency.
+- **P3 #17 · ed25519 agent-card signing** · `.app/ome365_signing.py` ·
+  `cryptography>=41` · auto-generates per-vault keypair on first call ·
+  signs `/.well-known/agent-card.json` with canonical-JSON ed25519. Verify
+  with `verify(card)`. `signature` / `signing_alg` / `signing_pubkey_b64`
+  are now real on every agent-card response.
+
+### Quality gates
+
+- **420 pytest tests · 100% pass** (was 406 at v1.1.1)
+- **0 PII hits** across 254 tracked files
+- **gitignore expanded**: roles.yml / whoami / wiki_vec.db / .ome365/keys/
+  all PII-protected by default
+- **Kevin hook**: every code commit cited a `[decision: <id>]`
+- **Smoke verified**: signed agent-card returns real ed25519 signature ·
+  whoami auto-resolves actor · actors endpoint returns 5 actors
+
+### Migration from v1.1.1
+
+No breaking changes. New surface is opt-in:
+1. (Optional) Create `vault/.ome365/roles.yml` to enforce RBAC
+2. (Optional) Set `OME365_WIKI_LLM=1` + API key for LLM-distilled wiki
+3. (Optional) `pip install sqlite-vec sentence-transformers` + set
+   `OME365_WIKI_VEC=1` for semantic search
+4. ed25519 signing is automatic on first agent-card request — no config
+
+---
+
 ## v1.1.1 — Productization pass · Team-ready (2026-05-09)
 
 **Tagline**: From "engineer demo" to "team can actually use this".

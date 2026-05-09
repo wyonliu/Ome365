@@ -147,7 +147,8 @@
     </label>
     <span class="spacer"></span>
     <span class="ago" v-if="lastLoaded">updated {{ ago }}s ago</span>
-    <button @click="loadAll" :disabled="loading">{{ loading ? '…' : '↻ refresh' }}</button>
+    <button @click="loadAll" :disabled="loading">{{ loading ? '…' : '↻' }}</button>
+    <button @click="toggleLang" :title="lang === 'zh' ? 'switch to English' : '切换中文'">{{ lang === 'zh' ? '中' : 'EN' }}</button>
     <button @click="toggleTheme">{{ theme === 'dark' ? '☀' : '☾' }}</button>
   </div>
 
@@ -325,32 +326,48 @@ const PRESET_WEIGHTS = {
   mixed:    { delivery:0.15, cost_per_outcome:0.15, quality:0.15, judgment:0.10, ecosystem:0.20, revenue_per_workflow:0.15, learning:0.10 },
 };
 
-const SCOPE_LABEL = {
-  cost_per_resolved_decision: "cost / decision",
-  human_equivalent_hourly: "cost / hour",
-  revenue_per_workflow: "revenue / workflow",
-};
-
-const DIM_LABEL = {
-  D1_delivery: "D1 delivery",
-  D2_cost_per_outcome: "D2 cost-per-outcome",
-  D3_quality: "D3 quality",
-  D4_judgment: "D4 judgment",
-  D5_ecosystem: "D5 ecosystem",
-  D6_revenue_per_workflow: "D6 revenue",
-  D7_learning: "D7 learning",
+const I18N = {
+  en: {
+    "scope.cost_per_resolved_decision": "cost / decision",
+    "scope.human_equivalent_hourly": "cost / hour",
+    "scope.revenue_per_workflow": "revenue / workflow",
+    "dim.D1_delivery": "D1 delivery",
+    "dim.D2_cost_per_outcome": "D2 cost-per-outcome",
+    "dim.D3_quality": "D3 quality",
+    "dim.D4_judgment": "D4 judgment",
+    "dim.D5_ecosystem": "D5 ecosystem",
+    "dim.D6_revenue_per_workflow": "D6 revenue",
+    "dim.D7_learning": "D7 learning",
+  },
+  zh: {
+    "scope.cost_per_resolved_decision": "决策成本",
+    "scope.human_equivalent_hourly": "等效小时成本",
+    "scope.revenue_per_workflow": "工作流收入",
+    "dim.D1_delivery": "D1 交付",
+    "dim.D2_cost_per_outcome": "D2 成本/结果",
+    "dim.D3_quality": "D3 质量",
+    "dim.D4_judgment": "D4 判断力",
+    "dim.D5_ecosystem": "D5 生态",
+    "dim.D6_revenue_per_workflow": "D6 收入",
+    "dim.D7_learning": "D7 学习",
+  },
 };
 
 createApp({
   setup() {
-    const initialActor = new URL(location).searchParams.get('actor') || localStorage.getItem('ome365_actor') || 'alice';
+    const initialActor = new URL(location).searchParams.get('actor') || localStorage.getItem('ome365_actor') || '';
     const initialWindow = +(new URL(location).searchParams.get('window_days') || localStorage.getItem('ome365_window') || 90);
     const initialTheme = localStorage.getItem('ome365_theme') || 'dark';
     document.documentElement.setAttribute('data-theme', initialTheme);
 
+    const initialLang = (localStorage.getItem('ome365_lang')
+      || (navigator.language && navigator.language.startsWith('zh') ? 'zh' : 'en'));
+
     const state = reactive({
       actor: initialActor,
-      actors: ['alice', 'bob', 'carol', 'dan', 'erin'],
+      actors: [],
+      lang: initialLang,
+      whoami_source: null,
       window_days: initialWindow,
       preset: localStorage.getItem('ome365_preset') || 'engineer',
       theme: initialTheme,
@@ -376,6 +393,11 @@ createApp({
       state.theme = state.theme === 'dark' ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', state.theme);
       localStorage.setItem('ome365_theme', state.theme);
+    }
+
+    function toggleLang() {
+      state.lang = state.lang === 'zh' ? 'en' : 'zh';
+      localStorage.setItem('ome365_lang', state.lang);
     }
 
     async function fetchJson(url) {
@@ -478,16 +500,40 @@ createApp({
       );
     }
 
-    function humanScope(k) { return SCOPE_LABEL[k] || k.replace(/_/g, ' '); }
-    function humanDim(d) { return DIM_LABEL[d] || d.replace(/_/g, ' '); }
+    function t(key) {
+      const dict = I18N[state.lang] || I18N.en;
+      return dict[key] || key;
+    }
+    function humanScope(k) { return t('scope.' + k); }
+    function humanDim(d) { return t('dim.' + d); }
     function scoreClass(s) {
       if (s >= 4) return 'good';
       if (s < 2) return 'bad';
       return '';
     }
 
+    async function bootstrap() {
+      // Resolve identity + actor list before first load
+      try {
+        const actorsResp = await fetchJson('/api/eval/actors');
+        state.actors = actorsResp.actors || [];
+      } catch { state.actors = ['alice', 'bob', 'carol', 'dan', 'erin']; }
+
+      if (!state.actor) {
+        try {
+          const whoami = await fetchJson('/api/eval/whoami');
+          state.actor = whoami.actor || 'alice';
+          state.whoami_source = whoami.source;
+        } catch { state.actor = state.actors[0] || 'alice'; }
+      }
+      if (!state.actors.includes(state.actor)) {
+        state.actors = [state.actor, ...state.actors];
+      }
+      await loadAll();
+    }
+
     onMounted(() => {
-      loadAll();
+      bootstrap();
       const tickHandle = setInterval(() => { state.now = Date.now(); }, 1000);
       onUnmounted(() => clearInterval(tickHandle));
     });
@@ -495,7 +541,7 @@ createApp({
     return {
       ...state,
       ago,
-      loadAll, reload, exportCsv, copyCurl, toggleTheme,
+      loadAll, reload, exportCsv, copyCurl, toggleTheme, toggleLang, t,
       humanScope, humanDim, scoreClass,
       JSON,
     };

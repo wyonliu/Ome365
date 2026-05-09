@@ -37,6 +37,18 @@ vault.example/Knowledge/L2-distilled/
 **/.ome365/notify_webhooks.json
 notify_webhooks.json
 
+# ── ed25519 signing keys (P3 #17) · per-vault private keys ──
+**/.ome365/keys/
+
+# ── RBAC config (PII: who has what role) ──
+**/.ome365/roles.yml
+
+# ── whoami pin (PII) ──
+**/.ome365/whoami
+
+# ── sqlite-vec embedding cache (P3 #16) ──
+**/.ome365/wiki_vec.db
+
 # ── Sensitive root files ──
 /agent-plan.md
 /agent-mem-evo-need.png
