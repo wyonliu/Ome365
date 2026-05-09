@@ -156,6 +156,24 @@ def close_decision(
             text = text.replace("---\n\n# ", f"hours_saved: {hours_saved}\n---\n\n# ", 1)
 
     p.write_text(text, "utf-8")
+
+    # P0 #5 · Fire decision.closed webhook (best-effort · never raises)
+    try:
+        from ome365_notify import notify as _notify
+        _notify(
+            "decision.closed",
+            {
+                "id": decision_id,
+                "owner": (re.search(r"^owner:\s*(\S+)", text, re.MULTILINE) or [None, None])[1],
+                "outcome": outcome,
+                "value_anchors": value_anchors,
+                "roi_estimated": roi_estimated,
+            },
+            vault=vault,
+        )
+    except Exception:  # noqa: BLE001
+        pass  # notify is best-effort · never block close
+
     return p
 
 

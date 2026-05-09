@@ -33,6 +33,10 @@
 # ── vault.example/ generated artifacts (wiki update output) ──
 vault.example/Knowledge/L2-distilled/
 
+# ── Webhook secrets (gitignored · use sample if shareable) ──
+**/.ome365/notify_webhooks.json
+notify_webhooks.json
+
 # ── Sensitive root files ──
 /agent-plan.md
 /agent-mem-evo-need.png

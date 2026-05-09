@@ -131,6 +131,22 @@ def update(vault: Optional[Path] = None, source: str = "Decisions") -> dict:
                 f.write(b)
         files_written.append(str(out_fp.relative_to(v)))
 
+    # P0 #5 · Fire wiki.updated webhook (best-effort)
+    if files_written:
+        try:
+            from ome365_notify import notify as _notify
+            _notify(
+                "wiki.updated",
+                {
+                    "categories": [Path(f).stem for f in files_written],
+                    "appended": appended,
+                    "files_written": files_written,
+                },
+                vault=v,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
     return {
         "scanned": len(decisions),
         "appended": appended,
