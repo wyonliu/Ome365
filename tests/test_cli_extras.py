@@ -109,6 +109,27 @@ def test_eval_skills_runs(monkeypatch, capsys):
     assert "skill" in out.lower()
 
 
+def test_eval_skills_json(monkeypatch, capsys):
+    """`eval skills --json` returns parseable list with name/author/created fields."""
+    pytest.importorskip("yaml")
+    monkeypatch.setenv("OME365_VAULT", str(VAULT_EXAMPLE))
+    rc = cmd_eval(["skills", "--json"])
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert isinstance(rows, list)
+    assert len(rows) >= 1
+    for k in ("name", "author", "created"):
+        assert k in rows[0], f"missing field: {k}"
+
+
+def test_eval_skills_json_empty_vault(tmp_path, monkeypatch, capsys):
+    pytest.importorskip("yaml")
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+    rc = cmd_eval(["skills", "--json"])
+    assert rc == 0
+    assert json.loads(capsys.readouterr().out) == []
+
+
 def test_eval_whoami_default(monkeypatch, tmp_path, capsys):
     monkeypatch.delenv("OME365_ACTOR", raising=False)
     monkeypatch.setenv("OME365_VAULT", str(tmp_path))

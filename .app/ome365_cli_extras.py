@@ -215,7 +215,7 @@ def cmd_eval(argv: list[str]) -> int:
             "usage:\n"
             "  ome365 eval member <actor> [--window-days N]\n"
             "  ome365 eval finops [<scope>] [--window-days N]\n"
-            "  ome365 eval skills\n"
+            "  ome365 eval skills [--json]\n"
             "  ome365 eval whoami\n",
         )
         return 0
@@ -289,6 +289,17 @@ def cmd_eval(argv: list[str]) -> int:
 
     if cmd == "skills":
         skills = grep_skills_all(v)
+        if "--json" in argv:
+            payload = [
+                {
+                    "name": s.name,
+                    "author": s.author,
+                    "created": s.created.isoformat() if s.created else None,
+                }
+                for s in skills
+            ]
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return 0
         print(f"=== {len(skills)} skill(s) ===")
         for s in skills:
             print(f"  {s.name:<32} @{s.author}  "

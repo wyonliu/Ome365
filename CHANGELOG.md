@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.1.35 — `eval skills --json` final list-CLI parity (2026-05-09)
+
+### What v1.1.35 ships
+
+- **`./ome365 eval skills --json`** · machine-readable list:
+  `[{name, author, created}, ...]`. Empty vault returns `[]`.
+- **2 new tests** · field shape · empty case.
+
+### Why this matters
+
+- All 7 list-style CLIs now have a `--json` mode (or default JSON output):
+  decision/wiki/backup/archive/notify list — plus trace/audit grep / eval
+  skills. Operators integrating with monitoring or syncing can rely on a
+  uniform contract.
+
+### Quality gates
+
+- 512 tests · 0 PII · 272 tracked files
+
+---
+
 ## v1.1.34 — `notify list --json` (host-only · token-leak guarded) (2026-05-09)
 
 ### What v1.1.34 ships
