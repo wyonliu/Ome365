@@ -460,7 +460,7 @@ def _dispatch_publish(argv: list) -> int:
 def main() -> int:
     # 支持两种用法：./ome365 [flags] | ./ome365 <subcommand>
     argv = sys.argv[1:]
-    if argv and argv[0] in ("setup", "doctor", "help", "--help", "-h", "publish", "share", "trace", "wiki", "archive", "backup", "audit", "verify", "status", "eval", "metrics", "notify", "rbac"):
+    if argv and argv[0] in ("setup", "doctor", "help", "--help", "-h", "publish", "share", "trace", "wiki", "archive", "backup", "audit", "verify", "status", "eval", "metrics", "notify", "rbac", "decision"):
         sub = argv[0]
         if sub in ("help", "--help", "-h"):
             print(__doc__)
@@ -504,6 +504,10 @@ def main() -> int:
             sys.path.insert(0, str(APP))
             from ome365_rbac import cli_main as _rbac_cli
             return _rbac_cli(argv[1:])
+        if sub == "decision":
+            sys.path.insert(0, str(APP))
+            from ome365_decisions import cli_main as _decision_cli
+            return _decision_cli(argv[1:])
         if sub == "verify":
             sys.path.insert(0, str(APP))
             from ome365_cli_extras import cmd_verify

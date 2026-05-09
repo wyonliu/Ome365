@@ -330,3 +330,90 @@ def get_decision(decision_id: str):
     text = p.read_text("utf-8")
     meta = _parse_frontmatter(text)
     return {"id": decision_id, "frontmatter": meta, "body_chars": len(text)}
+
+
+def cli_main(argv: list[str]) -> int:
+    """`./ome365 decision list | show` · read-only inspection.
+
+    Mutations stay HTTP-driven so audit + webhook hooks fire (see
+    server.py · POST /api/decision/new and /close).
+    """
+    import json as _json
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(
+            "usage:\n"
+            "  ome365 decision list [--status open|closed|superseded] [--owner X] [--json]\n"
+            "  ome365 decision show <id>\n",
+            flush=True,
+        )
+        return 0
+
+    cmd = argv[0]
+    rest = argv[1:]
+    args: dict = {}
+    positional: list[str] = []
+    json_out = False
+    i = 0
+    while i < len(rest):
+        tok = rest[i]
+        if tok == "--json":
+            json_out = True
+            i += 1
+        elif tok.startswith("--") and i + 1 < len(rest):
+            args[tok.lstrip("-").replace("-", "_")] = rest[i + 1]
+            i += 2
+        else:
+            positional.append(tok)
+            i += 1
+
+    vault = _vault_root()
+
+    if cmd == "list":
+        rows = grep_decisions_all(vault)
+        status_filter = args.get("status")
+        owner_filter = args.get("owner")
+        if status_filter:
+            rows = [r for r in rows if r.status == status_filter]
+        if owner_filter:
+            rows = [r for r in rows if r.owner == owner_filter]
+        if json_out:
+            out = [
+                {"id": r.id, "owner": r.owner, "status": r.status,
+                 "outcome": r.outcome, "value_anchors": r.value_anchors,
+                 "roi_actual": r.roi_actual,
+                 "closed_at": r.closed_at.isoformat() if r.closed_at else None}
+                for r in rows
+            ]
+            print(_json.dumps(out, indent=2, ensure_ascii=False))
+            return 0
+        if not rows:
+            print("no decisions match", flush=True)
+            return 0
+        for r in rows:
+            tag = f"[{r.status}]"
+            anchors = ",".join(r.value_anchors) if r.value_anchors else "-"
+            outcome = (r.outcome or "")[:40]
+            print(f"  {tag:<11} {r.id:<46} @{r.owner or '-':<10} "
+                  f"{anchors:<14} {outcome}")
+        print(f"--- {len(rows)} decision(s)", flush=True)
+        return 0
+
+    if cmd == "show":
+        if not positional:
+            print("ERROR: ome365 decision show <id>", flush=True)
+            return 2
+        p = decision_path(vault, positional[0])
+        if not p.exists():
+            print(f"ERROR: decision {positional[0]} not found", flush=True)
+            return 2
+        print(p.read_text("utf-8"), end="")
+        return 0
+
+    print(f"ERROR: unknown subcommand '{cmd}' (try list | show)", flush=True)
+    return 2
+
+
+__all__ = [
+    "router", "create_decision", "close_decision", "list_decisions",
+    "decision_path", "make_decision_id", "VALID_ANCHORS", "cli_main",
+]

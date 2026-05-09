@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.1.26 — `ome365 decision list / show` CLI (2026-05-09)
+
+### What v1.1.26 ships
+
+- **`./ome365 decision list [--status open|closed|superseded] [--owner X] [--json]`**
+  · view decision backlog from terminal · text-aligned columns or JSON.
+- **`./ome365 decision show <id>`** · dump full Decision file content
+  (frontmatter + 8 sections).
+- **7 new tests** in `tests/test_ome365_decisions.py` (now 20): help · list-text ·
+  list-json · status+owner filters · empty case · show-content · show-not-found.
+
+### Why this matters
+
+- Operators previously had to either `curl localhost:3650/api/decision/list` or
+  read `vault/Decisions/*.md` directly. The CLI is the natural bridge for
+  scripting and for users without a server running. Decision mutations stay
+  HTTP-driven — they need the audit + webhook hook chain.
+- This closes the last v1.1 module CLI gap. All 12 v1.1 modules now have CLI
+  surface area.
+
+### Quality gates
+
+- 488 tests · 0 PII · 271 tracked files
+
+---
+
 ## v1.1.25 — `ome365 rbac` CLI · who / list / check (2026-05-09)
 
 ### What v1.1.25 ships

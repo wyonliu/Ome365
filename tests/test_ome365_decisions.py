@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / ".app"))
 from ome365_decisions import (  # noqa: E402
     VALID_ANCHORS,
     capture_calibration,
+    cli_main as decision_cli,
     close_decision,
     create_decision,
     decision_path,
@@ -155,3 +156,81 @@ def test_full_lifecycle_open_close_calibrate(tmp_vault):
     text = p.read_text("utf-8")
     assert "status: closed" in text
     assert "value_anchors: [P, L]" in text
+
+
+# ── v1.1.26 · decision CLI ──────────────────────────────────────────────────
+
+
+def test_decision_cli_help(capsys):
+    rc = decision_cli([])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "ome365 decision" in out
+    assert "list" in out and "show" in out
+
+
+def test_decision_cli_list_text(tmp_vault, monkeypatch, capsys):
+    monkeypatch.setenv("OME365_VAULT", str(tmp_vault))
+    create_decision(tmp_vault, "Pick X", "alice", when=date(2026, 5, 8))
+    create_decision(tmp_vault, "Pick Y", "bob", when=date(2026, 5, 8))
+    rc = decision_cli(["list"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "[open]" in out
+    assert "alice" in out and "bob" in out
+
+
+def test_decision_cli_list_json(tmp_vault, monkeypatch, capsys):
+    import json as _json
+    monkeypatch.setenv("OME365_VAULT", str(tmp_vault))
+    create_decision(tmp_vault, "Pick X", "alice", when=date(2026, 5, 8))
+    rc = decision_cli(["list", "--json"])
+    assert rc == 0
+    rows = _json.loads(capsys.readouterr().out)
+    assert len(rows) == 1
+    assert rows[0]["owner"] == "alice"
+    assert rows[0]["status"] == "open"
+
+
+def test_decision_cli_list_filters(tmp_vault, monkeypatch, capsys):
+    import json as _json
+    monkeypatch.setenv("OME365_VAULT", str(tmp_vault))
+    p1 = create_decision(tmp_vault, "Pick X", "alice", when=date(2026, 5, 8))
+    create_decision(tmp_vault, "Pick Y", "bob", when=date(2026, 5, 8))
+    close_decision(tmp_vault, p1.stem, outcome="shipped", value_anchors=["P"])
+
+    rc = decision_cli(["list", "--status", "closed", "--json"])
+    assert rc == 0
+    rows = _json.loads(capsys.readouterr().out)
+    assert len(rows) == 1
+    assert rows[0]["owner"] == "alice"
+
+    rc = decision_cli(["list", "--owner", "bob", "--json"])
+    assert rc == 0
+    rows = _json.loads(capsys.readouterr().out)
+    assert len(rows) == 1
+    assert rows[0]["status"] == "open"
+
+
+def test_decision_cli_list_empty(tmp_vault, monkeypatch, capsys):
+    monkeypatch.setenv("OME365_VAULT", str(tmp_vault))
+    rc = decision_cli(["list"])
+    assert rc == 0
+    assert "no decisions" in capsys.readouterr().out
+
+
+def test_decision_cli_show(tmp_vault, monkeypatch, capsys):
+    monkeypatch.setenv("OME365_VAULT", str(tmp_vault))
+    p = create_decision(tmp_vault, "Pick LLM", "alice", when=date(2026, 5, 8))
+    rc = decision_cli(["show", p.stem])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "## ① Problem" in out
+    assert "alice" in out
+
+
+def test_decision_cli_show_not_found(tmp_vault, monkeypatch, capsys):
+    monkeypatch.setenv("OME365_VAULT", str(tmp_vault))
+    rc = decision_cli(["show", "nonexistent-id"])
+    assert rc == 2
+    assert "not found" in capsys.readouterr().out
