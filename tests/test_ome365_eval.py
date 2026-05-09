@@ -183,10 +183,10 @@ def test_eval_warning_anti_tokenmaxxing_present():
 def test_d1_delivery_insufficient_sample():
     """edge case #1: n<5 returns score=None + reason."""
     s = D1_delivery("alice", date.today() - timedelta(days=365), VAULT_EXAMPLE, sample_min=5)
-    # vault.example has 1 closed decision · n=1 < 5 → insufficient
+    # vault.example has 2 closed decisions (W1 pick-llm-backend + W3 trace-sdk-design) · n=2 < 5 → insufficient
     assert s.score is None
     assert s.reason == "insufficient_sample"
-    assert s.n == 1
+    assert s.n == 2
 
 
 def test_d2_cost_per_outcome_zero_value_zero_score():
@@ -224,7 +224,7 @@ def test_finops_cost_per_resolved_decision():
     r = finops_summary(VAULT_EXAMPLE, scope="cost_per_resolved_decision", since_days=365)
     assert r["scope"] == "cost_per_resolved_decision"
     assert r["unit"] == "USD per closed decision"
-    assert r["n_decisions_closed"] == 1
+    assert r["n_decisions_closed"] == 2
     assert r["human_review_required"] is True
 
 
