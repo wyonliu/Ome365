@@ -363,7 +363,9 @@ def D6_revenue_per_workflow(
     anchor_n = 0
     for d in decisions:
         days_since = (today - d.closed_at).days if d.closed_at else 0
-        if days_since >= 90 and d.roi_actual is not None:
+        # Review-Fix 8.3: roi_actual=0 means "shipped · no revenue tracked yet" ·
+        # treat as null (fall to anchor path)·only positive roi takes USD path
+        if days_since >= 90 and d.roi_actual is not None and d.roi_actual > 0:
             total_usd += d.roi_actual
         elif d.value_anchors:
             for a in d.value_anchors:
@@ -543,6 +545,185 @@ def finops_summary(
     }
 
 
+# ── Team distribution cache (Review-Fix 1 真落地 · 性能边界) ─────────────────
+
+
+def _compute_team_distribution(
+    members: list[str],
+    since: date,
+    vault: Path,
+    *,
+    sample_min: int = 5,
+    anchor_weights: Optional[dict] = None,
+) -> dict[str, list[Score]]:
+    """
+    Single-pass team distribution. Avoids O(N members × 7 dims) repeated grep.
+    Reads vault ONCE → builds dim → list[Score] indexed by member input order.
+
+    Use case: percentile lookup tables for cockpit cards / nightly snapshot job.
+    Returns {dim_name: [Score(...) per member in input order]}
+    """
+    # Single vault scan · cached for the function lifetime
+    all_decisions = grep_decisions_all(vault)
+    all_traces = grep_trace_all(vault)
+    all_skills = grep_skills_all(vault)
+
+    # Index by owner / actor for O(1) lookup per member
+    decisions_by_owner: dict[str, list] = defaultdict(list)
+    for d in all_decisions:
+        decisions_by_owner[d.owner].append(d)
+
+    traces_by_actor: dict[str, list] = defaultdict(list)
+    for t in all_traces:
+        traces_by_actor[t.actor].append(t)
+
+    skills_by_author: dict[str, list] = defaultdict(list)
+    for s in all_skills:
+        skills_by_author[s.author].append(s)
+
+    # Pre-build skill_id → adopters set (anti-self-gaming · for D5)
+    since_dt = datetime.combine(since, datetime.min.time(), tzinfo=timezone.utc)
+
+    out: dict[str, list[Score]] = {
+        "D1_delivery": [],
+        "D2_cost_per_outcome": [],
+        "D3_quality": [],
+        "D4_judgment": [],
+        "D5_ecosystem": [],
+        "D6_revenue_per_workflow": [],
+        "D7_learning": [],
+    }
+
+    aw = anchor_weights or {
+        "P": 2.0, "XL": 3.0, "L": 2.0, "M": 1.0,
+        "维护性": -0.5, "Revert": -2.0,
+    }
+
+    for m in members:
+        # D1: closed in window with planned vs elapsed
+        m_decisions = decisions_by_owner.get(m, [])
+        closed = [d for d in m_decisions
+                  if d.status == "closed" and d.closed_at and d.closed_at >= since]
+        if len(closed) < sample_min:
+            out["D1_delivery"].append(Score(n=len(closed), reason="insufficient_sample"))
+        else:
+            on_time = sum(
+                1 for d in closed
+                if d.elapsed_days is None or d.planned_duration_days is None
+                or d.elapsed_days <= d.planned_duration_days
+            )
+            raw = on_time / len(closed)
+            out["D1_delivery"].append(Score(raw=raw, score=_clip(raw * 5, 0, 5), n=len(closed)))
+
+        # D2: ROI multiple
+        m_traces = [t for t in traces_by_actor.get(m, []) if t.ts >= since_dt]
+        if len(m_traces) < sample_min:
+            out["D2_cost_per_outcome"].append(Score(n=len(m_traces), reason="insufficient_sample"))
+        else:
+            cost = sum(t.cost_usd for t in m_traces)
+            value = sum((t.output_value_usd or 0) for t in m_traces)
+            if cost <= 0:
+                out["D2_cost_per_outcome"].append(Score(n=len(m_traces), reason="zero_cost"))
+            else:
+                raw = value / cost
+                out["D2_cost_per_outcome"].append(Score(raw=raw, score=_clip(log10(raw + 1), 0, 5), n=len(m_traces)))
+
+        # D3: quality (1 - superseded ratio)
+        m_in_window = [d for d in m_decisions if d.closed_at and d.closed_at >= since]
+        if len(m_in_window) < sample_min:
+            out["D3_quality"].append(Score(n=len(m_in_window), reason="insufficient_sample"))
+        else:
+            superseded = sum(1 for d in m_in_window if d.superseded_by)
+            raw = 1 - (superseded / len(m_in_window))
+            out["D3_quality"].append(Score(raw=raw, score=_clip(raw * 5, 0, 5), n=len(m_in_window)))
+
+        # D4: anchor-based judgment
+        with_outcome = [d for d in closed if d.outcome]
+        if len(with_outcome) < sample_min:
+            out["D4_judgment"].append(Score(n=len(with_outcome), reason="insufficient_sample"))
+        else:
+            anchor_decisions = [d for d in with_outcome if d.value_anchors]
+            if anchor_decisions:
+                per_d = [sum(aw.get(a, 0) for a in d.value_anchors) for d in anchor_decisions]
+                raw = sum(per_d) / len(per_d)
+                out["D4_judgment"].append(Score(raw=raw, score=_clip((raw + 2) / 5 * 5, 0, 5), n=len(with_outcome)))
+            else:
+                ok = sum(1 for d in with_outcome if d.outcome.lower().startswith(("ok", "success", "成功")))
+                raw = ok / len(with_outcome)
+                out["D4_judgment"].append(Score(raw=raw, score=_clip(raw * 5, 0, 5), n=len(with_outcome)))
+
+        # D5: ecosystem (own × adopters)
+        own = [s for s in skills_by_author.get(m, [])
+               if s.created is None or s.created >= since]
+        skill_names = {s.name for s in own}
+        if not skill_names:
+            out["D5_ecosystem"].append(Score(raw=0, score=0, n=0))
+        else:
+            adopters = {t.actor for t in all_traces
+                        if t.skill in skill_names and t.actor != m and t.ts >= since_dt}
+            raw = len(skill_names) * len(adopters)
+            from math import log2
+            out["D5_ecosystem"].append(Score(raw=raw, score=_clip(log2(raw + 1) - 1, 0, 5), n=len(skill_names)))
+
+        # D6: revenue (90 day cutover)
+        if len(closed) < 3:
+            out["D6_revenue_per_workflow"].append(Score(n=len(closed), reason="insufficient_sample"))
+        else:
+            today_d = date.today()
+            total_usd, anchor_sum, anchor_n = 0.0, 0.0, 0
+            for d in closed:
+                days_since = (today_d - d.closed_at).days if d.closed_at else 0
+                if days_since >= 90 and d.roi_actual is not None and d.roi_actual > 0:
+                    total_usd += d.roi_actual
+                elif d.value_anchors:
+                    for a in d.value_anchors:
+                        anchor_sum += aw.get(a, 0)
+                        anchor_n += 1
+            if total_usd > 0:
+                out["D6_revenue_per_workflow"].append(Score(raw=total_usd, score=_clip(log10(total_usd + 1) - 2, 0, 5), n=len(closed)))
+            elif anchor_n > 0:
+                avg = anchor_sum / anchor_n
+                out["D6_revenue_per_workflow"].append(Score(raw=avg, score=_clip(avg, 0, 5), n=len(closed)))
+            else:
+                out["D6_revenue_per_workflow"].append(Score(n=len(closed), reason="no_roi_data"))
+
+        # D7: learning (new skills used)
+        used_in = {t.skill for t in m_traces if t.skill}
+        used_before = {t.skill for t in traces_by_actor.get(m, []) if t.skill and t.ts < since_dt}
+        new_skills = used_in - used_before
+        out["D7_learning"].append(Score(raw=len(new_skills), score=_clip(len(new_skills), 0, 5), n=len(used_in)))
+
+    return out
+
+
+def team_percentile(
+    member_id: str,
+    members: list[str],
+    since: date,
+    vault: Path,
+    *,
+    dim: str = "D2_cost_per_outcome",
+    sample_min: int = 5,
+) -> Optional[float]:
+    """
+    Compute percentile of `member_id` within `members` for given `dim` (0-100).
+    Single vault scan via _compute_team_distribution. Returns None if member
+    not in input or score is None.
+    """
+    if member_id not in members:
+        return None
+    dist = _compute_team_distribution(members, since, vault, sample_min=sample_min)
+    scores = [s.score for s in dist[dim] if s.score is not None]
+    if not scores:
+        return None
+    my_idx = members.index(member_id)
+    my_score = dist[dim][my_idx].score
+    if my_score is None:
+        return None
+    below = sum(1 for s in scores if s < my_score)
+    return 100.0 * below / len(scores)
+
+
 # ── Cost-per-Outcome dashboard (W4) ──────────────────────────────────────────
 
 
@@ -662,6 +843,7 @@ __all__ = [
     "D4_judgment", "D5_ecosystem", "D6_revenue_per_workflow", "D7_learning",
     "load_eval_config",
     "eval_member", "finops_summary", "dashboard_data",
+    "_compute_team_distribution", "team_percentile",
     "EvalDisabledForRegion", "PIPLNotifyRequired", "EvalOptedOut",
     "router",
 ]
