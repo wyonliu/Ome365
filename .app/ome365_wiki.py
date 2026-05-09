@@ -384,7 +384,7 @@ def cli_main(argv: list[str]) -> int:
         print(
             "usage:\n"
             "  ome365 wiki update [--source Decisions] [--dry-run]\n"
-            "  ome365 wiki query 'search term' [--limit 20]\n"
+            "  ome365 wiki query 'search term' [--limit 20] [--json]\n"
         )
         return 0
 
@@ -393,11 +393,15 @@ def cli_main(argv: list[str]) -> int:
     args: dict = {}
     positional: list[str] = []
     dry_run = False
+    json_out = False
     i = 0
     while i < len(rest):
         tok = rest[i]
         if tok == "--dry-run":
             dry_run = True
+            i += 1
+        elif tok == "--json":
+            json_out = True
             i += 1
         elif tok.startswith("--") and i + 1 < len(rest):
             args[tok.lstrip("-").replace("-", "_")] = rest[i + 1]
@@ -418,6 +422,9 @@ def cli_main(argv: list[str]) -> int:
         q = " ".join(positional)
         limit = int(args.get("limit", "20"))
         rows = query(q, limit=limit)
+        if json_out:
+            print(json.dumps(rows, indent=2, ensure_ascii=False))
+            return 0
         for r in rows:
             print(f"[{r['score']}] {r['path']} · {r['decision_id']}")
             print(f"    {r['snippet'].splitlines()[0] if r['snippet'] else ''}")

@@ -224,3 +224,31 @@ def test_cli_update_dry_run(monkeypatch, tmp_path, capsys):
     # No files actually written
     assert not (tmp_path / "Knowledge" / "L2-distilled").exists() or \
            not list((tmp_path / "Knowledge" / "L2-distilled").glob("*.md"))
+
+
+def test_cli_query_json_output(monkeypatch, tmp_path, capsys):
+    """`wiki query --json` returns parseable list (possibly empty) for scripting."""
+    import json as _json
+    pytest.importorskip("yaml")
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+    _make_decision(tmp_path, "d1", "alice", "infra", "shipped feature X", ["P"])
+    cli_main(["update"])
+    capsys.readouterr()  # drain
+    rc = cli_main(["query", "shipped", "--json"])
+    assert rc == 0
+    rows = _json.loads(capsys.readouterr().out)
+    assert isinstance(rows, list)
+    # Non-empty result: each row has score, path, decision_id, snippet
+    if rows:
+        for k in ("score", "path", "decision_id", "snippet"):
+            assert k in rows[0], f"missing field: {k}"
+
+
+def test_cli_query_json_empty_returns_array(monkeypatch, tmp_path, capsys):
+    """No L2 distilled → query returns []. Scripts can rely on this."""
+    import json as _json
+    pytest.importorskip("yaml")
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+    rc = cli_main(["query", "nothing", "--json"])
+    assert rc == 0
+    assert _json.loads(capsys.readouterr().out) == []

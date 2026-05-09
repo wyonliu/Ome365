@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.1.23 — `wiki query --json` for scriptable knowledge search (2026-05-09)
+
+### What v1.1.23 ships
+
+- **`./ome365 wiki query 'term' --json`** · machine-readable search results.
+  Each row: `{score, path, decision_id, snippet}`. Empty result = `[]`.
+- **2 new tests** · pin output shape · empty case returns array.
+
+### Why this matters
+
+- Round-tripping search results into other tools (notion-sync, slack bots,
+  custom dashboards) requires parseable output. The text mode is human-only.
+  Both wiki-query consumers (interactive + automated) are now covered.
+
+### Quality gates
+
+- 471 tests · 0 PII · 271 tracked files
+
+---
+
 ## v1.1.22 — README quick-tour reflects 21 micro-releases (2026-05-09)
 
 ### What v1.1.22 ships
