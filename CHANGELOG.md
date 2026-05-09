@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.1.36 — agent-card no longer claims "0.1-stub" preview (2026-05-09)
+
+### What v1.1.36 ships
+
+- **Bug fix in `/.well-known/agent-card.json`**: the card was splatting
+  `PREVIEW_META` (intended for federation preview routes) into its top level,
+  so external A2A clients saw `version: "0.1-stub"` and `_preview: True` for a
+  card that is actually real and shipping.
+- **`version: "1.1"`** now at top level. Federation-specific preview flags
+  segregated into `federation_preview` block.
+- **2 new tests**: top-level version check · `_preview` not at root · federation
+  preview block intact under its own key.
+
+### Why this matters
+
+- This was a real interop bug. A2A clients that gate on `_preview: True` would
+  refuse to talk to an Ome365 instance even though decisions/eval/wiki/trace
+  capabilities are production-grade. The fix doesn't change federation routes
+  (still preview) but exposes the agent's actual maturity correctly.
+
+### Quality gates
+
+- 514 tests · 0 PII · 272 tracked files
+
+---
+
 ## v1.1.35 — `eval skills --json` final list-CLI parity (2026-05-09)
 
 ### What v1.1.35 ships

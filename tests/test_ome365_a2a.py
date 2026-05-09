@@ -224,3 +224,26 @@ def test_agent_card_compliance_block():
     assert "gdpr_art_22" in comp
     assert "pipl_art_13_24" in comp
     assert "anti_tokenmaxxing" in comp
+
+
+# ── v1.1.36 · card.version reflects v1.1, federation preview is segregated ──
+
+
+def test_agent_card_top_level_version_is_1_1():
+    """v1.1.36 fix: previous code splatted PREVIEW_META so card claimed
+    version=0.1-stub even though v1.1 is shipping. Now version=1.1 at top level."""
+    from ome365_a2a import agent_card_well_known
+    card = agent_card_well_known()
+    assert card["version"].startswith("1.1"), \
+        f"top-level version should be 1.1.x, got {card['version']!r}"
+    # Top-level _preview flag should NOT be true (this is a real card)
+    assert card.get("_preview") is not True
+
+
+def test_agent_card_federation_preview_segregated():
+    """The preview flag belongs in `federation_preview`, not at the card root."""
+    from ome365_a2a import agent_card_well_known
+    card = agent_card_well_known()
+    fp = card.get("federation_preview", {})
+    assert fp.get("_preview") is True
+    assert fp.get("_real_in_version") == "v1.3"

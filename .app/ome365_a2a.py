@@ -344,12 +344,18 @@ well_known_router = APIRouter(tags=["a2a"])
 
 @well_known_router.get("/.well-known/agent-card.json")
 def agent_card_well_known():
-    """A2A v1.0 well-known agent card · v1.1.2 ed25519 signed (P3 #17)."""
+    """A2A v1.0 well-known agent card · v1.1.2 ed25519 signed (P3 #17).
+
+    The agent-card itself is real and shipping; the only `_preview` surface is
+    the `federation_preview` block (in-memory registry · real federation in v1.3).
+    """
     body = {
         "name": "Ome365",
+        "version": "1.1",
         "did": "did:web:omnity.ai:default",
-        **PREVIEW_META,
         "protocol": "a2a/1.0",
+        # Federation features are still preview · gate them under their own block
+        "federation_preview": dict(PREVIEW_META),
         "capabilities": [
             "hike.entities",
             "hike.lookup",
