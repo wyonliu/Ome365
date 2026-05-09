@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.1.6 — Perf smoke pytest + RBAC sample (2026-05-09)
+
+### What v1.1.6 ships
+
+- **`tests/test_perf_smoke.py`** · 8 perf-budget tests integrated into pytest.
+  Catches regressions in `grep_decisions` / `eval_member` / `team_distribution`
+  / `finops_summary` / `/metrics render`. Includes a "cache beats naive"
+  invariant test that fails CI if `_compute_team_distribution` is no longer
+  faster than naive 5×eval_member.
+- **`vault.example/.ome365/roles.sample.yml`** · sample RBAC config showing
+  the 5 actors with realistic role assignments (alice=owner, bob/carol/dan=
+  contributor, erin=viewer/exec sponsor). Copy to `roles.yml` to enable.
+
+### Quality gates
+
+- 441 pytest tests · 100% pass (was 433)
+- 0 PII hits · 264 tracked files
+- All perf smoke budgets green: grep_decisions <300ms, eval_member <1s,
+  team_distribution <800ms, /metrics <500ms
+
+---
+
 ## v1.1.5 — CI green for v1.1 + 5th SKILL.md (2026-05-09)
 
 **Tagline**: CI now actually runs all 433 tests.

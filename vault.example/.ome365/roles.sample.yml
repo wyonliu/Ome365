@@ -1,0 +1,23 @@
+# Ome365 v1.1.2+ · sample RBAC config
+#
+# Copy to vault/.ome365/roles.yml (gitignored) to enable role-based access.
+# Without this file, every actor is "contributor" by default.
+#
+# 3 roles:
+#   owner       — read · write · delete · admin (config / roles)
+#   contributor — read · write
+#   viewer      — read
+#
+# Members in `opted_out_members` (PIPL §24 right of refusal) always get 403.
+# See docs/policies/EVAL_USAGE_POLICY.md for full policy.
+
+default_role: contributor
+
+members:
+  alice: owner          # team lead
+  bob: contributor      # IC
+  carol: contributor    # PM
+  dan: contributor      # sales
+  erin: viewer          # exec sponsor (read-only)
+
+# opted_out_members: []
