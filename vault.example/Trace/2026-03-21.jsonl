@@ -1,0 +1,1 @@
+{"ts": "2026-03-21T12:32:00Z", "actor": "alice", "skill": "code-review", "decision_id": "ci-roadmap-2026q2", "model": "gpt-4o", "tokens_in": 1151, "tokens_out": 155, "cost_usd": 0.0379, "output_value_usd": null, "value_attribution": null, "elapsed_ms": 7279, "tenant": "default"}

@@ -1,0 +1,1 @@
+{"ts": "2026-02-10T12:54:00Z", "actor": "carol", "skill": "hike-wiki-update", "decision_id": null, "model": "gpt-4o", "tokens_in": 552, "tokens_out": 99, "cost_usd": 0.0498, "output_value_usd": 2.358, "value_attribution": "manual", "elapsed_ms": 1005, "tenant": "default"}

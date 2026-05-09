@@ -1,0 +1,1 @@
+{"ts": "2026-02-17T10:49:00Z", "actor": "carol", "skill": "dev-decision-workflow", "decision_id": "v1-1-scope-team-brain", "model": "claude-sonnet-4-6", "tokens_in": 146, "tokens_out": 474, "cost_usd": 0.0058, "output_value_usd": null, "value_attribution": null, "elapsed_ms": 7422, "tenant": "default"}

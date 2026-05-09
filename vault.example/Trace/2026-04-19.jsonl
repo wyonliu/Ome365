@@ -1,0 +1,1 @@
+{"ts": "2026-04-19T10:36:00Z", "actor": "dan", "skill": "deploy-checklist", "decision_id": null, "model": "gpt-4o", "tokens_in": 1046, "tokens_out": 235, "cost_usd": 0.0444, "output_value_usd": 6.461, "value_attribution": "manual", "elapsed_ms": 7217, "tenant": "default"}

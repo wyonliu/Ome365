@@ -1,0 +1,1 @@
+{"ts": "2026-04-27T16:57:00Z", "actor": "dan", "skill": "dev-decision-workflow", "decision_id": "cross-bu-workflow-design", "model": "claude-sonnet-4-6", "tokens_in": 1159, "tokens_out": 262, "cost_usd": 0.0371, "output_value_usd": 5.54, "value_attribution": "manual", "elapsed_ms": 3008, "tenant": "default"}

@@ -1,0 +1,1 @@
+{"ts": "2026-04-07T14:17:00Z", "actor": "dan", "skill": "meeting-summarize", "decision_id": "oncall-rotation-q2", "model": "claude-haiku-4-5-20251001", "tokens_in": 1171, "tokens_out": 467, "cost_usd": 0.0542, "output_value_usd": null, "value_attribution": null, "elapsed_ms": 3817, "tenant": "default"}

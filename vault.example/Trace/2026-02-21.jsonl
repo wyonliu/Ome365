@@ -1,0 +1,1 @@
+{"ts": "2026-02-21T08:57:00Z", "actor": "alice", "skill": "meeting-summarize", "decision_id": null, "model": "gpt-4o", "tokens_in": 765, "tokens_out": 115, "cost_usd": 0.0732, "output_value_usd": null, "value_attribution": null, "elapsed_ms": 7899, "tenant": "default"}

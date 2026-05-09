@@ -1,0 +1,1 @@
+{"ts": "2026-03-05T16:27:00Z", "actor": "carol", "skill": "hike-wiki-update", "decision_id": "auth-provider-strategy", "model": "deepseek-v3", "tokens_in": 394, "tokens_out": 415, "cost_usd": 0.0456, "output_value_usd": null, "value_attribution": null, "elapsed_ms": 5170, "tenant": "default"}

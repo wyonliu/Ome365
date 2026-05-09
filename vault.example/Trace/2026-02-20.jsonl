@@ -1,0 +1,1 @@
+{"ts": "2026-02-20T13:34:00Z", "actor": "bob", "skill": "hike-wiki-update", "decision_id": "cut-feature-realtime-collab", "model": "claude-haiku-4-5-20251001", "tokens_in": 175, "tokens_out": 270, "cost_usd": 0.0401, "output_value_usd": 6.768, "value_attribution": "manual", "elapsed_ms": 6621, "tenant": "default"}

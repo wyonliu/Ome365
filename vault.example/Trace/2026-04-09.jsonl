@@ -1,0 +1,2 @@
+{"ts": "2026-04-09T16:04:00Z", "actor": "carol", "skill": "meeting-summarize", "decision_id": null, "model": "claude-sonnet-4-6", "tokens_in": 414, "tokens_out": 361, "cost_usd": 0.0467, "output_value_usd": null, "value_attribution": null, "elapsed_ms": 6007, "tenant": "default"}
+{"ts": "2026-04-09T12:41:00Z", "actor": "carol", "skill": "code-review", "decision_id": "q2-team-retro-process", "model": "deepseek-v3", "tokens_in": 212, "tokens_out": 188, "cost_usd": 0.0513, "output_value_usd": 7.874, "value_attribution": "manual", "elapsed_ms": 2758, "tenant": "default"}

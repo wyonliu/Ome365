@@ -1,0 +1,2 @@
+{"ts": "2026-03-13T10:44:00Z", "actor": "dan", "skill": "estimate-cost", "decision_id": "auth-provider-strategy", "model": "claude-sonnet-4-6", "tokens_in": 286, "tokens_out": 202, "cost_usd": 0.0551, "output_value_usd": null, "value_attribution": null, "elapsed_ms": 1196, "tenant": "default"}
+{"ts": "2026-03-13T08:56:00Z", "actor": "bob", "skill": "code-review", "decision_id": null, "model": "claude-haiku-4-5-20251001", "tokens_in": 1015, "tokens_out": 359, "cost_usd": 0.0699, "output_value_usd": 4.885, "value_attribution": "manual", "elapsed_ms": 2552, "tenant": "default"}

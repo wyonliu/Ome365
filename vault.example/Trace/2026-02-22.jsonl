@@ -1,0 +1,1 @@
+{"ts": "2026-02-22T17:13:00Z", "actor": "bob", "skill": "draft-customer-email", "decision_id": "q2-team-retro-process", "model": "claude-sonnet-4-6", "tokens_in": 453, "tokens_out": 141, "cost_usd": 0.076, "output_value_usd": null, "value_attribution": null, "elapsed_ms": 520, "tenant": "default"}

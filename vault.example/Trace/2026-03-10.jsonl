@@ -1,0 +1,1 @@
+{"ts": "2026-03-10T13:07:00Z", "actor": "carol", "skill": "dev-decision-workflow", "decision_id": "customer-tier-abc-segmentation", "model": "claude-sonnet-4-6", "tokens_in": 1140, "tokens_out": 132, "cost_usd": 0.0182, "output_value_usd": null, "value_attribution": null, "elapsed_ms": 723, "tenant": "default"}

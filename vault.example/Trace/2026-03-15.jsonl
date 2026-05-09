@@ -1,0 +1,2 @@
+{"ts": "2026-03-15T18:12:00Z", "actor": "alice", "skill": "code-review", "decision_id": null, "model": "gpt-4o", "tokens_in": 749, "tokens_out": 222, "cost_usd": 0.0736, "output_value_usd": 4.181, "value_attribution": "manual", "elapsed_ms": 4468, "tenant": "default"}
+{"ts": "2026-03-15T09:33:00Z", "actor": "carol", "skill": "hike-wiki-update", "decision_id": "cross-bu-workflow-design", "model": "claude-sonnet-4-6", "tokens_in": 457, "tokens_out": 364, "cost_usd": 0.0179, "output_value_usd": 3.971, "value_attribution": "manual", "elapsed_ms": 5330, "tenant": "default"}

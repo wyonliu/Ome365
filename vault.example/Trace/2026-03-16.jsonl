@@ -1,0 +1,1 @@
+{"ts": "2026-03-16T11:40:00Z", "actor": "bob", "skill": "code-review", "decision_id": "cut-feature-realtime-collab", "model": "claude-haiku-4-5-20251001", "tokens_in": 818, "tokens_out": 315, "cost_usd": 0.0184, "output_value_usd": 7.407, "value_attribution": "manual", "elapsed_ms": 6323, "tenant": "default"}

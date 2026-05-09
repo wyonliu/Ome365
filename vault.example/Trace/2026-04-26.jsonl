@@ -1,0 +1,1 @@
+{"ts": "2026-04-26T08:59:00Z", "actor": "alice", "skill": "dev-decision-workflow", "decision_id": "q2-team-retro-process", "model": "gpt-4o", "tokens_in": 252, "tokens_out": 433, "cost_usd": 0.0701, "output_value_usd": null, "value_attribution": null, "elapsed_ms": 4610, "tenant": "default"}
