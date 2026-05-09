@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.1.25 — `ome365 rbac` CLI · who / list / check (2026-05-09)
+
+### What v1.1.25 ships
+
+- **`./ome365 rbac who <actor>`** · JSON dump of actor's role + permissions
+  array (read/write/delete/admin).
+- **`./ome365 rbac list`** · machine-readable dump of `roles.yml` config:
+  `{default_role, members}`.
+- **`./ome365 rbac check <actor> <action>`** · exit 0 if allowed, 1 if denied.
+  Useful in CI scripts: `ome365 rbac check $USER write || exit 1`.
+- **5 new tests** in `test_v1_1_2_final.py` (now 22): help · who · check
+  allow+deny · list · invalid-action.
+
+### Why this matters
+
+- v1.1.x ships RBAC, but the only way to debug "why can't bob delete?" was
+  to read the YAML manually. The CLI exposes the resolved view including
+  default-role fallback. All 12 v1.1 modules now have CLI surface area.
+
+### Quality gates
+
+- 481 tests · 0 PII · 271 tracked files
+
+---
+
 ## v1.1.24 — `ome365 notify list / test` CLI for webhook ops (2026-05-09)
 
 ### What v1.1.24 ships

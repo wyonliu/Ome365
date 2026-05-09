@@ -125,6 +125,80 @@ def test_rbac_unknown_role_falls_to_contributor(tmp_path):
     assert role_of("weirdo", vault=tmp_path) == "contributor"
 
 
+# ── v1.1.25 · RBAC CLI ──────────────────────────────────────────────────────
+
+
+def test_rbac_cli_help(capsys):
+    from ome365_rbac import cli_main as rbac_cli
+    rc = rbac_cli([])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "ome365 rbac" in out
+    assert "who" in out and "list" in out and "check" in out
+
+
+def test_rbac_cli_who(tmp_path, monkeypatch, capsys):
+    import json as _json
+    pytest.importorskip("yaml")
+    from ome365_rbac import cli_main as rbac_cli
+    cfg = tmp_path / ".ome365"
+    cfg.mkdir()
+    (cfg / "roles.yml").write_text(
+        "default_role: 'viewer'\nmembers:\n  alice: 'owner'\n", "utf-8",
+    )
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+    rc = rbac_cli(["who", "alice"])
+    assert rc == 0
+    parsed = _json.loads(capsys.readouterr().out)
+    assert parsed["actor"] == "alice"
+    assert parsed["role"] == "owner"
+    assert set(parsed["permissions"]) == {"read", "write", "delete", "admin"}
+
+
+def test_rbac_cli_check_allow_and_deny(tmp_path, monkeypatch, capsys):
+    pytest.importorskip("yaml")
+    from ome365_rbac import cli_main as rbac_cli
+    cfg = tmp_path / ".ome365"
+    cfg.mkdir()
+    (cfg / "roles.yml").write_text(
+        "default_role: 'contributor'\nmembers:\n  carol: 'viewer'\n", "utf-8",
+    )
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+    # Allow case
+    rc = rbac_cli(["check", "carol", "read"])
+    assert rc == 0
+    assert "allow" in capsys.readouterr().out
+    # Deny case (viewer cannot write)
+    rc = rbac_cli(["check", "carol", "write"])
+    assert rc == 1
+    assert "deny" in capsys.readouterr().out
+
+
+def test_rbac_cli_list_dumps_members(tmp_path, monkeypatch, capsys):
+    import json as _json
+    pytest.importorskip("yaml")
+    from ome365_rbac import cli_main as rbac_cli
+    cfg = tmp_path / ".ome365"
+    cfg.mkdir()
+    (cfg / "roles.yml").write_text(
+        "default_role: 'contributor'\nmembers:\n  alice: 'owner'\n  bob: 'viewer'\n",
+        "utf-8",
+    )
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+    rc = rbac_cli(["list"])
+    assert rc == 0
+    parsed = _json.loads(capsys.readouterr().out)
+    assert parsed["default_role"] == "contributor"
+    assert parsed["members"] == {"alice": "owner", "bob": "viewer"}
+
+
+def test_rbac_cli_check_invalid_action(capsys):
+    from ome365_rbac import cli_main as rbac_cli
+    rc = rbac_cli(["check", "alice", "godmode"])
+    assert rc == 2
+    assert "action must be" in capsys.readouterr().out
+
+
 # ── P3 #15 · LLM wiki gate ──────────────────────────────────────────────────
 
 

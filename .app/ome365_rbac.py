@@ -101,4 +101,60 @@ def require(actor: str, action: Action, vault: Optional[Path] = None) -> None:
         )
 
 
-__all__ = ["Role", "Action", "PERMISSIONS", "load_roles", "role_of", "can", "require"]
+def cli_main(argv: list[str]) -> int:
+    """`./ome365 rbac who <actor> | list | check <actor> <action>` · ops debug."""
+    import json
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(
+            "usage:\n"
+            "  ome365 rbac who <actor>                # actor's role + permissions\n"
+            "  ome365 rbac list                       # all configured members\n"
+            "  ome365 rbac check <actor> <action>     # exit 0 if allowed, 1 if denied\n"
+            "                                         # action: read|write|delete|admin\n",
+            flush=True,
+        )
+        return 0
+
+    cmd = argv[0]
+
+    if cmd == "who":
+        if len(argv) < 2:
+            print("ERROR: ome365 rbac who <actor>", flush=True)
+            return 2
+        actor = argv[1]
+        role = role_of(actor)
+        perms = sorted(PERMISSIONS[role])
+        print(json.dumps({
+            "actor": actor,
+            "role": role,
+            "permissions": perms,
+        }, indent=2))
+        return 0
+
+    if cmd == "list":
+        cfg = load_roles()
+        print(json.dumps({
+            "default_role": cfg.get("default_role", "contributor"),
+            "members": cfg.get("members", {}),
+        }, indent=2, ensure_ascii=False))
+        return 0
+
+    if cmd == "check":
+        if len(argv) < 3:
+            print("ERROR: ome365 rbac check <actor> <action>", flush=True)
+            return 2
+        actor, action = argv[1], argv[2]
+        if action not in ("read", "write", "delete", "admin"):
+            print(f"ERROR: action must be read|write|delete|admin, got {action!r}", flush=True)
+            return 2
+        if can(actor, action):  # type: ignore[arg-type]
+            print(f"allow  · {actor} ({role_of(actor)}) can {action}")
+            return 0
+        print(f"deny   · {actor} ({role_of(actor)}) cannot {action}")
+        return 1
+
+    print(f"ERROR: unknown subcommand '{cmd}' (try who | list | check)", flush=True)
+    return 2
+
+
+__all__ = ["Role", "Action", "PERMISSIONS", "load_roles", "role_of", "can", "require", "cli_main"]
