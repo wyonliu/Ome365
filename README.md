@@ -4,7 +4,7 @@
 **AI 原生个人操作系统** — 记忆 · 反思 · 执行 · 养成
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.1.21-blue" alt="v1.1.21">
+  <img src="https://img.shields.io/badge/version-v1.1.22-blue" alt="v1.1.22">
   <img src="https://img.shields.io/badge/python-3.9+-blue" alt="Python 3.9+">
   <img src="https://img.shields.io/badge/vue-3.x-green" alt="Vue 3">
   <img src="https://img.shields.io/badge/storage-markdown-orange" alt="Markdown">
@@ -23,20 +23,22 @@
 
 > **🚀 v1.1.x ships team-brain + productization (2026-05-09).**
 >
-> 12 modules · 441 pytest tests · 0 PII · ed25519-signed agent-card · RBAC ·
-> i18n · async trace · perf 194× cache speedup proven.
+> 12 modules · 469 pytest tests · 0 PII · ed25519-signed agent-card · RBAC ·
+> i18n · async trace · perf 194× cache speedup proven · 21 micro-releases.
 >
 > Quick tour:
 > ```bash
 > ./ome365                 # boot at localhost:3650
 > open http://localhost:3650/v1_1.html  # 4-card cockpit (Decisions/Skills/FinOps/Eval)
 > ./ome365 status          # one-glance vault overview
-> ./ome365 doctor          # 12-check diagnostic + 12 v1.1 module health table
+> ./ome365 doctor --json   # machine-readable health for monitoring
 > ./ome365 eval member alice --window-days 90   # CLI 7-dim eval
 > ./ome365 verify <agent-card-url>              # ed25519 verify
-> ./ome365 wiki update     # Karpathy distill Decisions → Knowledge/L2-distilled/
-> ./ome365 backup create   # tar.gz the vault (data-portable)
-> ./ome365 audit grep --actor alice  # SOC2/ISO27001-grade audit log
+> ./ome365 wiki update --dry-run    # Karpathy distill (preview before writing)
+> ./ome365 backup create --dry-run  # preview tarball before writing
+> ./ome365 backup list --json       # scriptable backup retention
+> ./ome365 audit grep --actor alice # SOC2/ISO27001-grade audit log
+> ./ome365 metrics                  # offline Prometheus scrape (no server boot)
 > ```
 >
 > Read the [HR usage policy](docs/policies/EVAL_USAGE_POLICY.md) before wiring

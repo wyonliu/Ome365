@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.1.22 — README quick-tour reflects 21 micro-releases (2026-05-09)
+
+### What v1.1.22 ships
+
+- **README v1.1.x box updated** · test count 441 → 469 · adds quick-tour
+  entries for the 4 ops-scriptable CLIs shipped in v1.1.17-20:
+  `doctor --json`, `wiki/backup --dry-run`, `backup list --json`,
+  `metrics` (offline scrape).
+
+### Why this matters
+
+- The "what's new" surface area has compounded over 21 micro-releases. New
+  visitors land on the README first; if it pins old test counts and misses
+  the most useful CLIs, they walk away with the wrong impression.
+
+### Quality gates
+
+- 469 tests · 0 PII · 271 tracked files
+
+---
+
 ## v1.1.21 — 6th SKILL.md: audit-incident-response (2026-05-09)
 
 ### What v1.1.21 ships
