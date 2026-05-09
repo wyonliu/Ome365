@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.1.13 — wiki update --dry-run + 3 new tests (2026-05-09)
+
+### What v1.1.13 ships
+
+- **`./ome365 wiki update --dry-run`** · preview what WOULD be distilled
+  without touching disk and without firing the wiki.updated webhook.
+  Returns `{dry_run: true, appended: 0, would_append: N, would_write: [...]}`.
+  Useful for "preview before commit" workflows in CI.
+- **3 new tests** (`tests/test_ome365_wiki.py`):
+  - `test_dry_run_does_not_write_files` — disk untouched
+  - `test_dry_run_then_real_run_idempotent` — dry would_append == real appended
+  - `test_cli_update_dry_run` — CLI `--dry-run` flag
+
+### Quality gates
+
+- 446 tests · 0 PII · 269 tracked files
+
+---
+
 ## v1.1.12 — Industry benchmarks · sector breakdown (2026-05-09)
 
 ### What v1.1.12 ships

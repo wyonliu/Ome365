@@ -120,15 +120,23 @@ def _format_pattern_block(decision_id: str, category: str, claim: str,
 # ── update · scan Decisions/ → write L2-distilled/<category>.md ─────────────
 
 
-def update(vault: Optional[Path] = None, source: str = "Decisions") -> dict:
+def update(
+    vault: Optional[Path] = None,
+    source: str = "Decisions",
+    dry_run: bool = False,
+) -> dict:
     """
     Walk vault/<source>/*.md, distill into Knowledge/L2-distilled/<category>.md.
     Idempotent: pattern blocks already containing `<!-- key: <id> -->` are skipped.
 
+    dry_run=True: compute what WOULD be written, but don't touch disk and don't
+                  fire webhooks. Useful for "preview before commit" workflows.
+
     Returns:
       {
         "scanned": int, "appended": int, "skipped_dup": int, "skipped_open": int,
-        "files_written": [<path>...]
+        "files_written": [<path>...],
+        "dry_run": bool,
       }
     """
     if grep_decisions_all is None:
@@ -182,6 +190,21 @@ def update(vault: Optional[Path] = None, source: str = "Decisions") -> dict:
         appended += 1
 
     files_written: list[str] = []
+    if dry_run:
+        # In dry-run: report what would be written but don't touch disk
+        for out_fp, _blocks in files_touched.items():
+            files_written.append(str(out_fp.relative_to(v)))
+        return {
+            "scanned": len(decisions),
+            "appended": 0,  # nothing actually written
+            "would_append": appended,
+            "skipped_dup": skipped_dup,
+            "skipped_open": skipped_open,
+            "files_written": [],
+            "would_write": files_written,
+            "dry_run": True,
+        }
+
     for out_fp, blocks in files_touched.items():
         header_needed = not out_fp.exists()
         with out_fp.open("a", encoding="utf-8") as f:
@@ -360,7 +383,7 @@ def cli_main(argv: list[str]) -> int:
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(
             "usage:\n"
-            "  ome365 wiki update [--source Decisions]\n"
+            "  ome365 wiki update [--source Decisions] [--dry-run]\n"
             "  ome365 wiki query 'search term' [--limit 20]\n"
         )
         return 0
@@ -369,10 +392,14 @@ def cli_main(argv: list[str]) -> int:
     rest = argv[1:]
     args: dict = {}
     positional: list[str] = []
+    dry_run = False
     i = 0
     while i < len(rest):
         tok = rest[i]
-        if tok.startswith("--") and i + 1 < len(rest):
+        if tok == "--dry-run":
+            dry_run = True
+            i += 1
+        elif tok.startswith("--") and i + 1 < len(rest):
             args[tok.lstrip("-").replace("-", "_")] = rest[i + 1]
             i += 2
         else:
@@ -380,7 +407,7 @@ def cli_main(argv: list[str]) -> int:
             i += 1
 
     if cmd == "update":
-        result = update(source=args.get("source", "Decisions"))
+        result = update(source=args.get("source", "Decisions"), dry_run=dry_run)
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return 0
 

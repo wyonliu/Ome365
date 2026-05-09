@@ -181,3 +181,46 @@ def test_cli_update_then_query_on_vault_example(monkeypatch, capsys):
     assert rc == 0
     out = capsys.readouterr().out
     assert "matches" in out
+
+
+# ── P0 #15 dry-run mode ─────────────────────────────────────────────────────
+
+
+def test_dry_run_does_not_write_files(tmp_path):
+    """--dry-run reports what WOULD be written but doesn't touch disk."""
+    pytest.importorskip("yaml")
+    _make_decision(tmp_path, "d1", "alice", "infra", "shipped X", ["P", "L"])
+    _make_decision(tmp_path, "d2", "alice", "infra", "fixed Y", ["P"])
+
+    result = update(vault=tmp_path, dry_run=True)
+    assert result["dry_run"] is True
+    assert result["appended"] == 0  # nothing written
+    assert result["would_append"] == 2
+    assert result["would_write"]
+    # No files actually written
+    l2 = tmp_path / "Knowledge" / "L2-distilled"
+    assert not l2.exists() or not list(l2.glob("*.md"))
+
+
+def test_dry_run_then_real_run_idempotent(tmp_path):
+    """dry_run should report the same set as a real run · idempotent."""
+    pytest.importorskip("yaml")
+    _make_decision(tmp_path, "d1", "alice", "infra", "shipped", ["P"])
+    dry = update(vault=tmp_path, dry_run=True)
+    real = update(vault=tmp_path, dry_run=False)
+    assert dry["would_append"] == real["appended"]
+
+
+def test_cli_update_dry_run(monkeypatch, tmp_path, capsys):
+    """CLI --dry-run flag works."""
+    pytest.importorskip("yaml")
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+    _make_decision(tmp_path, "d1", "alice", "infra", "shipped", ["P"])
+    rc = cli_main(["update", "--dry-run"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert '"dry_run": true' in out
+    assert '"appended": 0' in out
+    # No files actually written
+    assert not (tmp_path / "Knowledge" / "L2-distilled").exists() or \
+           not list((tmp_path / "Knowledge" / "L2-distilled").glob("*.md"))
