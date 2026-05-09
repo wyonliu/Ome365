@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.1.9 — Cockpit shortcuts + doctor --json (2026-05-09)
+
+### What v1.1.9 ships
+
+- **Cockpit keyboard shortcuts** (`/v1_1.html`):
+  - `r` — refresh all 4 cards
+  - `t` — toggle theme (dark/light)
+  - `l` — toggle language (zh/en)
+  - `1-4` — focus the corresponding card (smooth scroll)
+  - `?` — show shortcut help toast
+  - Footer shows `⌨ ?` reminder.
+  - Inputs/selects are not hijacked — focus-aware.
+- **`./ome365 doctor --json`** · machine-readable health output for ops
+  integration. Emits `{platform, python_version, missing_core_pkgs, ports,
+  files, v1_1_modules, vault, ok}`. Returns exit 0 if `ok: true`, else 1.
+
+### Quality gates
+
+- 443 pytest tests · 100% pass
+- 0 PII hits · 268 tracked files
+- doctor --json smoke: returns valid JSON with all 12 v1.1 modules "ok"
+
+---
+
 ## v1.1.8 — Full v1.1 lifecycle integration test (2026-05-09)
 
 ### What v1.1.8 ships

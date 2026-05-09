@@ -311,7 +311,8 @@
     Ome365 v1.1 · Team Brain · GDPR Art. 22 + PIPL §13/§24 enforced ·
     <a href="/docs/TEAM_ONBOARDING.md">5-min onboarding</a> ·
     <a href="/">main cockpit</a> ·
-    <a href="/.well-known/agent-card.json">agent-card</a>
+    <a href="/.well-known/agent-card.json">agent-card</a> ·
+    <span title="press ? for keyboard shortcuts">⌨ ?</span>
   </footer>
 
   <div class="toast" :class="[toast.kind, { show: toast.show }]" @click="toast.show = false">
@@ -543,10 +544,31 @@ createApp({
       await loadAll();
     }
 
+    function handleShortcut(ev) {
+      // Ignore if focus is in an input/select/textarea
+      const tag = (ev.target && ev.target.tagName) || '';
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(tag)) return;
+      switch (ev.key) {
+        case 'r': loadAll(); break;
+        case 't': toggleTheme(); break;
+        case 'l': toggleLang(); break;
+        case '?': showToast(
+          'shortcuts: r=refresh · t=theme · l=lang · 1-4=focus card · ?=help', 'ok'); break;
+        case '1': document.querySelector('.card:nth-of-type(1)')?.scrollIntoView({behavior:'smooth'}); break;
+        case '2': document.querySelector('.card:nth-of-type(2)')?.scrollIntoView({behavior:'smooth'}); break;
+        case '3': document.querySelector('.card:nth-of-type(3)')?.scrollIntoView({behavior:'smooth'}); break;
+        case '4': document.querySelector('.card:nth-of-type(4)')?.scrollIntoView({behavior:'smooth'}); break;
+      }
+    }
+
     onMounted(() => {
       bootstrap();
+      window.addEventListener('keydown', handleShortcut);
       const tickHandle = setInterval(() => { state.now = Date.now(); }, 1000);
-      onUnmounted(() => clearInterval(tickHandle));
+      onUnmounted(() => {
+        clearInterval(tickHandle);
+        window.removeEventListener('keydown', handleShortcut);
+      });
     });
 
     return {

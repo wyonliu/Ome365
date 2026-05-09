@@ -192,8 +192,61 @@ def run_server(port: int, open_browser: bool) -> int:
 
 
 # ── 子命令：doctor 自检 ─────────────────────
+def cmd_doctor_json() -> int:
+    """JSON output for ops integration · machine-readable doctor result."""
+    import json as _json
+    import platform as _platform
+    out = {
+        "platform": _platform.system(),
+        "python_version": sys.version.split()[0],
+        "missing_core_pkgs": missing_core_pkgs(),
+        "ports": {
+            "3650_free": port_is_free(3650),
+            "3651_free": port_is_free(3651),
+        },
+        "files": {
+            "env_exists": ENV_FILE.exists(),
+            "tenant_config_live": (APP / "tenant_config.json").exists(),
+            "tenant_config_sample": (APP / "tenant_config.sample.json").exists(),
+        },
+        "v1_1_modules": {},
+    }
+    sys.path.insert(0, str(APP))
+    for mod in [
+        "ome365_eval", "ome365_decisions", "ome365_trace", "ome365_wiki",
+        "ome365_archive", "ome365_backup", "ome365_audit", "ome365_metrics",
+        "ome365_notify", "ome365_rbac", "ome365_signing", "ome365_cli_extras",
+    ]:
+        try:
+            __import__(mod)
+            out["v1_1_modules"][mod] = "ok"
+        except Exception as e:
+            out["v1_1_modules"][mod] = f"error: {e}"
+
+    # Vault state
+    vault = Path(os.environ.get("OME365_VAULT", ROOT)).resolve()
+    if vault.exists():
+        out["vault"] = {
+            "path": str(vault),
+            "decisions_count": len(list((vault / "Decisions").glob("*.md"))) if (vault / "Decisions").exists() else 0,
+            "trace_files": sum(1 for _ in (vault / "Trace").glob("*.jsonl")) if (vault / "Trace").exists() else 0,
+            "skills_count": len(list((vault / "Skills").glob("*.md"))) if (vault / "Skills").exists() else 0,
+            "signing_key_present": (vault / ".ome365" / "keys" / "agent-card.ed25519").exists(),
+            "rbac_present": (vault / ".ome365" / "roles.yml").exists(),
+        }
+
+    out["ok"] = (
+        not out["missing_core_pkgs"]
+        and all(v == "ok" for v in out["v1_1_modules"].values())
+    )
+    print(_json.dumps(out, indent=2, ensure_ascii=False))
+    return 0 if out["ok"] else 1
+
+
 def cmd_doctor() -> int:
     """Multi-platform diagnostic · checks 12 things across 4 dimensions."""
+    if "--json" in sys.argv:
+        return cmd_doctor_json()
     import platform as _platform
     ok = True
     warnings = []
