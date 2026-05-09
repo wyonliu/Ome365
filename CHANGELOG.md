@@ -1,5 +1,32 @@
 # Changelog
 
+## v1.1.38 — agent-card advertised endpoints must really exist (regression) (2026-05-09)
+
+### What v1.1.38 ships
+
+- **2 new regression tests** in `tests/test_ome365_a2a.py` (now 27): one walks
+  every HTTP endpoint in `capabilities_v1_1` and asserts it's registered on a
+  real FastAPI router; the other checks every advertised CLI maps to a
+  module with `cli_main`.
+- Path-template normalizer (`{id}` ≡ `{decision_id}`) so naming differences
+  don't false-positive.
+
+### Why this matters
+
+- Same bug class as v1.1.36 (agent-card claimed `version=0.1-stub`): when the
+  card advertises something, A2A clients trust it. If we rename a route or
+  drop a CLI without updating the card, federation peers would see 404. Now
+  CI fails first.
+- Verified all 8 advertised HTTP endpoints + 7 CLIs match reality (including
+  `/api/eval/finops/dashboard` correctly resolved as the `{scope}=dashboard`
+  parameterized route).
+
+### Quality gates
+
+- 516 tests · 0 PII · 272 tracked files
+
+---
+
 ## v1.1.37 — `doctor` text mode shows git_sha (consistency with --json) (2026-05-09)
 
 ### What v1.1.37 ships

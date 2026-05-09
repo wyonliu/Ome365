@@ -247,3 +247,91 @@ def test_agent_card_federation_preview_segregated():
     fp = card.get("federation_preview", {})
     assert fp.get("_preview") is True
     assert fp.get("_real_in_version") == "v1.3"
+
+
+# ── v1.1.38 · agent-card advertised endpoints must really exist ─────────────
+
+
+def _normalize_path(path: str) -> str:
+    """Replace any {...} segment with the literal {} so path templates with
+    different parameter names ({id} vs {decision_id}) compare equal."""
+    import re
+    return re.sub(r"\{[^}]+\}", "{}", path)
+
+
+def _registered_route_set():
+    """Set of (method, normalized_path) tuples across all v1.1 routers."""
+    from ome365_decisions import router as dec_router
+    from ome365_eval import router as eval_router
+    out = set()
+    for r in list(dec_router.routes) + list(eval_router.routes):
+        if hasattr(r, "methods") and r.methods:
+            for m in r.methods:
+                if m in ("HEAD",):
+                    continue
+                out.add((m, _normalize_path(r.path)))
+    return out
+
+
+def test_agent_card_advertised_http_endpoints_exist():
+    """Every HTTP endpoint in capabilities_v1_1 must be registered.
+
+    Catches the "advertised but not implemented" drift that would mislead
+    A2A clients. Also catches the inverse — capabilities frozen while
+    the route was renamed under the table.
+    """
+    from ome365_a2a import agent_card_well_known
+    registered = _registered_route_set()
+
+    card = agent_card_well_known()
+    advertised = []
+    for group, items in card.get("capabilities_v1_1", {}).items():
+        for c in items:
+            ep = c.get("endpoint")
+            if not ep:
+                continue
+            method, _, path = ep.partition(" ")
+            advertised.append((c["name"], method, path))
+
+    missing = []
+    for name, method, path in advertised:
+        norm = _normalize_path(path)
+        if (method, norm) not in registered:
+            # Check if this is a {scope}-style sub-value (e.g. "dashboard")
+            # matched by a parameterized parent route
+            parent = norm.rsplit("/", 1)[0] + "/{}"
+            if (method, parent) not in registered:
+                missing.append(f"{name}: {method} {path}")
+
+    assert not missing, f"agent-card advertises non-existent endpoints: {missing}"
+
+
+def test_agent_card_advertised_cli_modules_loadable():
+    """Every CLI listed in capabilities_v1_1 must point to a loadable module."""
+    from ome365_a2a import agent_card_well_known
+    card = agent_card_well_known()
+    cli_to_module = {
+        "ome365 wiki": "ome365_wiki",
+        "ome365 trace": "ome365_trace",
+        "ome365 archive": "ome365_archive",
+    }
+    missing = []
+    for group, items in card.get("capabilities_v1_1", {}).items():
+        for c in items:
+            cli = c.get("cli")
+            if not cli:
+                continue
+            # First two tokens identify the module
+            head = " ".join(cli.split()[:2])
+            mod_name = cli_to_module.get(head)
+            if mod_name is None:
+                continue
+            try:
+                __import__(mod_name)
+                # Must have cli_main
+                mod = sys.modules[mod_name]
+                if not hasattr(mod, "cli_main"):
+                    missing.append(f"{c['name']}: {mod_name} has no cli_main")
+            except Exception as e:
+                missing.append(f"{c['name']}: cannot import {mod_name}: {e}")
+    assert not missing, missing
