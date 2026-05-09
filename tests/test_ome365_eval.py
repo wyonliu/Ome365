@@ -16,8 +16,10 @@ from ome365_eval import (  # noqa: E402
     Score,
     D1_delivery,
     D2_cost_per_outcome,
+    D4_judgment,
     D5_ecosystem,
     D7_learning,
+    dashboard_data,
     eval_member,
     finops_summary,
     grep_decisions_all,
@@ -183,10 +185,10 @@ def test_eval_warning_anti_tokenmaxxing_present():
 def test_d1_delivery_insufficient_sample():
     """edge case #1: n<5 returns score=None + reason."""
     s = D1_delivery("alice", date.today() - timedelta(days=365), VAULT_EXAMPLE, sample_min=5)
-    # vault.example has 2 closed decisions (W1 pick-llm-backend + W3 trace-sdk-design) · n=2 < 5 → insufficient
+    # vault.example has 3 closed decisions (W1 + W3 + W4) · n=3 < 5 → insufficient
     assert s.score is None
     assert s.reason == "insufficient_sample"
-    assert s.n == 2
+    assert s.n == 3
 
 
 def test_d2_cost_per_outcome_zero_value_zero_score():
@@ -224,7 +226,7 @@ def test_finops_cost_per_resolved_decision():
     r = finops_summary(VAULT_EXAMPLE, scope="cost_per_resolved_decision", since_days=365)
     assert r["scope"] == "cost_per_resolved_decision"
     assert r["unit"] == "USD per closed decision"
-    assert r["n_decisions_closed"] == 2
+    assert r["n_decisions_closed"] == 3
     assert r["human_review_required"] is True
 
 
@@ -238,3 +240,151 @@ def test_finops_three_scopes_all_work():
         r = finops_summary(VAULT_EXAMPLE, scope=scope, since_days=365)
         assert r["human_review_required"] is True
         assert "value" in r
+
+
+# ── W4 · D4 anchor-based judgment scoring ────────────────────────────────────
+
+
+def _seed_vault_with_anchors(tmp_path: Path, anchor_lists: list[list[str]]) -> None:
+    """Create N closed decisions for actor 'alice' with given anchor sets."""
+    decisions_dir = tmp_path / "Decisions"
+    decisions_dir.mkdir()
+    for i, anchors in enumerate(anchor_lists):
+        anchor_yaml = "\n".join(f"  - {a}" for a in anchors) if anchors else " []"
+        (decisions_dir / f"d{i}.md").write_text(
+            f"---\n"
+            f"id: d{i}\n"
+            f"opened: 2026-04-01T00:00:00Z\n"
+            f"closed: 2026-04-10T00:00:00Z\n"
+            f"status: closed\n"
+            f"owner: alice\n"
+            f"outcome: '"f"shipped"f"'\n"
+            f"value_anchors:\n{anchor_yaml}\n"
+            f"---\n# d{i}\n",
+            "utf-8",
+        )
+
+
+def test_d4_anchor_based_positive_anchors_lift_score(tmp_path):
+    pytest.importorskip("yaml")
+    # All 5 decisions tagged with strong positives
+    _seed_vault_with_anchors(tmp_path, [["P", "L"], ["P"], ["XL"], ["L", "M"], ["P", "L"]])
+    s = D4_judgment("alice", date(2026, 1, 1), tmp_path, sample_min=5)
+    assert s.score is not None
+    assert s.score > 3.5  # strong positive lift
+    assert s.n == 5
+
+
+def test_d4_anchor_based_revert_drags_score(tmp_path):
+    pytest.importorskip("yaml")
+    # Mix of Revert (very negative) decisions
+    _seed_vault_with_anchors(tmp_path, [["Revert"], ["Revert"], ["Revert"], ["Revert"], ["Revert"]])
+    s = D4_judgment("alice", date(2026, 1, 1), tmp_path, sample_min=5)
+    assert s.score is not None
+    assert s.score == 0  # all Revert clipped to 0
+
+
+def test_d4_falls_back_to_outcome_string_when_no_anchors(tmp_path):
+    pytest.importorskip("yaml")
+    # 5 decisions with empty anchors but outcome strings
+    decisions_dir = tmp_path / "Decisions"
+    decisions_dir.mkdir()
+    for i, outcome in enumerate(["OK", "OK", "成功", "shipped", "rolled-back"]):
+        (decisions_dir / f"d{i}.md").write_text(
+            f"---\nid: d{i}\nopened: 2026-04-01T00:00:00Z\nclosed: 2026-04-10T00:00:00Z\n"
+            f"status: closed\nowner: alice\noutcome: '"f"{outcome}"f"'\nvalue_anchors: []\n---\n",
+            "utf-8",
+        )
+    s = D4_judgment("alice", date(2026, 1, 1), tmp_path, sample_min=5)
+    # 3 of 5 start with ok/success/成功 (case-insensitive)
+    assert s.raw == 0.6
+    assert s.score == 3.0
+
+
+# ── W4 · dashboard_data composite ────────────────────────────────────────────
+
+
+def test_dashboard_data_combines_scopes_and_actors():
+    pytest.importorskip("yaml")
+    d = dashboard_data(VAULT_EXAMPLE, since_days=365)
+    assert d["human_review_required"] is True
+    assert set(d["by_scope"].keys()) == {
+        "cost_per_resolved_decision", "human_equivalent_hourly", "revenue_per_workflow",
+    }
+    assert "alice" in d["by_actor"]
+    assert d["by_actor"]["alice"]["requests"] >= 4
+    assert d["by_actor"]["alice"]["cost_usd"] > 0
+
+
+def test_dashboard_data_reads_monthly_summaries(tmp_path):
+    pytest.importorskip("yaml")
+    monthly = tmp_path / "Trace" / "monthly"
+    monthly.mkdir(parents=True)
+    import json as _json
+    (monthly / "2026-04.summary.json").write_text(_json.dumps({
+        "period": "2026-04", "totals": {"requests": 10, "cost_usd": 0.5, "value_usd": 1.0},
+        "by_actor": {"alice": {"requests": 10, "cost_usd": 0.5, "value_usd": 1.0,
+                               "tokens_in": 0, "tokens_out": 0}},
+        "by_skill": {}, "by_decision": {}, "generated_at": "2026-04-30T00:00:00Z",
+    }))
+    d = dashboard_data(tmp_path, since_days=30, months_back=3)
+    assert len(d["monthly_trend"]) == 1
+    assert d["monthly_trend"][0]["period"] == "2026-04"
+
+
+# ── W4 · HTTP router (FastAPI) ───────────────────────────────────────────────
+
+
+def test_eval_router_finops_dashboard_endpoint(monkeypatch):
+    pytest.importorskip("yaml")
+    fastapi = pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from ome365_eval import router
+
+    app = fastapi.FastAPI()
+    app.include_router(router)
+    monkeypatch.setenv("OME365_VAULT", str(VAULT_EXAMPLE))
+    client = TestClient(app)
+
+    r = client.get("/api/eval/finops/dashboard")
+    assert r.status_code == 200
+    data = r.json()
+    assert "by_scope" in data
+    assert data["human_review_required"] is True
+
+
+def test_eval_router_member_endpoint(monkeypatch):
+    pytest.importorskip("yaml")
+    fastapi = pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from ome365_eval import router
+
+    app = fastapi.FastAPI()
+    app.include_router(router)
+    monkeypatch.setenv("OME365_VAULT", str(VAULT_EXAMPLE))
+    client = TestClient(app)
+
+    r = client.get("/api/eval/member/alice?window_days=365")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["member_id"] == "alice"
+    assert data["human_review_required"] is True
+
+
+def test_eval_router_skills_endpoint(monkeypatch):
+    pytest.importorskip("yaml")
+    fastapi = pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from ome365_eval import router
+
+    app = fastapi.FastAPI()
+    app.include_router(router)
+    monkeypatch.setenv("OME365_VAULT", str(VAULT_EXAMPLE))
+    client = TestClient(app)
+
+    r = client.get("/api/eval/skills")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["count"] >= 3
+    names = {s["name"] for s in data["skills"]}
+    assert "meeting-summarize" in names

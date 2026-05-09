@@ -94,6 +94,15 @@ except ImportError as _e:
     logging.getLogger("ome365").warning(f"ome365.decisions router not loaded: {_e}")
 
 
+# ── ome365.eval · v1.1 W4 · Cost-per-Outcome dashboard + member eval ───────
+try:
+    from ome365_eval import router as eval_router
+    if eval_router is not None:
+        app.include_router(eval_router)
+except ImportError as _e:
+    logging.getLogger("ome365").warning(f"ome365.eval router not loaded: {_e}")
+
+
 # ── T1 Privacy headers · 仅作用于 /s 前缀（share 路由）──
 # 主站驾舱走 AuthProvider 自己的门禁，头部要保持干净；
 # share 是面向公网只读分享站，要 noindex + DENY iframe + no-referrer。

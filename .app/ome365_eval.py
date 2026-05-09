@@ -281,12 +281,45 @@ def D3_quality(actor: str, since: date, vault: Path, sample_min: int = 5) -> Sco
     return Score(raw=raw, score=_clip(raw * 5, 0, 5), n=len(decisions))
 
 
-def D4_judgment(actor: str, since: date, vault: Path, sample_min: int = 5) -> Score:
-    """outcome.startswith('OK'/'success'/'成功') 占比"""
+def D4_judgment(
+    actor: str, since: date, vault: Path,
+    sample_min: int = 5,
+    anchor_weights: Optional[dict] = None,
+) -> Score:
+    """
+    Judgment quality · weighted score from value_anchors with outcome-string fallback.
+
+    Primary signal (anchor-based · W4):
+      score per decision = sum(anchor_weights[a] for a in d.value_anchors)
+      Revert (-2.0) and 维护性 (-0.5) drag · P/XL/L/M (+1..+3) lift.
+      raw = mean(per-decision score) clipped to 0-5 via (raw + 2) / 5 * 5.
+
+    Secondary signal (W1 fallback):
+      If no decision in window has value_anchors, use outcome-string-startswith
+      ('ok'/'success'/'成功') as before — preserves W1 contract.
+    """
     closed = [d for d in grep_decisions_all(vault)
               if d.owner == actor and d.status == "closed" and d.outcome]
     if len(closed) < sample_min:
         return Score(n=len(closed), reason="insufficient_sample")
+
+    weights = anchor_weights or {
+        "P": 2.0, "XL": 3.0, "L": 2.0, "M": 1.0,
+        "维护性": -0.5, "Revert": -2.0,
+    }
+    anchor_decisions = [d for d in closed if d.value_anchors]
+
+    if anchor_decisions:
+        per_decision = [
+            sum(weights.get(a, 0) for a in d.value_anchors)
+            for d in anchor_decisions
+        ]
+        raw = sum(per_decision) / len(per_decision)
+        # raw range ≈ [-2, +3] · normalize to 0-5
+        score = _clip((raw + 2) / 5 * 5, 0, 5)
+        return Score(raw=raw, score=score, n=len(closed))
+
+    # Fallback to W1 outcome-string heuristic
     ok = sum(
         1 for d in closed
         if d.outcome and d.outcome.lower().startswith(("ok", "success", "成功"))
@@ -429,7 +462,7 @@ def eval_member(
         "D1_delivery":             D1_delivery(member_id, since, tenant_vault, sample_min),
         "D2_cost_per_outcome":     D2_cost_per_outcome(member_id, since, tenant_vault, sample_min),
         "D3_quality":              D3_quality(member_id, since, tenant_vault, sample_min),
-        "D4_judgment":             D4_judgment(member_id, since, tenant_vault, sample_min),
+        "D4_judgment":             D4_judgment(member_id, since, tenant_vault, sample_min, anchor_weights),
         "D5_ecosystem":            D5_ecosystem(member_id, since, tenant_vault, sample_min=1),
         "D6_revenue_per_workflow": D6_revenue_per_workflow(member_id, since, tenant_vault, anchor_weights, sample_min=3),
         "D7_learning":             D7_learning(member_id, since, tenant_vault),
@@ -510,6 +543,115 @@ def finops_summary(
     }
 
 
+# ── Cost-per-Outcome dashboard (W4) ──────────────────────────────────────────
+
+
+def dashboard_data(
+    tenant_vault: Path,
+    *,
+    since_days: int = 30,
+    months_back: int = 3,
+) -> dict:
+    """
+    Combined Cost-per-Outcome view for cockpit card.
+    Reads pre-computed Trace/monthly/<YYYY-MM>.summary.json (W3 rollup) when
+    available, plus live finops_summary for the rolling window.
+
+    Returns:
+      {
+        by_scope: {<scope>: finops_summary_dict},
+        monthly_trend: [<summary.json contents>, ...] (newest first),
+        by_actor: {actor: {requests, cost_usd, value_usd}} (rolling window),
+        since_days, months_back, human_review_required: True
+      }
+    """
+    by_scope = {
+        scope: finops_summary(tenant_vault, scope=scope, since_days=since_days)
+        for scope in ("cost_per_resolved_decision", "human_equivalent_hourly", "revenue_per_workflow")
+    }
+
+    monthly_trend = []
+    monthly_dir = tenant_vault / "Trace" / "monthly"
+    if monthly_dir.exists():
+        files = sorted(monthly_dir.glob("*.summary.json"), reverse=True)[:months_back]
+        for fp in files:
+            try:
+                monthly_trend.append(json.loads(fp.read_text("utf-8")))
+            except (OSError, json.JSONDecodeError):
+                continue
+
+    since_dt = datetime.combine(date.today() - timedelta(days=since_days),
+                                datetime.min.time(), tzinfo=timezone.utc)
+    by_actor: dict = defaultdict(lambda: {"requests": 0, "cost_usd": 0.0, "value_usd": 0.0})
+    for t in grep_trace_all(tenant_vault):
+        if t.ts < since_dt:
+            continue
+        by_actor[t.actor]["requests"] += 1
+        by_actor[t.actor]["cost_usd"] += t.cost_usd
+        by_actor[t.actor]["value_usd"] += t.output_value_usd or 0
+
+    return {
+        "by_scope": by_scope,
+        "monthly_trend": monthly_trend,
+        "by_actor": dict(by_actor),
+        "since_days": since_days,
+        "months_back": months_back,
+        "human_review_required": True,
+        "anti_tokenmaxxing_note": "Cost-per-Outcome · NOT cost-per-token · resource allocation hint only",
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# ── HTTP router (mounted by .app/server.py) ──────────────────────────────────
+
+
+def _vault_root() -> Path:
+    """Resolve vault root from env (matches server.py convention)."""
+    import os
+    return Path(os.environ.get("OME365_VAULT", Path(__file__).parent.parent)).resolve()
+
+
+try:
+    from fastapi import APIRouter, HTTPException, Query
+
+    router = APIRouter(prefix="/api/eval", tags=["eval"])
+
+    @router.get("/member/{actor}")
+    def http_eval_member(actor: str, window_days: int = Query(30, ge=1, le=365)):
+        try:
+            return eval_member(_vault_root(), actor, window_days=window_days)
+        except EvalDisabledForRegion as e:
+            raise HTTPException(403, f"region_disabled: {e}")
+        except PIPLNotifyRequired as e:
+            raise HTTPException(412, f"pipl_notify_required: {e}")
+        except EvalOptedOut as e:
+            raise HTTPException(403, f"opted_out: {e}")
+
+    @router.get("/finops/{scope}")
+    def http_finops(scope: str, since_days: int = Query(30, ge=1, le=365)):
+        if scope == "dashboard":
+            return dashboard_data(_vault_root(), since_days=since_days)
+        try:
+            return finops_summary(_vault_root(), scope=scope, since_days=since_days)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+    @router.get("/skills")
+    def http_skills():
+        skills = grep_skills_all(_vault_root())
+        return {
+            "skills": [
+                {"name": s.name, "author": s.author,
+                 "created": s.created.isoformat() if s.created else None}
+                for s in skills
+            ],
+            "count": len(skills),
+        }
+
+except ImportError:
+    router = None  # type: ignore
+
+
 # ── Module exports ────────────────────────────────────────────────────────────
 
 __all__ = [
@@ -519,6 +661,7 @@ __all__ = [
     "D1_delivery", "D2_cost_per_outcome", "D3_quality",
     "D4_judgment", "D5_ecosystem", "D6_revenue_per_workflow", "D7_learning",
     "load_eval_config",
-    "eval_member", "finops_summary",
+    "eval_member", "finops_summary", "dashboard_data",
     "EvalDisabledForRegion", "PIPLNotifyRequired", "EvalOptedOut",
+    "router",
 ]
