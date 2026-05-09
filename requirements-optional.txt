@@ -1,0 +1,28 @@
+# Ome365 v1.1.x · OPTIONAL deps · install only what you need
+# ----------------------------------------------------------
+#
+# Default Ome365 ships with ZERO optional deps · file-first stdlib path.
+# Install these only if you opt into the matching feature:
+#
+#   pip install -r requirements-optional.txt           # everything below
+#   pip install anthropic                              # P3 #15 LLM wiki
+#   pip install openai                                 # P3 #15 LLM wiki (alt)
+#   pip install sqlite-vec sentence-transformers       # P3 #16 semantic search
+#
+# All features are gated by env flags · Ome365 keeps working when these
+# are missing.
+
+# ── P3 #15 · LLM-distilled wiki ──
+# Activate via: OME365_WIKI_LLM=1 + ANTHROPIC_API_KEY (or OPENAI_API_KEY)
+anthropic>=0.40.0
+openai>=1.50.0
+
+# ── P3 #16 · sqlite-vec semantic wiki search ──
+# Activate via: OME365_WIKI_VEC=1
+# Note: bge-small-zh-v1.5 is ~90MB · cached locally on first use
+sqlite-vec>=0.1.0
+sentence-transformers>=2.5.0
+
+# ── Future v1.2+ candidates ──
+# httpx[http2]   # better connection reuse for high-QPS
+# prometheus_client  # if /metrics exporter grows beyond text format

@@ -1,5 +1,44 @@
 # Changelog
 
+## v1.1.3 — CLI polish + self-review (2026-05-09)
+
+**Tagline**: Every v1.1 surface has a CLI now.
+
+Self-review pass after v1.1.2 found 6 polish gaps and shipped them.
+
+### What v1.1.3 ships
+
+- **`./ome365 verify <url-or-file>`** · ed25519-verify any agent-card.
+  Returns 0 if valid · 1 if unsigned/invalid · 2 on transport error.
+  ```
+  $ ./ome365 verify https://your-org.com/.well-known/agent-card.json
+  ✓ valid  https://your-org.com/.well-known/agent-card.json
+    alg:      ed25519
+    pubkey:   TYSD2rxZiHZ9eUTED9R2Wujnl8eQsD0h...
+  ```
+- **`./ome365 status`** · one-glance vault overview (decisions / traces /
+  skills / wiki / audit / backups / RBAC / signing key).
+- **`./ome365 eval member|finops|skills|whoami`** · CLI mirror of `/api/eval/*`
+  routes. No need to spin up a server for quick lookups.
+- **`requirements-optional.txt`** · clearly documents the 4 optional deps
+  (anthropic / openai / sqlite-vec / sentence-transformers) and which env
+  flag activates each. Default install stays 0-deps for the file-first path.
+- **13 new tests** for the CLI extras (377 → 420 → 433).
+
+### Quality gates
+
+- **433 pytest tests · 100% pass**
+- **0 PII hits** across 258 tracked files
+- Smoke-verified: `./ome365 verify` against running server returns ✓ valid
+- Smoke-verified: `./ome365 status` on `vault.example` shows 26 decisions /
+  36 traces / 4 skills / 7 wiki categories / 1 ed25519 key
+
+### Migration from v1.1.2
+
+No breaking changes. Just `git pull` and the new CLI commands work.
+
+---
+
 ## v1.1.2 — Final batch · enterprise-grade (2026-05-09)
 
 **Tagline**: From team-ready to enterprise-shippable.
