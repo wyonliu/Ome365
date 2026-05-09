@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.1.40 — README ↔ CHANGELOG version sync regression (2026-05-09)
+
+### What v1.1.40 ships
+
+- **`tests/test_version_sync.py`** · 3 regression tests: README shields.io
+  badge matches CHANGELOG top entry · CHANGELOG headings non-increasing ·
+  badge URL pattern is the canonical shields.io format.
+
+### Why this matters
+
+- Each release manually bumps two files. If a future release script forgets
+  one, the README badge silently lies about what shipped. v1.1.40 catches
+  that drift before commit. Same "lock the implicit contract" pattern as
+  v1.1.36/.38/.39.
+
+### Quality gates
+
+- 524 tests · 0 PII · 273 tracked files
+
+---
+
 ## v1.1.39 — cockpit i18n key symmetry regression (2026-05-09)
 
 ### What v1.1.39 ships
