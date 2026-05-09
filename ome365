@@ -192,6 +192,20 @@ def run_server(port: int, open_browser: bool) -> int:
 
 
 # ── 子命令：doctor 自检 ─────────────────────
+def _git_sha() -> str:
+    """Best-effort short git SHA for version confirmation. Empty string if not a repo."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=2,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return ""
+
+
 def cmd_doctor_json() -> int:
     """JSON output for ops integration · machine-readable doctor result."""
     import json as _json
@@ -199,6 +213,7 @@ def cmd_doctor_json() -> int:
     out = {
         "platform": _platform.system(),
         "python_version": sys.version.split()[0],
+        "git_sha": _git_sha(),
         "missing_core_pkgs": missing_core_pkgs(),
         "ports": {
             "3650_free": port_is_free(3650),

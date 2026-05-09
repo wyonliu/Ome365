@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.1.29 — `doctor --json` adds `git_sha` for version pinning (2026-05-09)
+
+### What v1.1.29 ships
+
+- **`doctor --json` gains `git_sha` field** · short hex hash when in a git
+  repo, empty string otherwise. Best-effort with 2s timeout; never fails
+  doctor.
+- **2 new tests** · pinned in top-level-keys + new format-validation test.
+
+### Why this matters
+
+- Operators monitoring Ome365 deployments need to confirm "yes, you're
+  running commit abc123def, not the build from 3 weeks ago." Without this
+  field, monitoring tooling has to scrape the launcher binary or hit a
+  separate `/version` endpoint. Now it's one CLI call.
+
+### Quality gates
+
+- 495 tests · 0 PII · 272 tracked files
+
+---
+
 ## v1.1.28 — v1.1 retrospective doc (consolidation) (2026-05-09)
 
 ### What v1.1.28 ships

@@ -34,10 +34,20 @@ def test_doctor_json_top_level_keys():
     """Top-level keys are the public ops contract — pin them."""
     data, _ = _run_doctor_json({"OME365_VAULT": "/tmp/ome365-doctor-nonexistent"})
     required = {
-        "platform", "python_version", "missing_core_pkgs",
+        "platform", "python_version", "git_sha", "missing_core_pkgs",
         "ports", "files", "v1_1_modules", "ok",
     }
     assert required <= set(data.keys()), f"missing keys: {required - set(data.keys())}"
+
+
+def test_doctor_json_git_sha_is_short_hex_or_empty():
+    """git_sha is a short hex hash when in a repo, empty string otherwise."""
+    data, _ = _run_doctor_json({"OME365_VAULT": "/tmp/ome365-doctor-nonexistent"})
+    sha = data["git_sha"]
+    assert isinstance(sha, str)
+    if sha:
+        assert all(c in "0123456789abcdef" for c in sha), f"non-hex git_sha: {sha!r}"
+        assert 7 <= len(sha) <= 12, f"git_sha length out of range: {len(sha)}"
 
 
 def test_doctor_json_types():
