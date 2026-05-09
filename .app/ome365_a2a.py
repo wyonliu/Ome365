@@ -358,6 +358,39 @@ def agent_card_well_known():
             "memory.recall",
             "identity.whoami",
         ],
+        # v1.1 surface · advertised separately for backward-compat with v0.x clients
+        "capabilities_v1_1": {
+            "decisions": [
+                {"name": "decisions.list",   "endpoint": "GET /api/decision/list",         "tier": "T2"},
+                {"name": "decisions.get",    "endpoint": "GET /api/decision/{id}",         "tier": "T2"},
+                {"name": "decisions.create", "endpoint": "POST /api/decision/new",         "tier": "T2"},
+                {"name": "decisions.close",  "endpoint": "POST /api/decision/{id}/close",  "tier": "T2"},
+            ],
+            "eval": [
+                {"name": "eval.member",            "endpoint": "GET /api/eval/member/{actor}",     "tier": "T3"},
+                {"name": "eval.finops.scope",      "endpoint": "GET /api/eval/finops/{scope}",     "tier": "T2"},
+                {"name": "eval.finops.dashboard",  "endpoint": "GET /api/eval/finops/dashboard",   "tier": "T2"},
+                {"name": "eval.skills",            "endpoint": "GET /api/eval/skills",             "tier": "T1"},
+            ],
+            "wiki": [
+                {"name": "wiki.update", "cli": "ome365 wiki update", "tier": "T2"},
+                {"name": "wiki.query",  "cli": "ome365 wiki query 'term'", "tier": "T1"},
+            ],
+            "trace": [
+                {"name": "trace.add",     "cli": "ome365 trace add",      "tier": "T2"},
+                {"name": "trace.query",   "cli": "ome365 trace query",    "tier": "T2"},
+                {"name": "trace.rollup",  "cli": "ome365 trace rollup",   "tier": "T2"},
+            ],
+            "archive": [
+                {"name": "archive.gzip",   "cli": "ome365 archive",        "tier": "T2"},
+                {"name": "archive.recall", "cli": "ome365 archive recall", "tier": "T2"},
+            ],
+        },
+        "compliance": {
+            "gdpr_art_22": "human_review_required=True on all eval responses",
+            "pipl_art_13_24": "cn-region members must sign notice; opt-out always 403",
+            "anti_tokenmaxxing": "scores are value/cost ROI · NOT token leaderboards",
+        },
         "auth": {
             "supported_methods": ["bearer", "did-pinned", "tenant-internal"],
             "tier": ["T1", "T2", "T3"],

@@ -195,3 +195,32 @@ def test_registry_all():
         tenant_did="did:web:omnity.ai:tx", tenant_label="T", contact_email="x", public_capabilities=[]
     ))
     assert len(reg.all()) == 1
+
+
+# ── W7 · agent-card v1.1 capability surface ──────────────────────────────────
+
+
+def test_agent_card_advertises_v1_1_capabilities():
+    """W7 · /.well-known/agent-card.json must list decisions/eval/wiki/trace/archive."""
+    from ome365_a2a import agent_card_well_known
+    card = agent_card_well_known()
+    assert "capabilities_v1_1" in card
+    v11 = card["capabilities_v1_1"]
+    for group in ("decisions", "eval", "wiki", "trace", "archive"):
+        assert group in v11, f"missing capability group: {group}"
+    # Each capability has name + tier
+    for group, caps in v11.items():
+        for c in caps:
+            assert "name" in c
+            assert "tier" in c and c["tier"] in {"T1", "T2", "T3"}
+
+
+def test_agent_card_compliance_block():
+    """W7 · agent-card must surface compliance posture."""
+    from ome365_a2a import agent_card_well_known
+    card = agent_card_well_known()
+    assert "compliance" in card
+    comp = card["compliance"]
+    assert "gdpr_art_22" in comp
+    assert "pipl_art_13_24" in comp
+    assert "anti_tokenmaxxing" in comp
