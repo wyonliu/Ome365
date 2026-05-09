@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.1.27 — `ome365 decision new / close` CLI (audit-firing) (2026-05-09)
+
+### What v1.1.27 ships
+
+- **`./ome365 decision new "Title" --owner X [...]`** · creates a Decision file
+  with the 8-section template. Supports `--participants`, `--category`,
+  `--planned-duration-days`.
+- **`./ome365 decision close <id> --outcome 'X' --value-anchors P,L`** · closes
+  via the same code path as the HTTP route, so audit + webhook hooks fire.
+- **6 new tests** in `tests/test_ome365_decisions.py` (now 26): new with
+  args/options/missing-owner · close success · close-with-invalid-anchor ·
+  close-fires-audit (regression guard for audit-hook propagation).
+
+### Why this matters
+
+- Full CLI parity with HTTP routes for decision lifecycle. The
+  `close-fires-audit` test specifically guards against future regressions
+  where someone refactors `close_decision` and removes the audit/notify
+  side-effects, breaking SOC2/ISO27001 compliance for CLI users.
+
+### Quality gates
+
+- 494 tests · 0 PII · 271 tracked files
+
+---
+
 ## v1.1.26 — `ome365 decision list / show` CLI (2026-05-09)
 
 ### What v1.1.26 ships

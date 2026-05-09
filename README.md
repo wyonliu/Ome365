@@ -4,7 +4,7 @@
 **AI 原生个人操作系统** — 记忆 · 反思 · 执行 · 养成
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.1.26-blue" alt="v1.1.26">
+  <img src="https://img.shields.io/badge/version-v1.1.27-blue" alt="v1.1.27">
   <img src="https://img.shields.io/badge/python-3.9+-blue" alt="Python 3.9+">
   <img src="https://img.shields.io/badge/vue-3.x-green" alt="Vue 3">
   <img src="https://img.shields.io/badge/storage-markdown-orange" alt="Markdown">

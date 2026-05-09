@@ -343,7 +343,11 @@ def cli_main(argv: list[str]) -> int:
         print(
             "usage:\n"
             "  ome365 decision list [--status open|closed|superseded] [--owner X] [--json]\n"
-            "  ome365 decision show <id>\n",
+            "  ome365 decision show <id>\n"
+            '  ome365 decision new "Title" --owner X [--category cat]\n'
+            "                          [--participants alice,bob] [--planned-duration-days N]\n"
+            "  ome365 decision close <id> --outcome 'X' --value-anchors P,L\n"
+            "                              [--roi-estimated +15%%] [--hours-saved N]\n",
             flush=True,
         )
         return 0
@@ -409,7 +413,61 @@ def cli_main(argv: list[str]) -> int:
         print(p.read_text("utf-8"), end="")
         return 0
 
-    print(f"ERROR: unknown subcommand '{cmd}' (try list | show)", flush=True)
+    if cmd == "new":
+        title = " ".join(positional) if positional else None
+        owner = args.get("owner")
+        if not title or not owner:
+            print('ERROR: ome365 decision new "Title" --owner X [--category cat] '
+                  '[--participants a,b]',
+                  flush=True)
+            return 2
+        participants = (args.get("participants") or "").split(",") if args.get("participants") else None
+        if participants:
+            participants = [p.strip() for p in participants if p.strip()]
+        try:
+            p = create_decision(
+                vault, title, owner,
+                participants=participants,
+                category=args.get("category"),
+                planned_duration_days=int(args["planned_duration_days"])
+                if args.get("planned_duration_days") else None,
+            )
+        except FileExistsError as e:
+            print(f"ERROR: {e}", flush=True)
+            return 2
+        print(_json.dumps({"id": p.stem, "path": str(p)}, indent=2))
+        return 0
+
+    if cmd == "close":
+        if not positional:
+            print("ERROR: ome365 decision close <id> --outcome 'X' --value-anchors P,L",
+                  flush=True)
+            return 2
+        decision_id = positional[0]
+        outcome = args.get("outcome")
+        anchors_arg = args.get("value_anchors") or args.get("anchors")
+        if not outcome or not anchors_arg:
+            print("ERROR: --outcome and --value-anchors required", flush=True)
+            return 2
+        anchors = [a.strip() for a in anchors_arg.split(",") if a.strip()]
+        try:
+            p = close_decision(
+                vault, decision_id,
+                outcome=outcome, value_anchors=anchors,
+                roi_estimated=args.get("roi_estimated"),
+                hours_saved=int(args["hours_saved"]) if args.get("hours_saved") else None,
+            )
+        except (FileNotFoundError, ValueError) as e:
+            print(f"ERROR: {e}", flush=True)
+            return 2
+        print(_json.dumps({
+            "id": decision_id, "path": str(p), "status": "closed",
+            "value_anchors": anchors, "outcome": outcome,
+        }, indent=2, ensure_ascii=False))
+        return 0
+
+    print(f"ERROR: unknown subcommand '{cmd}' (try list | show | new | close)",
+          flush=True)
     return 2
 
 

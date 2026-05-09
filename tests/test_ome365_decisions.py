@@ -234,3 +234,85 @@ def test_decision_cli_show_not_found(tmp_vault, monkeypatch, capsys):
     rc = decision_cli(["show", "nonexistent-id"])
     assert rc == 2
     assert "not found" in capsys.readouterr().out
+
+
+# ── v1.1.27 · decision CLI mutations ────────────────────────────────────────
+
+
+def test_decision_cli_new(tmp_vault, monkeypatch, capsys):
+    import json as _json
+    monkeypatch.setenv("OME365_VAULT", str(tmp_vault))
+    rc = decision_cli(["new", "Pick", "vendor", "X", "--owner", "alice"])
+    assert rc == 0
+    parsed = _json.loads(capsys.readouterr().out)
+    assert "id" in parsed and "path" in parsed
+    assert (tmp_vault / "Decisions").exists()
+    assert any((tmp_vault / "Decisions").glob("*pick*.md"))
+
+
+def test_decision_cli_new_with_options(tmp_vault, monkeypatch, capsys):
+    import json as _json
+    monkeypatch.setenv("OME365_VAULT", str(tmp_vault))
+    rc = decision_cli([
+        "new", "Hire", "engineer",
+        "--owner", "alice",
+        "--participants", "bob,carol",
+        "--category", "hiring",
+        "--planned-duration-days", "30",
+    ])
+    assert rc == 0
+    parsed = _json.loads(capsys.readouterr().out)
+    text = (tmp_vault / "Decisions" / f"{parsed['id']}.md").read_text("utf-8")
+    assert "category: hiring" in text
+    assert "planned_duration_days: 30" in text
+    assert "bob" in text and "carol" in text
+
+
+def test_decision_cli_new_requires_owner(tmp_vault, monkeypatch, capsys):
+    monkeypatch.setenv("OME365_VAULT", str(tmp_vault))
+    rc = decision_cli(["new", "title-only"])
+    assert rc == 2
+    assert "ERROR" in capsys.readouterr().out
+
+
+def test_decision_cli_close(tmp_vault, monkeypatch, capsys):
+    import json as _json
+    monkeypatch.setenv("OME365_VAULT", str(tmp_vault))
+    p = create_decision(tmp_vault, "Pick LLM", "alice", when=date(2026, 5, 8))
+    rc = decision_cli([
+        "close", p.stem,
+        "--outcome", "shipped Claude",
+        "--value-anchors", "P,L",
+    ])
+    assert rc == 0
+    parsed = _json.loads(capsys.readouterr().out)
+    assert parsed["status"] == "closed"
+    assert parsed["value_anchors"] == ["P", "L"]
+    text = p.read_text("utf-8")
+    assert "status: closed" in text
+
+
+def test_decision_cli_close_invalid_anchor(tmp_vault, monkeypatch, capsys):
+    monkeypatch.setenv("OME365_VAULT", str(tmp_vault))
+    p = create_decision(tmp_vault, "Pick X", "alice", when=date(2026, 5, 8))
+    rc = decision_cli([
+        "close", p.stem,
+        "--outcome", "x",
+        "--value-anchors", "godmode",  # not a valid anchor
+    ])
+    assert rc == 2
+    assert "ERROR" in capsys.readouterr().out
+
+
+def test_decision_cli_close_fires_audit(tmp_vault, monkeypatch, capsys):
+    """Closing via CLI must hit the same audit hook as HTTP route."""
+    monkeypatch.setenv("OME365_VAULT", str(tmp_vault))
+    p = create_decision(tmp_vault, "Pick X", "alice", when=date(2026, 5, 8))
+    decision_cli(["close", p.stem, "--outcome", "shipped", "--value-anchors", "P"])
+    audit_dir = tmp_vault / "Audit"
+    assert audit_dir.exists()
+    audit_files = list(audit_dir.glob("*.jsonl"))
+    assert len(audit_files) >= 1
+    text = audit_files[0].read_text("utf-8")
+    assert "decision.close" in text
+    assert "alice" in text
