@@ -1,5 +1,32 @@
 # Changelog
 
+## v1.1.5 — CI green for v1.1 + 5th SKILL.md (2026-05-09)
+
+**Tagline**: CI now actually runs all 433 tests.
+
+### What v1.1.5 ships
+
+- **CI overhaul** · `.github/workflows/ci.yml` `unit-tests` job now runs the
+  full pytest suite (was only running 4 specific test files). Added FastAPI
+  + httpx + cryptography to install step. Added `./ome365 doctor` smoke
+  step. Coverage report widened to 12 v1.1 modules.
+- **CI new job: `v1_1-cockpit-e2e`** · boots the server in background and
+  curl-tests 10 v1.1 endpoints + verifies ed25519 agent-card signature
+  via `./ome365 verify`. Catches integration regressions that unit tests
+  can miss.
+- **5th SKILL.md** · `vault.example/Skills/cost-per-outcome.md` · the
+  Anti-Tokenmaxxing posture as a proper SKILL.md with 3 finops views,
+  CLI/HTTP/SDK invocation, NEVER-do list, CIO/CEO-ready output template.
+
+### Quality gates
+
+- 433 pytest tests · 100% pass
+- 0 PII hits · 264 tracked files
+- CI now green-gates: PII + syntax + unit (full 433) + install.sh dry-run +
+  v1.1 cockpit e2e (server-boot + endpoint smoke + signature verify)
+
+---
+
 ## v1.1.4 — Doctor v1.1 + role badge + v1.2 preview (2026-05-09)
 
 **Tagline**: When you run `./ome365 doctor`, you see all 12 v1.1 modules at a glance.

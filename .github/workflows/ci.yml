@@ -88,21 +88,27 @@ jobs:
       - name: Install test deps
         run: |
           python3 -m pip install pytest pytest-cov
-          # share_auth tests need cryptography
+          # cryptography for share_auth + ed25519 signing (v1.1.2)
           python3 -m pip install cryptography
-          # entity_registry needs PyYAML
+          # PyYAML for eval-config / SKILL.md frontmatter
           python3 -m pip install pyyaml
-      - name: Run contract tests
+          # FastAPI + httpx for TestClient-based v1.1 router tests
+          python3 -m pip install fastapi httpx pydantic
+      - name: Full pytest suite (433+ tests · v1.0 + v1.1 + v1.1.x)
+        run: python3 -m pytest tests/ -q --tb=short
+      - name: v1.1 module load smoke
         run: |
-          python3 -m pytest tests/test_ome365_id.py tests/test_ome365_a2a.py \
-                            tests/test_scan_pii.py tests/test_share_auth.py \
-                            -v --no-header
-      - name: Coverage report
+          ./ome365 doctor
+      - name: Coverage report (v1.1 modules)
         run: |
-          python3 -m pytest tests/test_ome365_id.py tests/test_ome365_a2a.py \
-                            tests/test_scan_pii.py tests/test_share_auth.py \
-                            --cov=.app/ome365_id --cov=.app/ome365_a2a --cov=.app/share_auth \
-                            --cov-report=term-missing
+          python3 -m pytest tests/ -q \
+            --cov=.app/ome365_eval --cov=.app/ome365_decisions \
+            --cov=.app/ome365_trace --cov=.app/ome365_wiki \
+            --cov=.app/ome365_archive --cov=.app/ome365_backup \
+            --cov=.app/ome365_audit --cov=.app/ome365_metrics \
+            --cov=.app/ome365_notify --cov=.app/ome365_rbac \
+            --cov=.app/ome365_signing --cov=.app/ome365_cli_extras \
+            --cov-report=term-missing --no-cov-on-fail || true
 
   install-sh-test:
     name: install.sh 三平台 dry-run
@@ -118,3 +124,40 @@ jobs:
         run: bash install.sh --dry-run
       - name: OME365_DRY_RUN=1 (env-driven)
         run: OME365_DRY_RUN=1 bash install.sh
+
+  v1_1-cockpit-e2e:
+    name: v1.1 cockpit e2e smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          python3 -m pip install -r requirements.txt
+          python3 -m pip install pyyaml cryptography
+      - name: Boot server in background
+        run: |
+          OME365_PORT=3699 OME365_VAULT="$PWD/vault.example" \
+            python3 .app/server.py &> /tmp/server.log &
+          sleep 6
+          curl -sf http://127.0.0.1:3699/v1_1.html >/dev/null
+      - name: Hit all v1.1 endpoints
+        run: |
+          for ep in "/v1_1.html" \
+                    "/api/decision/list" \
+                    "/api/eval/skills" \
+                    "/api/eval/whoami" \
+                    "/api/eval/actors" \
+                    "/api/eval/role/alice" \
+                    "/api/eval/finops/dashboard?since_days=365" \
+                    "/api/eval/member/alice?window_days=365" \
+                    "/.well-known/agent-card.json" \
+                    "/metrics"; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:3699$ep")
+            echo "$ep → $code"
+            test "$code" = "200" || { echo "::error::$ep returned $code"; exit 1; }
+          done
+      - name: Verify ed25519 agent-card signature
+        run: ./ome365 verify "http://127.0.0.1:3699/.well-known/agent-card.json"
