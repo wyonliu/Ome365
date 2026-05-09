@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.1.28 — v1.1 retrospective doc (consolidation) (2026-05-09)
+
+### What v1.1.28 ships
+
+- **`docs/v1.1-RELEASE-NOTES.md`** · single-page customer-facing summary of
+  the 28 micro-releases · 12 modules table · design pillars · operational
+  scriptability matrix · SKILL.md library · 5 performance highlights ·
+  quality gates · v1.2 preview pointer.
+
+### Why this matters
+
+- After 28 micro-releases, README + CHANGELOG don't tell a coherent story —
+  the changelog is too granular, README too marketing. This doc bridges:
+  what v1.1 *is*, why each module exists, what tradeoffs we made.
+  Audience: customer eval teams, OSS contributors, future-us.
+
+### Quality gates
+
+- 494 tests · 0 PII · 271 → 272 tracked files
+
+---
+
 ## v1.1.27 — `ome365 decision new / close` CLI (audit-firing) (2026-05-09)
 
 ### What v1.1.27 ships
