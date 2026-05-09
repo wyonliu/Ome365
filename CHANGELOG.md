@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.1.30 — `ome365 status --json` for monitoring integration (2026-05-09)
+
+### What v1.1.30 ships
+
+- **`./ome365 status --json`** · structured dict with all sections: vault path,
+  decisions {total, closed, open, owners}, traces {total, cost_usd, actors},
+  skills {total, authors}, wiki_categories, audit_files, backups, rbac, signing.
+- **2 new tests** · pin top-level + sub-section shapes · empty-vault invariant
+  (rbac/signing/backups → null when absent).
+
+### Why this matters
+
+- `status` was text-only; monitoring pipelines couldn't parse it. Refactored
+  into `_collect_status() → dict` shared by both renderers, so future format
+  changes happen in one place. Empty-vault returns clean nulls (not "missing
+  key" errors).
+
+### Quality gates
+
+- 497 tests · 0 PII · 272 tracked files
+
+---
+
 ## v1.1.29 — `doctor --json` adds `git_sha` for version pinning (2026-05-09)
 
 ### What v1.1.29 ships

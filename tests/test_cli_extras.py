@@ -31,6 +31,40 @@ def test_status_handles_empty_vault(tmp_path, monkeypatch, capsys):
     assert "Decisions   : 0" in out
 
 
+def test_status_json_shape(monkeypatch, capsys):
+    """`status --json` returns parseable dict with all module sections."""
+    monkeypatch.setenv("OME365_VAULT", str(VAULT_EXAMPLE))
+    rc = cmd_status(["--json"])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    # Required top-level sections
+    for k in ("vault", "decisions", "traces", "skills",
+              "wiki_categories", "audit_files"):
+        assert k in data, f"missing section: {k}"
+    # Decisions sub-shape
+    for k in ("total", "closed", "open", "owners"):
+        assert k in data["decisions"]
+    # Traces sub-shape
+    for k in ("total", "cost_usd", "actors"):
+        assert k in data["traces"]
+    # Skills sub-shape
+    for k in ("total", "authors"):
+        assert k in data["skills"]
+
+
+def test_status_json_empty_vault(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+    rc = cmd_status(["--json"])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["decisions"]["total"] == 0
+    assert data["traces"]["total"] == 0
+    assert data["skills"]["total"] == 0
+    assert data["backups"] is None
+    assert data["rbac"] is None
+    assert data["signing"] is None
+
+
 def test_eval_help(capsys):
     rc = cmd_eval([])
     assert rc == 0

@@ -65,83 +65,142 @@ def cmd_verify(argv: list[str]) -> int:
 # ── status ──────────────────────────────────────────────────────────────────
 
 
-def cmd_status(argv: list[str]) -> int:
-    """One-glance vault summary · what's in there · how big · how recent."""
-    try:
-        from ome365_eval import grep_decisions_all, grep_skills_all, grep_trace_all
-    except ImportError:
-        print("ERROR: ome365_eval not importable", flush=True)
-        return 2
-
-    v = _vault_root()
-    print("─" * 60)
-    print(f"  Ome365 status · vault={v}")
-    print("─" * 60)
-
+def _collect_status(v: Path) -> dict:
+    """Gather status data once · used by both text and JSON output."""
+    from ome365_eval import grep_decisions_all, grep_skills_all, grep_trace_all
     decisions = grep_decisions_all(v)
     closed = sum(1 for d in decisions if d.status == "closed")
     open_ = sum(1 for d in decisions if d.status == "open")
-    print(f"  Decisions   : {len(decisions)} ({closed} closed · {open_} open)")
-    if decisions:
-        owners = {d.owner for d in decisions if d.owner}
-        print(f"                owners: {', '.join(sorted(owners))}")
+    owners = sorted({d.owner for d in decisions if d.owner})
 
     traces = grep_trace_all(v)
-    print(f"  Traces      : {len(traces)}")
-    if traces:
-        cost = sum(t.cost_usd for t in traces)
-        actors = {t.actor for t in traces}
-        print(f"                ${cost:.3f} total · {len(actors)} actors")
+    trace_cost = sum(t.cost_usd for t in traces)
+    trace_actors = sorted({t.actor for t in traces})
 
     skills = grep_skills_all(v)
-    print(f"  Skills      : {len(skills)}")
-    if skills:
-        authors = {s.author for s in skills}
-        print(f"                authors: {', '.join(sorted(a for a in authors if a))}")
+    skill_authors = sorted({s.author for s in skills if s.author})
 
-    # Knowledge / L2-distilled
     l2 = v / "Knowledge" / "L2-distilled"
-    if l2.exists():
-        files = list(l2.glob("*.md"))
-        print(f"  Wiki (L2)   : {len(files)} categor{'y' if len(files) == 1 else 'ies'}")
+    wiki_categories = len(list(l2.glob("*.md"))) if l2.exists() else 0
 
-    # Audit
-    audit = v / "Audit"
-    if audit.exists():
-        n = sum(1 for fp in audit.glob("*.jsonl"))
-        print(f"  Audit       : {n} day file(s)")
+    audit_dir = v / "Audit"
+    audit_files = sum(1 for _ in audit_dir.glob("*.jsonl")) if audit_dir.exists() else 0
 
-    # Backups
-    backups = v / "Backups"
-    if backups.exists():
-        bks = list(backups.glob("vault-*.tar.gz"))
+    backups_dir = v / "Backups"
+    backup_info = None
+    if backups_dir.exists():
+        bks = list(backups_dir.glob("vault-*.tar.gz"))
         if bks:
-            latest = max(bks, key=lambda p: p.stat().st_mtime)
             from datetime import datetime, timezone
+            latest = max(bks, key=lambda p: p.stat().st_mtime)
             mtime = datetime.fromtimestamp(latest.stat().st_mtime, tz=timezone.utc)
-            age_days = (date.today() - mtime.date()).days
-            print(f"  Backups     : {len(bks)} · latest {age_days}d ago ({latest.name})")
+            backup_info = {
+                "count": len(bks),
+                "latest_name": latest.name,
+                "latest_age_days": (date.today() - mtime.date()).days,
+            }
 
-    # Roles
+    rbac_info = None
     roles_fp = v / ".ome365" / "roles.yml"
     if roles_fp.exists():
         try:
             from ome365_rbac import load_roles
             cfg = load_roles(v)
-            n_members = len(cfg.get("members", {}))
-            print(f"  Roles (RBAC): {n_members} members · default={cfg.get('default_role')}")
+            rbac_info = {
+                "members": len(cfg.get("members", {})),
+                "default_role": cfg.get("default_role", "contributor"),
+            }
         except Exception:
-            print(f"  Roles (RBAC): config present (parse failed)")
+            rbac_info = {"error": "parse failed"}
 
-    # Signing
+    signing_info = None
     key_fp = v / ".ome365" / "keys" / "agent-card.ed25519"
     if key_fp.exists():
         try:
             from ome365_signing import public_key_b64
-            pk = public_key_b64(v)
-            print(f"  Signing key : ed25519 · {pk[:32]}...")
+            signing_info = {"alg": "ed25519", "pubkey_b64": public_key_b64(v)}
         except Exception:
-            print(f"  Signing key : present (load failed)")
+            signing_info = {"error": "load failed"}
+
+    return {
+        "vault": str(v),
+        "decisions": {
+            "total": len(decisions),
+            "closed": closed,
+            "open": open_,
+            "owners": owners,
+        },
+        "traces": {
+            "total": len(traces),
+            "cost_usd": round(trace_cost, 3),
+            "actors": trace_actors,
+        },
+        "skills": {"total": len(skills), "authors": skill_authors},
+        "wiki_categories": wiki_categories,
+        "audit_files": audit_files,
+        "backups": backup_info,
+        "rbac": rbac_info,
+        "signing": signing_info,
+    }
+
+
+def cmd_status(argv: list[str]) -> int:
+    """One-glance vault summary · what's in there · how big · how recent."""
+    try:
+        v = _vault_root()
+        data = _collect_status(v)
+    except ImportError:
+        print("ERROR: ome365_eval not importable", flush=True)
+        return 2
+
+    if "--json" in argv:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 0
+
+    print("─" * 60)
+    print(f"  Ome365 status · vault={data['vault']}")
+    print("─" * 60)
+
+    d = data["decisions"]
+    print(f"  Decisions   : {d['total']} ({d['closed']} closed · {d['open']} open)")
+    if d["owners"]:
+        print(f"                owners: {', '.join(d['owners'])}")
+
+    t = data["traces"]
+    print(f"  Traces      : {t['total']}")
+    if t["total"]:
+        print(f"                ${t['cost_usd']:.3f} total · {len(t['actors'])} actors")
+
+    s = data["skills"]
+    print(f"  Skills      : {s['total']}")
+    if s["authors"]:
+        print(f"                authors: {', '.join(s['authors'])}")
+
+    if data["wiki_categories"]:
+        n = data["wiki_categories"]
+        print(f"  Wiki (L2)   : {n} categor{'y' if n == 1 else 'ies'}")
+
+    if data["audit_files"]:
+        print(f"  Audit       : {data['audit_files']} day file(s)")
+
+    bk = data["backups"]
+    if bk:
+        print(f"  Backups     : {bk['count']} · latest {bk['latest_age_days']}d ago "
+              f"({bk['latest_name']})")
+
+    if data["rbac"]:
+        rb = data["rbac"]
+        if "error" in rb:
+            print(f"  Roles (RBAC): config present ({rb['error']})")
+        else:
+            print(f"  Roles (RBAC): {rb['members']} members · default={rb['default_role']}")
+
+    if data["signing"]:
+        sg = data["signing"]
+        if "error" in sg:
+            print(f"  Signing key : present ({sg['error']})")
+        else:
+            print(f"  Signing key : ed25519 · {sg['pubkey_b64'][:32]}...")
 
     print("─" * 60)
     return 0
