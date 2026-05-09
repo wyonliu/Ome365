@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.1.34 — `notify list --json` (host-only · token-leak guarded) (2026-05-09)
+
+### What v1.1.34 ships
+
+- **`./ome365 notify list --json`** · machine-readable webhook config dump.
+  Sanitized output: `{platform, host, events}` only — full URL with path/token
+  never appears.
+- **2 new tests**: empty case returns `[]` · token-leak regression guard
+  (asserts "SECRET" and "TOKEN" substrings never in output).
+
+### Why this matters
+
+- Slack/Lark webhook URLs embed the auth token in the path. Before this
+  release, `notify list` only had a text mode where token-leakage protection
+  was visible-by-inspection. Now the JSON shape is contract-pinned: any
+  refactor that accidentally serializes the raw `url` field fails CI.
+
+### Quality gates
+
+- 510 tests · 0 PII · 272 tracked files
+
+---
+
 ## v1.1.33 — `decision list --limit N` symmetry with trace/wiki (2026-05-09)
 
 ### What v1.1.33 ships

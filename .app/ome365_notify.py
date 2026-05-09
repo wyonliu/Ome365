@@ -207,7 +207,7 @@ def cli_main(argv: list[str]) -> int:
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(
             "usage:\n"
-            "  ome365 notify list                 # show configured webhooks (host only)\n"
+            "  ome365 notify list [--json]        # show configured webhooks (host only)\n"
             "  ome365 notify test [--event E]     # fire a fake event to all webhooks\n"
             "                     [--platform P]   filter by platform · slack/lark/teams/generic\n"
             "                     [--vault DIR]    use webhooks from this vault\n",
@@ -231,6 +231,18 @@ def cli_main(argv: list[str]) -> int:
 
     if cmd == "list":
         webhooks = _load_webhooks(vault)
+        if "--json" in argv:
+            # Sanitize: drop full URL, keep host only (token never leaks)
+            safe = [
+                {
+                    "platform": w.get("platform", "generic"),
+                    "host": _host(w.get("url", "")),
+                    "events": w.get("events") or None,
+                }
+                for w in webhooks
+            ]
+            print(json.dumps(safe, indent=2, ensure_ascii=False))
+            return 0
         if not webhooks:
             print("no webhooks configured", flush=True)
             return 0

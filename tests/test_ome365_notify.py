@@ -257,3 +257,30 @@ def test_notify_cli_test_when_no_webhooks(tmp_path, monkeypatch, capsys):
     parsed = json.loads(out)
     assert parsed["sent"] == 0
     assert "note" in parsed
+
+
+def test_notify_cli_list_json_shape(monkeypatch, capsys):
+    cfg = json.dumps([
+        {"platform": "slack",
+         "url": "https://hooks.slack.com/services/SECRET/TOKEN/HERE"},
+        {"platform": "lark", "url": "https://open.feishu.cn/x", "events": ["budget.warn"]},
+    ])
+    monkeypatch.setenv("OME365_WEBHOOKS", cfg)
+    rc = notify_cli(["list", "--json"])
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert len(rows) == 2
+    for r in rows:
+        for k in ("platform", "host", "events"):
+            assert k in r
+        # Crucially: never the full URL · path/token never leaks
+        assert "url" not in r
+        assert "SECRET" not in str(r) and "TOKEN" not in str(r)
+
+
+def test_notify_cli_list_json_empty(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("OME365_WEBHOOKS", raising=False)
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+    rc = notify_cli(["list", "--json"])
+    assert rc == 0
+    assert json.loads(capsys.readouterr().out) == []
