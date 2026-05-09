@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.1.16 — Audit endpoint tests + CONTRIBUTING v1.1 essentials (2026-05-09)
+
+### What v1.1.16 ships
+
+- **3 audit endpoint tests** (`tests/test_v1_1_2_final.py` extended) ·
+  v1.1.10 shipped `/api/eval/audit/recent` without tests · now covered:
+  empty vault / events present / limit respected.
+- **`CONTRIBUTING.md` v1.1 essentials block** · 6 PR-prep rules at top
+  (Kevin hook · doctor · pytest · scan_pii · --dry-run · no-emoji).
+
+### Quality gates
+
+- 452 tests · 0 PII · 269 tracked files
+
+---
+
 ## v1.1.15 — backup --dry-run (3 modules now dry-runnable) (2026-05-09)
 
 ### What v1.1.15 ships

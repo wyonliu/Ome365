@@ -215,3 +215,69 @@ def test_agent_card_endpoint_is_signed(tmp_path, monkeypatch):
     assert card["signing_alg"] == "ed25519"
     assert card["signature"]
     assert verify(card) is True
+
+
+# ── v1.1.10 audit endpoint (untested at ship · adding now) ──────────────────
+
+
+def test_audit_recent_endpoint_empty_vault(tmp_path, monkeypatch):
+    pytest.importorskip("yaml")
+    fastapi = pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from ome365_eval import router
+
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+
+    app = fastapi.FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+
+    r = client.get("/api/eval/audit/recent?days=7&limit=20")
+    assert r.status_code == 200
+    assert r.json()["events"] == []
+
+
+def test_audit_recent_endpoint_with_events(tmp_path, monkeypatch):
+    pytest.importorskip("yaml")
+    fastapi = pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from ome365_audit import log as _audit_log
+    from ome365_eval import router
+
+    # Seed audit events
+    for action in ("decision.close", "wiki.update", "backup.create"):
+        _audit_log(actor="alice", action=action, target_id=f"target-{action}",
+                   vault=tmp_path)
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+
+    app = fastapi.FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+
+    r = client.get("/api/eval/audit/recent?days=1&limit=10")
+    assert r.status_code == 200
+    events = r.json()["events"]
+    assert len(events) == 3
+    actions = {e["action"] for e in events}
+    assert actions == {"decision.close", "wiki.update", "backup.create"}
+
+
+def test_audit_recent_endpoint_respects_limit(tmp_path, monkeypatch):
+    pytest.importorskip("yaml")
+    fastapi = pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from ome365_audit import log as _audit_log
+    from ome365_eval import router
+
+    for i in range(15):
+        _audit_log(actor="alice", action="decision.close", target_id=f"d{i}",
+                   vault=tmp_path)
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+
+    app = fastapi.FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+
+    r = client.get("/api/eval/audit/recent?days=1&limit=5")
+    assert r.status_code == 200
+    assert len(r.json()["events"]) == 5
