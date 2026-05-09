@@ -226,9 +226,14 @@ def query(
     skill: Optional[str] = None,
     decision_id: Optional[str] = None,
     since: Optional[date] = None,
+    limit: Optional[int] = None,
     vault: Optional[Path] = None,
 ) -> list[dict]:
-    """grep-style filter over Trace/*.jsonl · returns matching dicts."""
+    """grep-style filter over Trace/*.jsonl · returns matching dicts.
+
+    limit=N: keep only the last N matches (newest by ts). Useful for tail-like
+    recent inspection. Default None = unlimited.
+    """
     v = _vault_root(vault)
     trace_dir = v / "Trace"
     if not trace_dir.exists():
@@ -261,6 +266,13 @@ def query(
                 if ts < since:
                     continue
             out.append(j)
+    if limit is not None and limit > 0:
+        # Sort by ts descending, take newest N, return in chronological order
+        try:
+            out.sort(key=lambda j: j.get("ts", ""), reverse=True)
+        except TypeError:
+            pass
+        out = list(reversed(out[:limit]))
     return out
 
 
@@ -371,7 +383,8 @@ def cli_main(argv: list[str]) -> int:
             "usage:\n"
             "  ome365 trace add --actor X --cost 0.01 [--skill S] [--decision-id D]\n"
             "                     [--tokens IN/OUT] [--model M] [--tenant T]\n"
-            "  ome365 trace query [--actor X] [--skill S] [--decision-id D] [--since YYYY-MM-DD]\n"
+            "  ome365 trace query [--actor X] [--skill S] [--decision-id D]\n"
+            "                     [--since YYYY-MM-DD] [--limit N]\n"
             "  ome365 trace rollup [--period YYYY-MM]\n"
         )
         return 0
@@ -403,11 +416,13 @@ def cli_main(argv: list[str]) -> int:
 
     if cmd == "query":
         since = date.fromisoformat(args["since"]) if "since" in args else None
+        limit = int(args["limit"]) if "limit" in args else None
         rows = query(
             actor=args.get("actor"),
             skill=args.get("skill"),
             decision_id=args.get("decision_id"),
             since=since,
+            limit=limit,
         )
         for r in rows:
             print(json.dumps(r, ensure_ascii=False))

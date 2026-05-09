@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.1.32 — `trace query --limit N` for tail-like recent inspection (2026-05-09)
+
+### What v1.1.32 ships
+
+- **`./ome365 trace query --limit N`** · keeps the N newest matches by ts.
+  Combine with --actor / --skill / --decision-id / --since for "show me the
+  last 20 trace lines for alice this week."
+- **`query(limit=N)` Python API parity** · same semantics for SDK users.
+- **4 new tests** in `tests/test_ome365_trace.py` (now 23): newest-N selection
+  preserves filter combination · limit=0 / None = unlimited · CLI smoke.
+
+### Why this matters
+
+- v1.1 traces accumulate fast (one line per LLM call). Without `--limit`,
+  `query` over a 6-month vault returns thousands of rows. The pattern matches
+  `kubectl logs --tail=N`, `journalctl -n N` — operator muscle memory.
+
+### Quality gates
+
+- 505 tests · 0 PII · 272 tracked files
+
+---
+
 ## v1.1.31 — `archive list` for ops discovery of archived buckets (2026-05-09)
 
 ### What v1.1.31 ships

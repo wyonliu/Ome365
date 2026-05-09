@@ -1,7 +1,7 @@
 """tests/test_ome365_trace.py · v1.1 W3 · Trace SDK + CLI + monthly rollup contract tests"""
 import json
 import sys
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -133,6 +133,52 @@ def test_query_filters_by_skill_and_decision(tmp_path):
 
 def test_query_empty_when_no_trace_dir(tmp_path):
     assert query(vault=tmp_path) == []
+
+
+# ── v1.1.32 · query --limit N (tail-like recent inspection) ─────────────────
+
+
+def test_query_limit_returns_newest_n(tmp_path):
+    """--limit keeps the N newest matches (by ts), in chronological order."""
+    when = datetime(2026, 5, 9, 12, 0, 0, tzinfo=timezone.utc)
+    log(actor="alice", cost_usd=0.01, when=when, vault=tmp_path)
+    log(actor="alice", cost_usd=0.02, when=when + timedelta(seconds=1), vault=tmp_path)
+    log(actor="alice", cost_usd=0.03, when=when + timedelta(seconds=2), vault=tmp_path)
+    log(actor="alice", cost_usd=0.04, when=when + timedelta(seconds=3), vault=tmp_path)
+    rows = query(actor="alice", limit=2, vault=tmp_path)
+    assert len(rows) == 2
+    # Returned in chronological order — newest two are 0.03 and 0.04
+    assert [r["cost_usd"] for r in rows] == [0.03, 0.04]
+
+
+def test_query_limit_preserves_filter_combination(tmp_path):
+    when = datetime(2026, 5, 9, 12, 0, 0, tzinfo=timezone.utc)
+    log(actor="alice", cost_usd=0.01, when=when, vault=tmp_path)
+    log(actor="bob", cost_usd=0.02, when=when + timedelta(seconds=1), vault=tmp_path)
+    log(actor="alice", cost_usd=0.03, when=when + timedelta(seconds=2), vault=tmp_path)
+    rows = query(actor="alice", limit=10, vault=tmp_path)
+    assert len(rows) == 2  # bob is filtered out
+    assert all(r["actor"] == "alice" for r in rows)
+
+
+def test_query_limit_zero_or_none_unlimited(tmp_path):
+    when = datetime(2026, 5, 9, 12, 0, 0, tzinfo=timezone.utc)
+    for _ in range(5):
+        log(actor="alice", cost_usd=0.01, when=when, vault=tmp_path)
+    assert len(query(limit=None, vault=tmp_path)) == 5
+    assert len(query(limit=0, vault=tmp_path)) == 5  # 0 = unlimited per docstring
+
+
+def test_cli_query_limit_flag(tmp_path, monkeypatch, capsys):
+    when = datetime(2026, 5, 9, 12, 0, 0, tzinfo=timezone.utc)
+    for i in range(4):
+        log(actor="alice", cost_usd=0.01 * (i + 1),
+            when=when + timedelta(seconds=i), vault=tmp_path)
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+    rc = cli_main(["query", "--actor", "alice", "--limit", "2"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "--- 2 rows" in out
 
 
 # ── monthly_rollup() · nightly job ───────────────────────────────────────────
