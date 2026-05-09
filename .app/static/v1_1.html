@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ome365 v1.1 · Team Brain Cockpit</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --card: #161a22;
+    --border: #2a2f3a;
+    --text: #e6e6e6;
+    --muted: #8a92a3;
+    --accent: #6cb6ff;
+    --good: #4ade80;
+    --warn: #fbbf24;
+    --bad: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--text);
+         font-family: -apple-system, "SF Pro", "Segoe UI", Roboto, sans-serif;
+         font-size: 14px; line-height: 1.5; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .lead { color: var(--muted); margin-bottom: 20px; font-size: 13px; }
+  .toolbar { background: var(--card); border: 1px solid var(--border);
+             border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;
+             display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  .toolbar label { color: var(--muted); font-size: 12px; }
+  .toolbar select, .toolbar input {
+    background: #0b0e13; color: var(--text); border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 8px; font: inherit;
+  }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--border);
+          border-radius: 8px; padding: 16px; min-height: 260px; }
+  .card h2 { font-size: 14px; margin: 0 0 12px; color: var(--accent);
+             text-transform: uppercase; letter-spacing: 0.5px; }
+  .card .sub { color: var(--muted); font-size: 11px; margin-bottom: 8px; }
+  .stat { display: flex; justify-content: space-between; align-items: baseline;
+          padding: 6px 0; border-bottom: 1px dashed #1f242e; }
+  .stat:last-child { border-bottom: none; }
+  .stat .v { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .stat .k { color: var(--muted); font-size: 12px; }
+  .pill { display: inline-block; padding: 1px 6px; border-radius: 3px;
+          background: #1f242e; color: var(--muted); font-size: 11px;
+          margin-right: 4px; }
+  .pill.P { background: #1e3a4d; color: #6cb6ff; }
+  .pill.L, .pill.XL { background: #1f3d2a; color: #4ade80; }
+  .pill.M { background: #2d2f1a; color: #fbbf24; }
+  .pill.Revert { background: #3d1f1f; color: #f87171; }
+  .row { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
+  .row .name { flex: 1; }
+  .row .num { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .bar { height: 4px; background: #1f242e; border-radius: 2px; overflow: hidden;
+         margin-top: 4px; }
+  .bar .fill { height: 100%; background: var(--accent); }
+  .warning { background: #2a1f0a; color: var(--warn); padding: 8px 12px;
+             border-radius: 4px; font-size: 12px; margin-top: 12px;
+             border-left: 3px solid var(--warn); }
+  .err { color: var(--bad); font-size: 12px; }
+  footer { margin-top: 32px; color: var(--muted); font-size: 11px; text-align: center; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>Ome365 v1.1 · Team Brain Cockpit</h1>
+  <p class="lead">
+    File-first · 4 cards backed by Decisions / Trace / Skills / Eval router.
+    All scores are <em>resource-allocation hints</em>, not HR decisions.
+  </p>
+
+  <div class="toolbar">
+    <label>actor: <input v-model="actor" @change="loadAll" size="12"></label>
+    <label>window:
+      <select v-model.number="window_days" @change="loadAll">
+        <option :value="7">7 days</option>
+        <option :value="30">30 days</option>
+        <option :value="90">90 days</option>
+        <option :value="365">365 days</option>
+      </select>
+    </label>
+    <label>preset:
+      <select v-model="preset" @change="loadAll">
+        <option value="engineer">engineer</option>
+        <option value="pm">pm</option>
+        <option value="sales">sales</option>
+        <option value="ops">ops</option>
+        <option value="mixed">mixed</option>
+      </select>
+    </label>
+    <span style="color: var(--muted); font-size:11px">preset 仅切换权重显示，源数据不变</span>
+  </div>
+
+  <div class="grid">
+
+    <!-- 1. Decisions card -->
+    <div class="card">
+      <h2>① Decisions</h2>
+      <div class="sub">8-step file-first decisions · supersede + value_anchors</div>
+      <div v-if="decisions.err" class="err">{{ decisions.err }}</div>
+      <div v-else-if="!decisions.list.length" class="sub">No decisions in vault.</div>
+      <div v-else>
+        <div class="stat"><span class="k">total</span><span class="v">{{ decisions.list.length }}</span></div>
+        <div class="stat"><span class="k">closed</span><span class="v">{{ decisions.closed }}</span></div>
+        <div class="stat"><span class="k">open</span><span class="v">{{ decisions.open }}</span></div>
+        <div style="margin-top:10px">
+          <div class="sub">recent 5</div>
+          <div class="row" v-for="d in decisions.list.slice(0,5)" :key="d.id">
+            <span class="name">{{ d.id }}</span>
+            <span v-for="a in (d.value_anchors||[])" :key="a" :class="['pill', a]">{{ a }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Skills card -->
+    <div class="card">
+      <h2>② Skills · Ecosystem</h2>
+      <div class="sub">Anthropic SKILL.md spec · authored, adopters from Trace</div>
+      <div v-if="skills.err" class="err">{{ skills.err }}</div>
+      <div v-else>
+        <div class="stat"><span class="k">total skills</span><span class="v">{{ skills.count }}</span></div>
+        <div class="stat"><span class="k">authors</span><span class="v">{{ skills.authors.size }}</span></div>
+        <div style="margin-top:10px">
+          <div class="row" v-for="s in skills.list" :key="s.name">
+            <span class="name">{{ s.name }}</span>
+            <span class="num">@{{ s.author }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. FinOps card -->
+    <div class="card">
+      <h2>③ Cost-per-Outcome · FinOps</h2>
+      <div class="sub">Reads Trace/monthly/*.summary.json + rolling window</div>
+      <div v-if="finops.err" class="err">{{ finops.err }}</div>
+      <div v-else-if="!finops.data">
+        <div class="sub">loading…</div>
+      </div>
+      <div v-else>
+        <div class="stat" v-for="(s, k) in finops.data.by_scope" :key="k">
+          <span class="k">{{ k.replace(/_/g, ' ') }}</span>
+          <span class="v">${{ s.value.toFixed(3) }} <span style="color:var(--muted);font-size:10px">/ {{ s.unit.split(' ').slice(2).join(' ') }}</span></span>
+        </div>
+        <div style="margin-top:12px">
+          <div class="sub">by actor (window)</div>
+          <div class="row" v-for="(stats, name) in finops.data.by_actor" :key="name">
+            <span class="name">{{ name }}</span>
+            <span class="num">{{ stats.requests }} req · ${{ stats.cost_usd.toFixed(3) }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="warning" v-if="finops.data?.anti_tokenmaxxing_note">
+        ⚠️ {{ finops.data.anti_tokenmaxxing_note }}
+      </div>
+    </div>
+
+    <!-- 4. Eval card -->
+    <div class="card">
+      <h2>④ Member Eval · {{ actor }}</h2>
+      <div class="sub">7-dim · weights from preset «{{ preset }}»</div>
+      <div v-if="eval_.err" class="err">{{ eval_.err }}</div>
+      <div v-else-if="!eval_.data">
+        <div class="sub">loading…</div>
+      </div>
+      <div v-else>
+        <div class="row" v-for="(s, dim) in eval_.data.dimensions" :key="dim">
+          <span class="name">{{ dim.replace('_', ' ') }}</span>
+          <span class="num">
+            <template v-if="s.score !== null">{{ s.score.toFixed(2) }} / 5 (n={{ s.n }})</template>
+            <template v-else>{{ s.reason }} (n={{ s.n }})</template>
+          </span>
+        </div>
+        <div class="warning">
+          ⚠️ {{ eval_.data.warning }}<br>
+          {{ eval_.data.anti_tokenmaxxing_note }}
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    Ome365 v1.1 · Team Brain · GDPR Art. 22 + PIPL §13/§24 enforced ·
+    <a style="color:var(--accent)" href="/">back to main cockpit</a>
+  </footer>
+</div>
+
+<script type="module">
+import { createApp, reactive, onMounted } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.prod.js';
+
+// 5 role preset weights (client-side display hint · server source-of-truth in eval-config.yml)
+const PRESET_WEIGHTS = {
+  engineer: { delivery:0.15, cost_per_outcome:0.15, quality:0.15, judgment:0.10, ecosystem:0.20, revenue_per_workflow:0.15, learning:0.10 },
+  pm:       { delivery:0.20, cost_per_outcome:0.10, quality:0.10, judgment:0.20, ecosystem:0.15, revenue_per_workflow:0.15, learning:0.10 },
+  sales:    { delivery:0.15, cost_per_outcome:0.10, quality:0.10, judgment:0.15, ecosystem:0.10, revenue_per_workflow:0.30, learning:0.10 },
+  ops:      { delivery:0.25, cost_per_outcome:0.20, quality:0.20, judgment:0.10, ecosystem:0.05, revenue_per_workflow:0.10, learning:0.10 },
+  mixed:    { delivery:0.15, cost_per_outcome:0.15, quality:0.15, judgment:0.10, ecosystem:0.20, revenue_per_workflow:0.15, learning:0.10 },
+};
+
+createApp({
+  setup() {
+    const state = reactive({
+      actor: 'alice',
+      window_days: 365,
+      preset: 'engineer',
+      decisions: { list: [], closed: 0, open: 0, err: null },
+      skills:    { list: [], count: 0, authors: new Set(), err: null },
+      finops:    { data: null, err: null },
+      eval_:     { data: null, err: null },
+    });
+
+    async function fetchJson(url) {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`${url} → ${r.status}`);
+      return r.json();
+    }
+
+    async function loadAll() {
+      // Decisions
+      try {
+        const j = await fetchJson('/api/decision/list');
+        state.decisions.list = j.decisions || [];
+        state.decisions.closed = state.decisions.list.filter(d => d.status === 'closed').length;
+        state.decisions.open   = state.decisions.list.filter(d => d.status === 'open').length;
+        state.decisions.err = null;
+      } catch (e) { state.decisions.err = e.message; }
+
+      // Skills
+      try {
+        const j = await fetchJson('/api/eval/skills');
+        state.skills.list = j.skills || [];
+        state.skills.count = j.count || 0;
+        state.skills.authors = new Set(state.skills.list.map(s => s.author));
+        state.skills.err = null;
+      } catch (e) { state.skills.err = e.message; }
+
+      // FinOps dashboard
+      try {
+        state.finops.data = await fetchJson(`/api/eval/finops/dashboard?since_days=${state.window_days}`);
+        state.finops.err = null;
+      } catch (e) { state.finops.err = e.message; state.finops.data = null; }
+
+      // Eval member
+      try {
+        state.eval_.data = await fetchJson(`/api/eval/member/${encodeURIComponent(state.actor)}?window_days=${state.window_days}`);
+        state.eval_.err = null;
+      } catch (e) { state.eval_.err = e.message; state.eval_.data = null; }
+    }
+
+    onMounted(loadAll);
+    return { ...state, loadAll };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
