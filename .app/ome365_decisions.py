@@ -157,6 +157,9 @@ def close_decision(
 
     p.write_text(text, "utf-8")
 
+    owner_match = re.search(r"^owner:\s*(\S+)", text, re.MULTILINE)
+    actor = owner_match.group(1) if owner_match else "unknown"
+
     # P0 #5 · Fire decision.closed webhook (best-effort · never raises)
     try:
         from ome365_notify import notify as _notify
@@ -164,7 +167,7 @@ def close_decision(
             "decision.closed",
             {
                 "id": decision_id,
-                "owner": (re.search(r"^owner:\s*(\S+)", text, re.MULTILINE) or [None, None])[1],
+                "owner": actor,
                 "outcome": outcome,
                 "value_anchors": value_anchors,
                 "roi_estimated": roi_estimated,
@@ -172,7 +175,22 @@ def close_decision(
             vault=vault,
         )
     except Exception:  # noqa: BLE001
-        pass  # notify is best-effort · never block close
+        pass
+
+    # P2 #13 · audit log (best-effort)
+    try:
+        from ome365_audit import log as _audit
+        _audit(
+            actor=actor,
+            action="decision.close",
+            target_type="decision",
+            target_id=decision_id,
+            details={"outcome": outcome, "value_anchors": value_anchors,
+                     "roi_estimated": roi_estimated},
+            vault=vault,
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
     return p
 

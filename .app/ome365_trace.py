@@ -15,9 +15,12 @@ No external deps required (stdlib only).
 """
 from __future__ import annotations
 
+import atexit
 import contextlib
 import json
 import os
+import queue
+import threading
 import time
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
@@ -78,6 +81,69 @@ def log(
     with fp.open("a", encoding="utf-8") as f:
         f.write(json.dumps(line, ensure_ascii=False) + "\n")
     return fp
+
+
+# ── Async write · queue + daemon thread (P2 #11) ─────────────────────────────
+
+
+_async_queue: "queue.Queue[Optional[dict]]" = queue.Queue()
+_worker_started = False
+_worker_lock = threading.Lock()
+
+
+def _worker_loop():
+    """Background thread · drain queue · write each item to its day file."""
+    while True:
+        item = _async_queue.get()
+        try:
+            if item is None:
+                return  # shutdown sentinel
+            try:
+                log(**item)
+            except Exception:
+                pass  # never crash worker
+        finally:
+            _async_queue.task_done()
+
+
+def _ensure_worker():
+    global _worker_started
+    if _worker_started:
+        return
+    with _worker_lock:
+        if _worker_started:
+            return
+        t = threading.Thread(target=_worker_loop, daemon=True, name="ome365-trace-async")
+        t.start()
+        _worker_started = True
+        atexit.register(_flush_async)
+
+
+def _flush_async(timeout: float = 5.0):
+    """Drain queue and stop worker · called at process exit."""
+    if not _worker_started:
+        return
+    _async_queue.put(None)  # shutdown sentinel
+    try:
+        _async_queue.join()
+    except Exception:
+        pass
+
+
+def log_async(**kwargs) -> None:
+    """
+    Non-blocking append. Same kwargs as log() · returns immediately.
+    Background thread persists to vault/Trace/<date>.jsonl.
+
+    Use under high-QPS server paths to avoid disk fsync blocking the request.
+    """
+    _ensure_worker()
+    _async_queue.put(kwargs)
+
+
+def queue_size() -> int:
+    """Approx pending writes · for /metrics observability."""
+    return _async_queue.qsize()
 
 
 # ── Context manager · auto-time / auto-write ─────────────────────────────────
@@ -361,4 +427,5 @@ def cli_main(argv: list[str]) -> int:
     return 2
 
 
-__all__ = ["log", "session", "query", "monthly_rollup", "cli_main"]
+__all__ = ["log", "log_async", "queue_size", "session", "query",
+           "monthly_rollup", "cli_main"]
