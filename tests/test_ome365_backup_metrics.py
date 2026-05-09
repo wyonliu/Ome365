@@ -196,3 +196,32 @@ def test_metrics_via_http(tmp_path, monkeypatch):
     r = client.get("/metrics")
     assert r.status_code == 200
     assert "ome365_decisions_total" in r.text
+
+
+# ── v1.1.15 backup --dry-run ─────────────────────────────────────────────────
+
+
+def test_backup_dry_run_no_disk_writes(tmp_path):
+    _seed_min_vault(tmp_path)
+    # Add a __pycache__ file in Decisions/ so DEFAULT_EXCLUDE_PATTERNS skip is exercised
+    (tmp_path / "Decisions" / "__pycache__").mkdir(exist_ok=True)
+    (tmp_path / "Decisions" / "__pycache__" / "junk.pyc").write_bytes(b"\x00")
+    result = create(vault=tmp_path, dest=tmp_path, dry_run=True)
+    assert isinstance(result, dict)
+    assert result["dry_run"] is True
+    assert result["would_include_count"] >= 2  # d1.md + 2026-05-01.jsonl + eval-config.yml
+    assert result["would_skip_count"] >= 1  # __pycache__/junk.pyc
+    # No tarball written
+    assert not list(tmp_path.glob("vault-*.tar.gz"))
+
+
+def test_backup_cli_create_dry_run(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+    _seed_min_vault(tmp_path)
+    rc = backup_cli(["create", "--dry-run"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert '"dry_run": true' in out
+    # No tarball created in default Backups/
+    assert not (tmp_path / "Backups").exists() or \
+           not list((tmp_path / "Backups").glob("vault-*.tar.gz"))

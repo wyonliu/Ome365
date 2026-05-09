@@ -57,8 +57,12 @@ def create(
     dest: Optional[Path] = None,
     *,
     when: Optional[datetime] = None,
-) -> Path:
-    """Create tar.gz of vault. Returns path to tarball."""
+    dry_run: bool = False,
+) -> Path | dict:
+    """Create tar.gz of vault. Returns path to tarball.
+
+    dry_run=True: returns dict {dry_run, would_include_count, would_skip_count,
+                  would_write_to} without touching disk."""
     v = _vault_root(vault)
     when = when or datetime.now(timezone.utc)
     timestamp = when.strftime("%Y%m%dT%H%M%S")
@@ -66,6 +70,33 @@ def create(
     dest_dir = Path(dest).resolve() if dest else v / "Backups"
     dest_dir.mkdir(parents=True, exist_ok=True)
     out = dest_dir / f"vault-{timestamp}.tar.gz"
+
+    if dry_run:
+        # Walk what would be included without writing
+        n_would = 0
+        n_skipped = 0
+        for sub in DEFAULT_INCLUDE:
+            sub_path = v / sub
+            if sub_path.is_dir():
+                for fp in sub_path.rglob("*"):
+                    if not fp.is_file():
+                        continue
+                    if any(pat in str(fp) for pat in DEFAULT_EXCLUDE_PATTERNS):
+                        n_skipped += 1
+                    else:
+                        n_would += 1
+            elif sub_path.is_file():
+                n_would += 1
+        for f in DEFAULT_INCLUDE_FILES:
+            if (v / f).exists():
+                n_would += 1
+        return {
+            "dry_run": True,
+            "would_include_count": n_would,
+            "would_skip_count": n_skipped,
+            "would_write_to": str(out),
+            "vault": str(v),
+        }
 
     n_files = 0
     n_bytes = 0
@@ -167,7 +198,7 @@ def cli_main(argv: list[str]) -> int:
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(
             "usage:\n"
-            "  ome365 backup create [--dest DIR]\n"
+            "  ome365 backup create [--dest DIR] [--dry-run]\n"
             "  ome365 backup restore <tarball> [--unsafe]\n"
             "  ome365 backup list [--dir DIR]\n"
         )
@@ -177,11 +208,15 @@ def cli_main(argv: list[str]) -> int:
     rest = argv[1:]
     args: dict = {}
     positional: list[str] = []
+    dry_run = False
     i = 0
     while i < len(rest):
         tok = rest[i]
         if tok == "--unsafe":
             args["unsafe"] = True
+            i += 1
+        elif tok == "--dry-run":
+            dry_run = True
             i += 1
         elif tok.startswith("--") and i + 1 < len(rest):
             args[tok.lstrip("-").replace("-", "_")] = rest[i + 1]
@@ -191,9 +226,12 @@ def cli_main(argv: list[str]) -> int:
             i += 1
 
     if cmd == "create":
-        out = create(dest=args.get("dest"))
-        size_mb = out.stat().st_size / (1024 * 1024)
-        print(f"created → {out} ({size_mb:.2f} MB)")
+        out = create(dest=args.get("dest"), dry_run=dry_run)
+        if dry_run:
+            print(json.dumps(out, indent=2, ensure_ascii=False))
+        else:
+            size_mb = out.stat().st_size / (1024 * 1024)
+            print(f"created → {out} ({size_mb:.2f} MB)")
         return 0
 
     if cmd == "restore":

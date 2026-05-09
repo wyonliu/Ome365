@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.1.15 — backup --dry-run (3 modules now dry-runnable) (2026-05-09)
+
+### What v1.1.15 ships
+
+- **`./ome365 backup create --dry-run`** · preview which files would be
+  included/skipped without creating the tarball. Returns
+  `{dry_run: true, would_include_count: N, would_skip_count: M, would_write_to: <path>}`.
+- All 3 mutating CLIs now have consistent `--dry-run` flag:
+  - `ome365 wiki update --dry-run`   (v1.1.13)
+  - `ome365 archive --dry-run`       (v1.1.14)
+  - `ome365 backup create --dry-run` (v1.1.15)
+- 2 new tests for backup dry-run.
+
+### Quality gates
+
+- 449 tests · 0 PII · 269 tracked files
+
+---
+
 ## v1.1.14 — archive --dry-run (consistency with wiki) (2026-05-09)
 
 ### What v1.1.14 ships
