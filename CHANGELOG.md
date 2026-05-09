@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.1.11 — Audit demo data · cockpit lit up (2026-05-09)
+
+### What v1.1.11 ships
+
+- **`vault.example/Audit/2026-05-09.jsonl`** · 8 sample audit events
+  across 5 actors and 4 action types (decision.create / decision.close /
+  wiki.update / backup.create / config.change). Cockpit Audit card now
+  shows real demo data instead of empty state on fresh install.
+
+### Quality gates
+
+- 443 tests · 0 PII · 268 tracked files
+- /api/eval/audit/recent returns 8 events on vault.example
+
+---
+
 ## v1.1.10 — 5th cockpit card · Audit visibility (2026-05-09)
 
 ### What v1.1.10 ships

@@ -1,0 +1,8 @@
+{"ts": "2026-05-09T09:15:00Z", "actor": "alice", "action": "decision.create", "target_type": "decision", "target_id": "pick-database-pg-vs-sqlite", "details": {"category": "infra"}, "source_ip": null}
+{"ts": "2026-05-09T11:30:00Z", "actor": "alice", "action": "decision.close", "target_type": "decision", "target_id": "pick-database-pg-vs-sqlite", "details": {"outcome": "Postgres for v2 multi-tenant", "value_anchors": ["P", "L", "维护性"]}, "source_ip": null}
+{"ts": "2026-05-09T13:42:00Z", "actor": "carol", "action": "decision.close", "target_type": "decision", "target_id": "v1-1-scope-team-brain", "details": {"outcome": "8-week file-first build · ship 2026-05-09", "value_anchors": ["P", "XL", "L"]}, "source_ip": null}
+{"ts": "2026-05-09T14:08:00Z", "actor": "bob", "action": "wiki.update", "target_type": "wiki", "target_id": "infra", "details": {"appended": 5}, "source_ip": null}
+{"ts": "2026-05-09T15:21:00Z", "actor": "dan", "action": "decision.close", "target_type": "decision", "target_id": "customer-tier-abc-segmentation", "details": {"outcome": "A=enterprise B=team C=indie", "value_anchors": ["P", "L"]}, "source_ip": null}
+{"ts": "2026-05-09T16:45:00Z", "actor": "alice", "action": "backup.create", "target_type": "backup", "target_id": "vault-20260509T164500.tar.gz", "details": {"size_mb": 2.4}, "source_ip": null}
+{"ts": "2026-05-09T17:12:00Z", "actor": "erin", "action": "wiki.update", "target_type": "wiki", "target_id": "ops", "details": {"appended": 2}, "source_ip": null}
+{"ts": "2026-05-09T18:30:00Z", "actor": "alice", "action": "config.change", "target_type": "config", "target_id": "eval-config.yml", "details": {"field": "weights.delivery", "from": 0.15, "to": 0.20}, "source_ip": null}
