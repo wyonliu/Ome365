@@ -278,7 +278,9 @@ def cmd_doctor() -> int:
     except Exception:
         pass
     plat = "WSL" if is_wsl else sys_name
-    print(f"  [1/12] Platform     : {plat} ({_platform.machine()})")
+    sha = _git_sha()
+    sha_str = f" · git={sha}" if sha else ""
+    print(f"  [1/12] Platform     : {plat} ({_platform.machine()}){sha_str}")
     print(f"  [2/12] Python       : {sys.version.split()[0]} ({sys.executable})")
     py_ver = sys.version_info
     if py_ver < (3, 9):

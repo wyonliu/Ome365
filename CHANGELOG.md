@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.1.37 — `doctor` text mode shows git_sha (consistency with --json) (2026-05-09)
+
+### What v1.1.37 ships
+
+- `doctor` text mode prints `git=<short-sha>` next to platform info when in
+  a git repo. Matches the `git_sha` field already in `doctor --json`.
+
+### Why this matters
+
+- Operators rarely use `--json` for ad-hoc inspection. Putting the SHA in the
+  default text output means "which commit am I running?" is one command, no
+  flag. Fixes a small but real friction.
+
+### Quality gates
+
+- 514 tests · 0 PII · 272 tracked files
+
+---
+
 ## v1.1.36 — agent-card no longer claims "0.1-stub" preview (2026-05-09)
 
 ### What v1.1.36 ships
