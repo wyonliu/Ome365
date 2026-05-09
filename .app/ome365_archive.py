@@ -128,12 +128,42 @@ def recall(period: str, vault: Optional[Path] = None) -> Iterable[dict]:
                 continue
 
 
+def list_periods(vault: Optional[Path] = None) -> list[dict]:
+    """List archived month buckets · sorted oldest-first.
+
+    Returns list of {period, path, size_bytes, size_mb, modified}.
+    """
+    from datetime import datetime, timezone
+    v = _vault_root(vault)
+    arc_dir = v / ARCHIVE_DIR_REL
+    if not arc_dir.exists():
+        return []
+    out: list[dict] = []
+    for fp in sorted(arc_dir.glob("*.jsonl.gz")):
+        try:
+            st = fp.stat()
+            period = fp.name.replace(".jsonl.gz", "")
+            out.append({
+                "period": period,
+                "path": str(fp),
+                "size_bytes": st.st_size,
+                "size_mb": round(st.st_size / (1024 * 1024), 3),
+                "modified": datetime.fromtimestamp(
+                    st.st_mtime, tz=timezone.utc,
+                ).isoformat().replace("+00:00", "Z"),
+            })
+        except OSError:
+            continue
+    return out
+
+
 def cli_main(argv: list[str]) -> int:
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(
             "usage:\n"
             "  ome365 archive [--older-than 30] [--dry-run]\n"
             "  ome365 archive recall --period YYYY-MM\n"
+            "  ome365 archive list                 # list archived periods\n"
         )
         return 0
 
@@ -166,10 +196,15 @@ def cli_main(argv: list[str]) -> int:
         print(f"--- {n} rows from {period}", flush=True)
         return 0
 
+    if positional and positional[0] == "list":
+        rows = list_periods()
+        print(json.dumps(rows, indent=2, ensure_ascii=False))
+        return 0
+
     older = int(args.get("older_than", "30"))
     result = archive(older_than_days=older, dry_run=dry_run)
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
 
 
-__all__ = ["archive", "recall", "cli_main"]
+__all__ = ["archive", "recall", "list_periods", "cli_main"]

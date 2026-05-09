@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.1.31 — `archive list` for ops discovery of archived buckets (2026-05-09)
+
+### What v1.1.31 ships
+
+- **`./ome365 archive list`** · JSON list of archived month buckets (period,
+  path, size_bytes, size_mb, modified). Operators no longer have to know what
+  YYYY-MM periods are available before running `archive recall --period`.
+- **`list_periods()` helper** in `ome365_archive` · usable from Python too.
+- **4 new tests** · empty case · returns archived months · CLI smoke · empty
+  CLI returns `[]` array (script-friendly, never errors).
+
+### Why this matters
+
+- Closes the `archive` discovery gap. Before v1.1.31, you'd archive 6 months
+  of trace data and then forget which months were already archived. Now:
+  ```bash
+  ome365 archive list | jq '.[].period'
+  ```
+
+### Quality gates
+
+- 501 tests · 0 PII · 272 tracked files
+
+---
+
 ## v1.1.30 — `ome365 status --json` for monitoring integration (2026-05-09)
 
 ### What v1.1.30 ships

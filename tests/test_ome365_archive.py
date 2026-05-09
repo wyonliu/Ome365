@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / ".app"))
 
-from ome365_archive import archive, cli_main, recall  # noqa: E402
+from ome365_archive import archive, cli_main, list_periods, recall  # noqa: E402
 
 
 def _seed_jsonl(vault: Path, day: date, lines: int = 3) -> Path:
@@ -121,3 +121,44 @@ def test_archive_dry_run_no_disk_writes(tmp_path):
     # No archive .gz created
     arc_dir = tmp_path / "Trace" / "archive"
     assert not arc_dir.exists() or not list(arc_dir.glob("*.jsonl.gz"))
+
+
+# ── v1.1.31 list_periods · ops discovery of archived buckets ────────────────
+
+
+def test_list_periods_empty_when_no_archive(tmp_path):
+    assert list_periods(vault=tmp_path) == []
+
+
+def test_list_periods_returns_archived_months(tmp_path):
+    today = date(2026, 5, 9)
+    _seed_jsonl(tmp_path, today - timedelta(days=60))
+    _seed_jsonl(tmp_path, today - timedelta(days=45))
+    archive(vault=tmp_path, older_than_days=30, today=today)
+    rows = list_periods(vault=tmp_path)
+    assert len(rows) >= 1
+    for r in rows:
+        for k in ("period", "path", "size_bytes", "size_mb", "modified"):
+            assert k in r
+        # period format YYYY-MM
+        assert len(r["period"]) == 7 and r["period"][4] == "-"
+
+
+def test_cli_archive_list_emits_json(tmp_path, monkeypatch, capsys):
+    today = date(2026, 5, 9)
+    _seed_jsonl(tmp_path, today - timedelta(days=60))
+    archive(vault=tmp_path, older_than_days=30, today=today)
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+    rc = cli_main(["list"])
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert isinstance(rows, list)
+    assert len(rows) >= 1
+    assert "period" in rows[0]
+
+
+def test_cli_archive_list_empty_returns_empty_array(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+    rc = cli_main(["list"])
+    assert rc == 0
+    assert json.loads(capsys.readouterr().out) == []
