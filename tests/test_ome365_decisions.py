@@ -316,3 +316,52 @@ def test_decision_cli_close_fires_audit(tmp_vault, monkeypatch, capsys):
     text = audit_files[0].read_text("utf-8")
     assert "decision.close" in text
     assert "alice" in text
+
+
+# ── v1.1.33 · decision list --limit N ───────────────────────────────────────
+
+
+def test_decision_cli_list_limit(tmp_vault, monkeypatch, capsys):
+    """--limit N keeps the N most recent decisions."""
+    import json as _json
+    monkeypatch.setenv("OME365_VAULT", str(tmp_vault))
+    # Create 5 decisions across different days
+    for i, day in enumerate([date(2026, 5, 1), date(2026, 5, 2), date(2026, 5, 3),
+                              date(2026, 5, 4), date(2026, 5, 5)]):
+        create_decision(tmp_vault, f"Title {i}", "alice", when=day)
+    rc = decision_cli(["list", "--limit", "2", "--json"])
+    assert rc == 0
+    rows = _json.loads(capsys.readouterr().out)
+    assert len(rows) == 2
+    # Should be the latest two — IDs include 2026-05-04 and 2026-05-05
+    ids = [r["id"] for r in rows]
+    assert any("2026-05-04" in i for i in ids)
+    assert any("2026-05-05" in i for i in ids)
+
+
+def test_decision_cli_list_limit_zero_or_negative_no_op(tmp_vault, monkeypatch, capsys):
+    """--limit 0 should not filter (matches trace --limit 0 semantics)."""
+    import json as _json
+    monkeypatch.setenv("OME365_VAULT", str(tmp_vault))
+    create_decision(tmp_vault, "A", "alice", when=date(2026, 5, 1))
+    create_decision(tmp_vault, "B", "alice", when=date(2026, 5, 2))
+    rc = decision_cli(["list", "--limit", "0", "--json"])
+    assert rc == 0
+    rows = _json.loads(capsys.readouterr().out)
+    assert len(rows) == 2  # all returned
+
+
+def test_decision_cli_list_limit_combines_with_filters(tmp_vault, monkeypatch, capsys):
+    import json as _json
+    monkeypatch.setenv("OME365_VAULT", str(tmp_vault))
+    create_decision(tmp_vault, "Old A", "alice", when=date(2026, 4, 1))
+    create_decision(tmp_vault, "Old B", "bob", when=date(2026, 4, 2))
+    create_decision(tmp_vault, "New A", "alice", when=date(2026, 5, 5))
+    rc = decision_cli([
+        "list", "--owner", "alice", "--limit", "1", "--json"
+    ])
+    assert rc == 0
+    rows = _json.loads(capsys.readouterr().out)
+    assert len(rows) == 1
+    assert rows[0]["owner"] == "alice"
+    assert "2026-05-05" in rows[0]["id"]

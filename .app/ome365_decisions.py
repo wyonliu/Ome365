@@ -342,7 +342,8 @@ def cli_main(argv: list[str]) -> int:
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(
             "usage:\n"
-            "  ome365 decision list [--status open|closed|superseded] [--owner X] [--json]\n"
+            "  ome365 decision list [--status open|closed|superseded] [--owner X]\n"
+            "                        [--limit N] [--json]\n"
             "  ome365 decision show <id>\n"
             '  ome365 decision new "Title" --owner X [--category cat]\n'
             "                          [--participants alice,bob] [--planned-duration-days N]\n"
@@ -380,6 +381,19 @@ def cli_main(argv: list[str]) -> int:
             rows = [r for r in rows if r.status == status_filter]
         if owner_filter:
             rows = [r for r in rows if r.owner == owner_filter]
+        if "limit" in args:
+            try:
+                n = int(args["limit"])
+                if n > 0:
+                    # Sort newest-first by opened or closed_at, take N, return chronological
+                    rows = sorted(
+                        rows,
+                        key=lambda r: r.closed_at or r.id,
+                        reverse=True,
+                    )[:n]
+                    rows.reverse()
+            except (ValueError, TypeError):
+                pass
         if json_out:
             out = [
                 {"id": r.id, "owner": r.owner, "status": r.status,

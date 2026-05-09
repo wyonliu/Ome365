@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.1.33 — `decision list --limit N` symmetry with trace/wiki (2026-05-09)
+
+### What v1.1.33 ships
+
+- **`./ome365 decision list --limit N`** · keep N most-recent decisions, by
+  closed_at then id desc. Combines with `--status`, `--owner`, `--json`.
+- **3 new tests** · limit selection · zero/negative no-op · combine with
+  owner filter.
+
+### Why this matters
+
+- All three "list-style" CLIs (trace query, wiki query, decision list) now
+  honor `--limit`. Operators don't have to remember which one supports it.
+
+### Quality gates
+
+- 508 tests · 0 PII · 272 tracked files
+
+---
+
 ## v1.1.32 — `trace query --limit N` for tail-like recent inspection (2026-05-09)
 
 ### What v1.1.32 ships
