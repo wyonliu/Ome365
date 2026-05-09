@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.1.20 — `backup list --json` for scriptable retention (2026-05-09)
+
+### What v1.1.20 ships
+
+- **`./ome365 backup list --json`** · machine-readable backup catalog. Each
+  row includes `name, path, size_bytes, size_mb, modified`. Empty result is
+  `[]`, never an error.
+- **2 new tests** · valid JSON shape with all 5 fields · empty case returns
+  `[]` (not "no backups found" string).
+
+### Why this matters
+
+- Backup retention policies (keep N most recent, prune > 100 MB, etc.) need
+  parseable output. Previously `list` was human-only. Now ops can:
+  ```bash
+  ome365 backup list --json | jq '.[1:] | .[].path' | xargs rm
+  ```
+  All three CLI primitives are now scriptable: `metrics` (Prometheus text),
+  `doctor --json`, and `backup list --json`.
+
+### Quality gates
+
+- 469 tests · 0 PII · 270 tracked files
+
+---
+
 ## v1.1.19 — `ome365 metrics` CLI (offline Prometheus scrape) (2026-05-09)
 
 ### What v1.1.19 ships

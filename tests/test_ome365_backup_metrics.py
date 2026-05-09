@@ -132,6 +132,32 @@ def test_backup_cli_create_list(tmp_path, monkeypatch, capsys):
     assert "vault-" in out
 
 
+def test_backup_cli_list_json(tmp_path, monkeypatch, capsys):
+    """--json output is parseable + has expected fields per backup row."""
+    import json as _json
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+    _seed_min_vault(tmp_path)
+    backup_cli(["create"])
+    capsys.readouterr()  # drain
+    rc = backup_cli(["list", "--json"])
+    assert rc == 0
+    rows = _json.loads(capsys.readouterr().out)
+    assert isinstance(rows, list)
+    assert len(rows) == 1
+    for k in ("name", "path", "size_bytes", "size_mb", "modified"):
+        assert k in rows[0], f"missing field: {k}"
+
+
+def test_backup_cli_list_json_empty(tmp_path, monkeypatch, capsys):
+    """--json on empty dir returns []. Scripts can rely on this."""
+    import json as _json
+    monkeypatch.setenv("OME365_VAULT", str(tmp_path))
+    rc = backup_cli(["list", "--json"])
+    assert rc == 0
+    rows = _json.loads(capsys.readouterr().out)
+    assert rows == []
+
+
 def test_backup_cli_help(capsys):
     rc = backup_cli([])
     assert rc == 0

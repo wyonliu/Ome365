@@ -228,7 +228,7 @@ def cli_main(argv: list[str]) -> int:
             "usage:\n"
             "  ome365 backup create [--dest DIR] [--dry-run]\n"
             "  ome365 backup restore <tarball> [--unsafe] [--dry-run]\n"
-            "  ome365 backup list [--dir DIR]\n"
+            "  ome365 backup list [--dir DIR] [--json]\n"
         )
         return 0
 
@@ -237,6 +237,7 @@ def cli_main(argv: list[str]) -> int:
     args: dict = {}
     positional: list[str] = []
     dry_run = False
+    json_out = False
     i = 0
     while i < len(rest):
         tok = rest[i]
@@ -245,6 +246,9 @@ def cli_main(argv: list[str]) -> int:
             i += 1
         elif tok == "--dry-run":
             dry_run = True
+            i += 1
+        elif tok == "--json":
+            json_out = True
             i += 1
         elif tok.startswith("--") and i + 1 < len(rest):
             args[tok.lstrip("-").replace("-", "_")] = rest[i + 1]
@@ -280,6 +284,9 @@ def cli_main(argv: list[str]) -> int:
 
     if cmd == "list":
         rows = list_backups(args.get("dir"))
+        if json_out:
+            print(json.dumps(rows, indent=2, ensure_ascii=False))
+            return 0
         if not rows:
             print("no backups found", flush=True)
             return 0
