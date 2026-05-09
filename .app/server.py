@@ -103,6 +103,18 @@ except ImportError as _e:
     logging.getLogger("ome365").warning(f"ome365.eval router not loaded: {_e}")
 
 
+# ── ome365.metrics · v1.1.1 P2 #12 · Prometheus /metrics endpoint ──────────
+try:
+    from ome365_metrics import render as render_metrics
+
+    @app.get("/metrics", response_class=__import__("fastapi.responses",
+                                                     fromlist=["PlainTextResponse"]).PlainTextResponse)
+    def _metrics():
+        return render_metrics()
+except ImportError as _e:
+    logging.getLogger("ome365").warning(f"ome365.metrics not loaded: {_e}")
+
+
 # ── T1 Privacy headers · 仅作用于 /s 前缀（share 路由）──
 # 主站驾舱走 AuthProvider 自己的门禁，头部要保持干净；
 # share 是面向公网只读分享站，要 noindex + DENY iframe + no-referrer。

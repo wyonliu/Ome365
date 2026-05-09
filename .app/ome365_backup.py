@@ -1,0 +1,225 @@
+"""
+ome365.backup · v1.1.1 P1 #8 · vault snapshot + restore (tar.gz)
+[decision: 2026-05-09-p1-backup-and-metrics]
+
+stdlib only · 0 deps · 3 subcommands:
+  · ome365 backup create [--dest DIR]   → vault → tar.gz timestamped
+  · ome365 backup restore <tarball>     → tarball → vault (safe: backs up first)
+  · ome365 backup list [--dir DIR]      → list backups with size + date
+
+Default-include: Decisions/ Trace/ Skills/ Knowledge/ Contacts/ .ome365/eval-config.yml
+Default-exclude: .ome365/notify_webhooks.json (secrets) · .git/ · __pycache__/ · *.pyc
+"""
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import sys
+import tarfile
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+
+DEFAULT_INCLUDE = [
+    "Decisions", "Trace", "Skills", "Knowledge", "Contacts",
+    "Notes", "Journal", "Memory", "Insights",
+]
+DEFAULT_INCLUDE_FILES = [
+    ".ome365/eval-config.yml",
+]
+DEFAULT_EXCLUDE_PATTERNS = [
+    "__pycache__", ".pyc", ".git",
+    "notify_webhooks.json",  # secrets
+    "share_auth.db",  # session cookies
+    "share_registry.json",  # share state
+]
+
+
+def _vault_root(vault: Optional[Path] = None) -> Path:
+    if vault:
+        return Path(vault).resolve()
+    return Path(os.environ.get("OME365_VAULT", Path(__file__).parent.parent)).resolve()
+
+
+def _filter_excluded(tarinfo: tarfile.TarInfo) -> Optional[tarfile.TarInfo]:
+    """Drop secrets / cache / git from tarball."""
+    name = tarinfo.name
+    for pat in DEFAULT_EXCLUDE_PATTERNS:
+        if pat in name:
+            return None
+    return tarinfo
+
+
+def create(
+    vault: Optional[Path] = None,
+    dest: Optional[Path] = None,
+    *,
+    when: Optional[datetime] = None,
+) -> Path:
+    """Create tar.gz of vault. Returns path to tarball."""
+    v = _vault_root(vault)
+    when = when or datetime.now(timezone.utc)
+    timestamp = when.strftime("%Y%m%dT%H%M%S")
+
+    dest_dir = Path(dest).resolve() if dest else v / "Backups"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    out = dest_dir / f"vault-{timestamp}.tar.gz"
+
+    n_files = 0
+    n_bytes = 0
+    with tarfile.open(out, "w:gz") as tar:
+        for sub in DEFAULT_INCLUDE:
+            sub_path = v / sub
+            if sub_path.exists():
+                tar.add(sub_path, arcname=sub, filter=_filter_excluded)
+                # Tally
+                if sub_path.is_dir():
+                    for fp in sub_path.rglob("*"):
+                        if fp.is_file() and not any(
+                            pat in str(fp) for pat in DEFAULT_EXCLUDE_PATTERNS
+                        ):
+                            n_files += 1
+                            try:
+                                n_bytes += fp.stat().st_size
+                            except OSError:
+                                pass
+
+        for f in DEFAULT_INCLUDE_FILES:
+            fp = v / f
+            if fp.exists():
+                tar.add(fp, arcname=f)
+                n_files += 1
+                try:
+                    n_bytes += fp.stat().st_size
+                except OSError:
+                    pass
+
+    return out
+
+
+def restore(
+    tarball: Path,
+    vault: Optional[Path] = None,
+    *,
+    safe: bool = True,
+) -> dict:
+    """
+    Restore tarball into vault. Safe mode (default) backs up existing vault first.
+
+    Returns: {restored_to, prior_backup, n_files}
+    """
+    v = _vault_root(vault)
+    src = Path(tarball).resolve()
+    if not src.exists():
+        raise FileNotFoundError(f"backup tarball not found: {src}")
+
+    prior_backup = None
+    if safe and v.exists() and any(v.iterdir()):
+        prior_backup = create(vault=v, dest=v / "Backups" / "_pre_restore")
+
+    n_files = 0
+    with tarfile.open(src, "r:gz") as tar:
+        # Filter for path traversal safety
+        for member in tar.getmembers():
+            if member.name.startswith("/") or ".." in member.name.split("/"):
+                raise ValueError(f"unsafe member path in tarball: {member.name}")
+            n_files += 1
+        # Extract — Python 3.12+ has filter; older falls back
+        try:
+            tar.extractall(v, filter="data")  # type: ignore[arg-type]
+        except TypeError:
+            tar.extractall(v)
+
+    return {
+        "restored_to": str(v),
+        "prior_backup": str(prior_backup) if prior_backup else None,
+        "tarball": str(src),
+        "n_files": n_files,
+    }
+
+
+def list_backups(directory: Optional[Path] = None) -> list[dict]:
+    """List backups in a directory · sorted newest-first."""
+    d = Path(directory).resolve() if directory else _vault_root() / "Backups"
+    if not d.exists():
+        return []
+    out = []
+    for fp in sorted(d.glob("vault-*.tar.gz"), reverse=True):
+        try:
+            st = fp.stat()
+            out.append({
+                "name": fp.name,
+                "path": str(fp),
+                "size_bytes": st.st_size,
+                "size_mb": round(st.st_size / (1024 * 1024), 2),
+                "modified": datetime.fromtimestamp(
+                    st.st_mtime, tz=timezone.utc
+                ).isoformat().replace("+00:00", "Z"),
+            })
+        except OSError:
+            continue
+    return out
+
+
+def cli_main(argv: list[str]) -> int:
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(
+            "usage:\n"
+            "  ome365 backup create [--dest DIR]\n"
+            "  ome365 backup restore <tarball> [--unsafe]\n"
+            "  ome365 backup list [--dir DIR]\n"
+        )
+        return 0
+
+    cmd = argv[0]
+    rest = argv[1:]
+    args: dict = {}
+    positional: list[str] = []
+    i = 0
+    while i < len(rest):
+        tok = rest[i]
+        if tok == "--unsafe":
+            args["unsafe"] = True
+            i += 1
+        elif tok.startswith("--") and i + 1 < len(rest):
+            args[tok.lstrip("-").replace("-", "_")] = rest[i + 1]
+            i += 2
+        else:
+            positional.append(tok)
+            i += 1
+
+    if cmd == "create":
+        out = create(dest=args.get("dest"))
+        size_mb = out.stat().st_size / (1024 * 1024)
+        print(f"created → {out} ({size_mb:.2f} MB)")
+        return 0
+
+    if cmd == "restore":
+        if not positional:
+            print("ERROR: restore needs a tarball path", flush=True)
+            return 2
+        try:
+            result = restore(Path(positional[0]), safe=not args.get("unsafe", False))
+            print(json.dumps(result, indent=2))
+            return 0
+        except (FileNotFoundError, ValueError) as e:
+            print(f"ERROR: {e}", flush=True)
+            return 2
+
+    if cmd == "list":
+        rows = list_backups(args.get("dir"))
+        if not rows:
+            print("no backups found", flush=True)
+            return 0
+        for r in rows:
+            print(f"  {r['name']:<40} {r['size_mb']:>6.2f} MB  {r['modified']}")
+        print(f"--- {len(rows)} backup(s)", flush=True)
+        return 0
+
+    print(f"ERROR: unknown subcommand '{cmd}' (try create | restore | list)", flush=True)
+    return 2
+
+
+__all__ = ["create", "restore", "list_backups", "cli_main"]

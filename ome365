@@ -343,7 +343,7 @@ def _dispatch_publish(argv: list) -> int:
 def main() -> int:
     # 支持两种用法：./ome365 [flags] | ./ome365 <subcommand>
     argv = sys.argv[1:]
-    if argv and argv[0] in ("setup", "doctor", "help", "--help", "-h", "publish", "share", "trace", "wiki", "archive"):
+    if argv and argv[0] in ("setup", "doctor", "help", "--help", "-h", "publish", "share", "trace", "wiki", "archive", "backup"):
         sub = argv[0]
         if sub in ("help", "--help", "-h"):
             print(__doc__)
@@ -367,6 +367,10 @@ def main() -> int:
             sys.path.insert(0, str(APP))
             from ome365_archive import cli_main as _arch_cli
             return _arch_cli(argv[1:])
+        if sub == "backup":
+            sys.path.insert(0, str(APP))
+            from ome365_backup import cli_main as _backup_cli
+            return _backup_cli(argv[1:])
         if sub == "publish":
             # 派发到 publish.cli 的 publish 子命令
             return _dispatch_publish(["publish", *argv[1:]])
