@@ -39,16 +39,16 @@
  │
  ▼ 5-20 ────────● 🏁 v1.1 W1 启动
  │
- │ W1 SKILL.md 32 工具 CI 兼容
- │ W2 Decisions 8 步 + value_anchors + Kevin hook
- │ W3 Trace + sqlite-vec
- │ W4 ome365_eval.py + Cost-per-Outcome
- │ W5 4 cockpit cards + Roles + MCP Progressive Discovery
- │ W6 GDPR + EU + Karpathy /wiki-update + /wiki-query
- │ W7 智能归档 95%/5% + MCP Code Mode + AAIF
- │ W8 snapshot + Anti-Tokenmaxxing + Implementation Spec ship
+ │ W1 ✅ SKILL.md 32 工具 CI 兼容 + 7-dim ome365_eval.py 骨架
+ │ W2 ✅ Decisions 8 步 + value_anchors + Kevin git hook
+ │ W3 ✅ Trace SDK (Python ctx mgr + CLI) + monthly rollup
+ │ W4 ✅ D4 anchor scoring + Cost-per-Outcome dashboard + /api/eval router
+ │ W5 ✅ /v1_1.html 4 cockpit cards + 5 role preset switcher
+ │ W6 ✅ Karpathy wiki-update + wiki-query (rule-based · LLM 是 v1.2)
+ │ W7 ✅ Moxt 95/5 archive + AAIF agent-card v1.1 surface
+ │ W8 ✅ CHANGELOG + EVAL_USAGE_POLICY + version bump + git tag v1.1.0
  │
- ▼ 7-14 ────────● 🚀 v1.1.0 release · Team Brain
+ ▼ 2026-05-09 ─● 🚀 v1.1.0 release · Team Brain · SHIPPED (250 tests · 0 PII)
  │
  │ 8-15 ~ 8-31 ─● v1.2 启动（ome365.id 真签名 + Hike L4 Wiki Maintainer）
  ▼ 9-01 ────────● 🚀 v1.2.0 release · 身份可携 + 决策蒸馏

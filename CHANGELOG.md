@@ -1,5 +1,86 @@
 # Changelog
 
+## v1.1.0 — Team Brain · 8-week file-first build (2026-05-09)
+
+**Tagline**: The decisions, not the chats.
+**Sub**: Your team's wiki is the artifact. Cost-per-Outcome is the metric.
+
+This is the v1.1 ship that turns Ome365 from a personal vault + share station into a
+**team brain** — Decisions, Skills, Trace, Wiki, Eval all derived from plain markdown
+files. Every score has `human_review_required: True`. Every cost view is per-outcome,
+not per-token. Region-aware (EU GDPR Art. 22 / CN PIPL §13/§24) is enforced by code,
+not policy.
+
+### What v1.1 ships (W1-W8)
+
+- **W1 · Eval foundation** · `vault.example/` · 4 sample SKILL.md (spec-PASS) · 7-dim
+  `ome365_eval.py` (D1-D7) · region-aware (EU default-deny / CN PIPL ack) · 5 preset
+  weights (engineer/pm/sales/ops/mixed) · sample threshold 5 · `human_review_required`
+  on every response
+- **W2 · Decisions** · 8-step (5 AI + 3 human) lifecycle · `value_anchors` (P/XL/L/M/
+  维护性/Revert) · `.calibration/` AI-vs-human diff capture · 5 endpoints
+  (list/get/new/close/calibration) · git hook `[decision: <id>]` enforcement
+  (Kevin 范式·先文件再代码)
+- **W3 · Trace SDK** · `from ome365_trace import session` Python context manager
+  (auto-time + auto-extract anthropic/openai usage) · `./ome365 trace add | query |
+  rollup` CLI · monthly `Trace/monthly/<YYYY-MM>.summary.json` rollup
+  (by_actor/by_skill/by_decision) · 11-field schema matches impl spec §四 4.5
+- **W4 · Cost-per-Outcome dashboard** · D4 anchor-based judgment (P/XL/L/M lift,
+  Revert/维护性 drag · backward-compat outcome-string fallback) · `dashboard_data()`
+  combines 3 finops scopes + monthly_trend + by_actor · 4 HTTP endpoints under
+  `/api/eval/*`
+- **W5 · Cockpit panel** · `/v1_1.html` standalone Vue 3 CDN · 4 cards
+  (Decisions/Skills/FinOps/Eval) · role-preset switcher · zero build step · explicit
+  Anti-Tokenmaxxing warnings on display
+- **W6 · Karpathy wiki** · `ome365 wiki update` scans Decisions → groups by category
+  → appends `## Pattern · <id> · <date>` to `Knowledge/L2-distilled/<cat>.md` ·
+  idempotent via `<!-- key: <decision_id> -->` · `ome365 wiki query 'term'` greps L2
+  distilled with frequency rank
+- **W7 · Nightly archive + AAIF** · `ome365 archive` gzips old `Trace/<date>.jsonl`
+  into per-month `Trace/archive/<YYYY-MM>.jsonl.gz` (Moxt 95%/5% pattern) · `recall`
+  symmetry · `/.well-known/agent-card.json` advertises v1.1 surface
+  (decisions/eval/wiki/trace/archive) + compliance posture (gdpr / pipl / anti-tokenmaxxing)
+- **W8 · Release** · this changelog · `docs/policies/EVAL_USAGE_POLICY.md` (HR usage
+  boundary) · version bump · git tag v1.1.0
+
+### Quality gates (all green at ship)
+
+- **250 pytest tests · 100% pass** (was 178 at v1.0.0-rc1)
+- **PII scan: 0 hits** across 193 tracked files
+- **Kevin git hook**: every code commit traces to a `[decision: <id>]` tag in
+  `vault.example/Decisions/`
+- **Anti-Tokenmaxxing**: every eval response carries `anti_tokenmaxxing_note`
+- **GDPR Art. 22 / PIPL §13/§24**: enforced in code, not policy
+
+### Compliance ground
+
+- All `eval_member()` responses set `human_review_required: True` (GDPR Art. 22)
+- EU region default-deny unless `eval_enabled_eu: true` (config flag)
+- CN region requires `pipl_notify_acknowledged_by[member_id]` (template at
+  `docs/legal/PIPL-NOTIFY-TEMPLATE.zh.md`)
+- Members can opt out via `opted_out_members` (PIPL §24 right) → permanent 403
+- Eval scores are **resource-allocation hints**, never sole basis for HR action
+
+### What's NOT in v1.1 (deferred)
+
+- **LLM-distilled wiki**: `ome365 wiki update` is rule-based; LLM mode is v1.2
+  (gated by `OME365_WIKI_LLM=1`)
+- **Semantic search (sqlite-vec)**: opt-in only, requires bge-m3 (~2.27GB) — deferred
+- **A2A signing**: `/.well-known/agent-card.json` advertises capabilities but
+  `signed_by: null` until mindos.protocol integration (v1.2~v1.3)
+- **Identity ed25519**: still v0.1 stub; v1.2 ships real signing
+- **Roles framework UI editor**: v1.1 ships JSON config; visual editor in v1.2
+
+### Migration from v1.0.0-rc1
+
+No breaking changes. Adopting v1.1 surface is opt-in:
+1. Run `./ome365 doctor` — should be green
+2. Optionally seed `vault.example/` patterns into your real vault
+3. Optionally enable the git hook: `git config core.hooksPath .githooks`
+4. Visit `/v1_1.html` to see the new cockpit
+
+---
+
 ## v1.0.0-rc1 — 顶级企业 AI 平台开源·阶段 1 launch 准备 19-round 收口 (2026-05-07 → 2026-05-08)
 
 **Tagline**: Run your company on agents, not org charts.
