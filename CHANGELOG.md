@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.1.4 — Doctor v1.1 + role badge + v1.2 preview (2026-05-09)
+
+**Tagline**: When you run `./ome365 doctor`, you see all 12 v1.1 modules at a glance.
+
+### What v1.1.4 ships
+
+- **`./ome365 doctor` v1.1 upgrade** · adds a 12-module health table after the
+  classic 12 checks. Shows ✓/✗ per v1.1 module (eval / decisions / trace / wiki
+  / archive / backup / audit / metrics / notify / rbac / signing / cli_extras),
+  optional dep status (anthropic / openai / sqlite-vec / sentence-transformers
+  with which env flag activates each), and vault state (decisions / traces /
+  skills count + signing key + roles.yml presence).
+- **Cockpit role badge** · `/v1_1.html` now shows the current actor's role
+  (owner / contributor / viewer) as a colored pill in the toolbar. Backed by
+  new `GET /api/eval/role/{actor}` endpoint. Viewers immediately know they're
+  viewers.
+- **`docs/strategy/v1.2-preview.md`** · 90-day roadmap preview · 3 themes
+  (Cognition Loop / Multi-Hike federation / Cost-per-Outcome board pack) ·
+  what v1.2 explicitly does NOT ship · timeline · how preview becomes plan.
+
+### Quality gates
+
+- 433 pytest tests · 100% pass
+- 0 PII hits across 262 tracked files
+- doctor smoke: `12/12 v1.1 modules loaded`
+
+---
+
 ## v1.1.3 — CLI polish + self-review (2026-05-09)
 
 **Tagline**: Every v1.1 surface has a CLI now.

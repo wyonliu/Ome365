@@ -307,9 +307,73 @@ def cmd_doctor() -> int:
     except Exception:
         print(f"  [12/12] Disk free   : ?")
 
+    # ── v1.1.x module checks ──────────────────────────────────────
+    print()
+    print("─" * 60)
+    print(f"  v1.1 modules · 8-week build (Decisions/Trace/Eval/Wiki/Audit/...)")
+    print("─" * 60)
+    sys.path.insert(0, str(APP))
+
+    v11_modules = [
+        ("ome365_eval",       "Eval (7-dim · D1-D7)"),
+        ("ome365_decisions",  "Decisions (8-step + Kevin hook)"),
+        ("ome365_trace",      "Trace (jsonl + async)"),
+        ("ome365_wiki",       "Wiki (Karpathy distill)"),
+        ("ome365_archive",    "Archive (gzip 95/5)"),
+        ("ome365_backup",     "Backup (tarball)"),
+        ("ome365_audit",      "Audit (SOC2/ISO27001)"),
+        ("ome365_metrics",    "Prometheus /metrics"),
+        ("ome365_notify",     "Webhook notify"),
+        ("ome365_rbac",       "RBAC (3 roles)"),
+        ("ome365_signing",    "ed25519 agent-card"),
+        ("ome365_cli_extras", "CLI extras (verify/status/eval)"),
+    ]
+    n_loaded = 0
+    for mod, label in v11_modules:
+        try:
+            __import__(mod)
+            print(f"  \033[32m✓\033[0m {label:<40}")
+            n_loaded += 1
+        except Exception as e:
+            print(f"  \033[31m✗\033[0m {label:<40}  ({e})")
+            ok = False
+
+    # Optional dep status (informational · not failures)
+    print()
+    print("  optional deps (gated by env flag · OK if missing):")
+    for pkg, hint in [
+        ("anthropic", "P3 #15 LLM wiki · OME365_WIKI_LLM=1"),
+        ("openai", "P3 #15 LLM wiki (alt) · OME365_WIKI_LLM=1"),
+        ("sqlite_vec", "P3 #16 semantic search · OME365_WIKI_VEC=1"),
+        ("sentence_transformers", "P3 #16 embedding model · OME365_WIKI_VEC=1"),
+    ]:
+        try:
+            __import__(pkg.replace("-", "_"))
+            print(f"    \033[32m✓\033[0m {pkg:<25} {hint}")
+        except ImportError:
+            print(f"    \033[33m○\033[0m {pkg:<25} {hint}")
+
+    # Vault state (informational)
+    vault = Path(os.environ.get("OME365_VAULT", ROOT)).resolve()
+    if vault.exists():
+        n_dec = len(list((vault / "Decisions").glob("*.md"))) if (vault / "Decisions").exists() else 0
+        n_trace = sum(1 for _ in (vault / "Trace").glob("*.jsonl")) if (vault / "Trace").exists() else 0
+        n_skill = len(list((vault / "Skills").glob("*.md"))) if (vault / "Skills").exists() else 0
+        signing = (vault / ".ome365" / "keys" / "agent-card.ed25519").exists()
+        roles = (vault / ".ome365" / "roles.yml").exists()
+        green_check = "\033[32m✓\033[0m"
+        yellow_dot = "\033[33m○\033[0m"
+        signing_status = green_check if signing else (yellow_dot + " (auto-gen on first /.well-known/agent-card.json)")
+        roles_status = (green_check + " present (RBAC enabled)") if roles else (yellow_dot + " (default-contributor mode)")
+        print()
+        print(f"  vault state ({vault.name}/):")
+        print(f"    Decisions: {n_dec} files · Trace: {n_trace} jsonl · Skills: {n_skill}")
+        print(f"    signing key: {signing_status}")
+        print(f"    roles.yml:   {roles_status}")
+
     print("─" * 60)
     if ok and not warnings:
-        print(f"  \033[32m✓ All green\033[0m · 可启动 ./ome365")
+        print(f"  \033[32m✓ All green\033[0m · {n_loaded}/{len(v11_modules)} v1.1 modules loaded · 可启动 ./ome365")
     elif ok:
         print(f"  \033[33m! {len(warnings)} warnings\033[0m: {' · '.join(warnings)}")
     else:

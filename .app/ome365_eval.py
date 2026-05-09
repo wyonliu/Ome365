@@ -857,6 +857,15 @@ try:
                 return {"actor": most_common[0][0], "source": "vault_inferred"}
         return {"actor": "alice", "source": "default"}
 
+    @router.get("/role/{actor}")
+    def http_role(actor: str):
+        """Resolve actor's role · cockpit displays role badge based on this."""
+        try:
+            from ome365_rbac import role_of
+            return {"actor": actor, "role": role_of(actor, _vault_root())}
+        except ImportError:
+            return {"actor": actor, "role": "contributor"}
+
     @router.get("/actors")
     def http_actors():
         """List all known actors (decision owners + trace actors + skill authors)."""

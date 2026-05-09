@@ -67,6 +67,9 @@
   .pill.L, .pill.XL { background: rgba(74, 222, 128, 0.18); color: var(--good); }
   .pill.M { background: rgba(251, 191, 36, 0.18); color: var(--warn); }
   .pill.Revert { background: rgba(248, 113, 113, 0.18); color: var(--bad); }
+  .pill.role-owner { background: rgba(108, 182, 255, 0.18); color: var(--accent); }
+  .pill.role-contributor { background: rgba(74, 222, 128, 0.18); color: var(--good); }
+  .pill.role-viewer { background: rgba(138, 146, 163, 0.18); color: var(--muted); }
   .row { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
   .row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .num { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
@@ -148,6 +151,7 @@
     <span class="spacer"></span>
     <span class="ago" v-if="lastLoaded">updated {{ ago }}s ago</span>
     <button @click="loadAll" :disabled="loading">{{ loading ? '…' : '↻' }}</button>
+    <span v-if="role" :class="['pill', 'role-' + role]" :title="'role: ' + role">{{ role }}</span>
     <button @click="toggleLang" :title="lang === 'zh' ? 'switch to English' : '切换中文'">{{ lang === 'zh' ? '中' : 'EN' }}</button>
     <button @click="toggleTheme">{{ theme === 'dark' ? '☀' : '☾' }}</button>
   </div>
@@ -366,6 +370,7 @@ createApp({
     const state = reactive({
       actor: initialActor,
       actors: [],
+      role: '',
       lang: initialLang,
       whoami_source: null,
       window_days: initialWindow,
@@ -462,6 +467,12 @@ createApp({
       url.searchParams.set('actor', state.actor);
       url.searchParams.set('window_days', state.window_days);
       history.replaceState(null, '', url);
+
+      // Fetch current actor's role for the badge
+      try {
+        const r = await fetchJson(`/api/eval/role/${encodeURIComponent(state.actor)}`);
+        state.role = r.role || '';
+      } catch { state.role = ''; }
 
       await Promise.all([loadDecisions(), loadSkills(), loadFinops(), loadEval()]);
       state.lastLoaded = Date.now();
