@@ -1,81 +1,138 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ome365 v1.1 · Team Brain Cockpit</title>
 <style>
-  :root {
-    --bg: #0e1116;
-    --card: #161a22;
-    --border: #2a2f3a;
-    --text: #e6e6e6;
-    --muted: #8a92a3;
-    --accent: #6cb6ff;
-    --good: #4ade80;
-    --warn: #fbbf24;
-    --bad: #f87171;
+  :root[data-theme="dark"] {
+    --bg: #0e1116; --card: #161a22; --border: #2a2f3a;
+    --text: #e6e6e6; --muted: #8a92a3; --accent: #6cb6ff;
+    --good: #4ade80; --warn: #fbbf24; --bad: #f87171;
+    --bar-bg: #1f242e;
+  }
+  :root[data-theme="light"] {
+    --bg: #f6f8fa; --card: #ffffff; --border: #d0d7de;
+    --text: #1f2328; --muted: #59636e; --accent: #0969da;
+    --good: #1a7f37; --warn: #9a6700; --bad: #cf222e;
+    --bar-bg: #eaeef2;
   }
   * { box-sizing: border-box; }
   body { margin: 0; padding: 24px; background: var(--bg); color: var(--text);
          font-family: -apple-system, "SF Pro", "Segoe UI", Roboto, sans-serif;
-         font-size: 14px; line-height: 1.5; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
+         font-size: 14px; line-height: 1.5; transition: background 0.15s; }
+  h1 { font-size: 22px; margin: 0 0 4px; display: flex; align-items: center; gap: 12px; }
+  h1 .badge { font-size: 11px; background: var(--accent); color: #fff;
+              padding: 2px 8px; border-radius: 10px; font-weight: 500; }
   .lead { color: var(--muted); margin-bottom: 20px; font-size: 13px; }
   .toolbar { background: var(--card); border: 1px solid var(--border);
              border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;
              display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
   .toolbar label { color: var(--muted); font-size: 12px; }
   .toolbar select, .toolbar input {
-    background: #0b0e13; color: var(--text); border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
     border-radius: 4px; padding: 4px 8px; font: inherit;
   }
+  .toolbar button {
+    background: var(--card); color: var(--text); border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 10px; font: inherit; cursor: pointer;
+  }
+  .toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+  .toolbar .spacer { flex: 1; }
+  .toolbar .ago { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
   .card { background: var(--card); border: 1px solid var(--border);
-          border-radius: 8px; padding: 16px; min-height: 260px; }
+          border-radius: 8px; padding: 16px; min-height: 260px;
+          position: relative; }
   .card h2 { font-size: 14px; margin: 0 0 12px; color: var(--accent);
-             text-transform: uppercase; letter-spacing: 0.5px; }
+             text-transform: uppercase; letter-spacing: 0.5px;
+             display: flex; justify-content: space-between; align-items: center; }
+  .card h2 .actions { display: flex; gap: 6px; }
+  .card h2 .actions button {
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    font-size: 10px; padding: 2px 6px; border-radius: 3px; cursor: pointer;
+  }
+  .card h2 .actions button:hover { color: var(--accent); border-color: var(--accent); }
   .card .sub { color: var(--muted); font-size: 11px; margin-bottom: 8px; }
   .stat { display: flex; justify-content: space-between; align-items: baseline;
-          padding: 6px 0; border-bottom: 1px dashed #1f242e; }
+          padding: 6px 0; border-bottom: 1px dashed var(--bar-bg); }
   .stat:last-child { border-bottom: none; }
   .stat .v { font-variant-numeric: tabular-nums; font-weight: 600; }
   .stat .k { color: var(--muted); font-size: 12px; }
   .pill { display: inline-block; padding: 1px 6px; border-radius: 3px;
-          background: #1f242e; color: var(--muted); font-size: 11px;
+          background: var(--bar-bg); color: var(--muted); font-size: 11px;
           margin-right: 4px; }
-  .pill.P { background: #1e3a4d; color: #6cb6ff; }
-  .pill.L, .pill.XL { background: #1f3d2a; color: #4ade80; }
-  .pill.M { background: #2d2f1a; color: #fbbf24; }
-  .pill.Revert { background: #3d1f1f; color: #f87171; }
+  .pill.P { background: rgba(108, 182, 255, 0.18); color: var(--accent); }
+  .pill.L, .pill.XL { background: rgba(74, 222, 128, 0.18); color: var(--good); }
+  .pill.M { background: rgba(251, 191, 36, 0.18); color: var(--warn); }
+  .pill.Revert { background: rgba(248, 113, 113, 0.18); color: var(--bad); }
   .row { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
-  .row .name { flex: 1; }
-  .row .num { color: var(--muted); font-variant-numeric: tabular-nums; }
-  .bar { height: 4px; background: #1f242e; border-radius: 2px; overflow: hidden;
-         margin-top: 4px; }
-  .bar .fill { height: 100%; background: var(--accent); }
-  .warning { background: #2a1f0a; color: var(--warn); padding: 8px 12px;
-             border-radius: 4px; font-size: 12px; margin-top: 12px;
+  .row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .num { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .row .name a { color: var(--text); text-decoration: none; }
+  .row .name a:hover { color: var(--accent); }
+  .bar { height: 6px; background: var(--bar-bg); border-radius: 3px; overflow: hidden;
+         margin-top: 4px; flex: 0 0 80px; }
+  .bar .fill { height: 100%; background: var(--accent); transition: width 0.3s; }
+  .bar .fill.good { background: var(--good); }
+  .bar .fill.bad { background: var(--bad); }
+  .warning { background: rgba(251, 191, 36, 0.10); color: var(--warn);
+             padding: 8px 12px; border-radius: 4px; font-size: 12px; margin-top: 12px;
              border-left: 3px solid var(--warn); }
-  .err { color: var(--bad); font-size: 12px; }
+  .err { color: var(--bad); font-size: 12px; padding: 8px;
+         background: rgba(248, 113, 113, 0.10); border-radius: 4px; }
+  .err button { float: right; background: transparent; border: 1px solid var(--bad);
+                color: var(--bad); border-radius: 3px; cursor: pointer; padding: 1px 6px; font-size: 10px; }
+  .empty { color: var(--muted); font-size: 12px; text-align: center; padding: 32px 16px;
+           border: 1px dashed var(--border); border-radius: 4px; margin-top: 8px; }
+  .empty code { background: var(--bar-bg); padding: 1px 6px; border-radius: 3px; font-size: 11px; }
+  /* Loading skeletons */
+  .skel { background: linear-gradient(90deg, var(--bar-bg) 0%, var(--border) 50%, var(--bar-bg) 100%);
+          background-size: 200% 100%; animation: shimmer 1.4s infinite linear;
+          height: 14px; border-radius: 3px; margin: 8px 0; }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  /* Toast */
+  .toast { position: fixed; bottom: 24px; right: 24px; padding: 10px 16px;
+           background: var(--card); border: 1px solid var(--border); border-radius: 6px;
+           box-shadow: 0 4px 16px rgba(0,0,0,0.3); font-size: 13px; max-width: 360px;
+           opacity: 0; transform: translateY(8px); transition: all 0.2s;
+           pointer-events: none; }
+  .toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  .toast.err { border-color: var(--bad); color: var(--bad); }
+  .toast.ok { border-color: var(--good); color: var(--good); }
   footer { margin-top: 32px; color: var(--muted); font-size: 11px; text-align: center; }
+  footer a { color: var(--accent); }
+  details { margin-top: 8px; }
+  details summary { color: var(--muted); cursor: pointer; font-size: 11px; }
+  details code { background: var(--bar-bg); padding: 1px 6px; border-radius: 3px;
+                 font-size: 11px; word-break: break-all; }
 </style>
 </head>
 <body>
 <div id="app">
-  <h1>Ome365 v1.1 · Team Brain Cockpit</h1>
+  <h1>
+    Ome365 · Team Brain Cockpit
+    <span class="badge">v1.1.0</span>
+  </h1>
   <p class="lead">
     File-first · 4 cards backed by Decisions / Trace / Skills / Eval router.
     All scores are <em>resource-allocation hints</em>, not HR decisions.
+    See <a href="/docs/policies/EVAL_USAGE_POLICY.md">eval usage policy</a>.
   </p>
 
   <div class="toolbar">
-    <label>actor: <input v-model="actor" @change="loadAll" size="12"></label>
+    <label>actor:
+      <select v-model="actor" @change="loadAll">
+        <option v-for="a in actors" :key="a" :value="a">{{ a }}</option>
+      </select>
+    </label>
     <label>window:
       <select v-model.number="window_days" @change="loadAll">
         <option :value="7">7 days</option>
         <option :value="30">30 days</option>
         <option :value="90">90 days</option>
+        <option :value="180">180 days</option>
         <option :value="365">365 days</option>
       </select>
     </label>
@@ -88,94 +145,158 @@
         <option value="mixed">mixed</option>
       </select>
     </label>
-    <span style="color: var(--muted); font-size:11px">preset 仅切换权重显示，源数据不变</span>
+    <span class="spacer"></span>
+    <span class="ago" v-if="lastLoaded">updated {{ ago }}s ago</span>
+    <button @click="loadAll" :disabled="loading">{{ loading ? '…' : '↻ refresh' }}</button>
+    <button @click="toggleTheme">{{ theme === 'dark' ? '☀' : '☾' }}</button>
   </div>
 
   <div class="grid">
 
-    <!-- 1. Decisions card -->
+    <!-- ① Decisions -->
     <div class="card">
-      <h2>① Decisions</h2>
+      <h2>
+        ① Decisions
+        <span class="actions">
+          <button @click="exportCsv('decisions')" title="export decisions to CSV">CSV</button>
+          <button @click="copyCurl('/api/decision/list')" title="copy curl">curl</button>
+        </span>
+      </h2>
       <div class="sub">8-step file-first decisions · supersede + value_anchors</div>
-      <div v-if="decisions.err" class="err">{{ decisions.err }}</div>
-      <div v-else-if="!decisions.list.length" class="sub">No decisions in vault.</div>
+
+      <div v-if="decisions.loading" class="skel" style="height: 80px"></div>
+      <div v-else-if="decisions.err" class="err">
+        <button @click="reload('decisions')">retry</button>
+        {{ decisions.err }}
+      </div>
+      <div v-else-if="!decisions.list.length" class="empty">
+        No decisions yet · create your first with<br>
+        <code>./ome365 decision new "Pick our agent"</code>
+      </div>
       <div v-else>
         <div class="stat"><span class="k">total</span><span class="v">{{ decisions.list.length }}</span></div>
         <div class="stat"><span class="k">closed</span><span class="v">{{ decisions.closed }}</span></div>
         <div class="stat"><span class="k">open</span><span class="v">{{ decisions.open }}</span></div>
-        <div style="margin-top:10px">
-          <div class="sub">recent 5</div>
-          <div class="row" v-for="d in decisions.list.slice(0,5)" :key="d.id">
-            <span class="name">{{ d.id }}</span>
-            <span v-for="a in (d.value_anchors||[])" :key="a" :class="['pill', a]">{{ a }}</span>
+        <div style="margin-top: 12px">
+          <div class="sub">recent {{ Math.min(decisions.list.length, 8) }}</div>
+          <div class="row" v-for="d in decisions.list.slice(0, 8)" :key="d.id">
+            <span class="name" :title="d.id">{{ d.id }}</span>
+            <span v-for="a in (d.value_anchors || [])" :key="a" :class="['pill', a]">{{ a }}</span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 2. Skills card -->
+    <!-- ② Skills -->
     <div class="card">
-      <h2>② Skills · Ecosystem</h2>
+      <h2>
+        ② Skills · Ecosystem
+        <span class="actions">
+          <button @click="copyCurl('/api/eval/skills')" title="copy curl">curl</button>
+        </span>
+      </h2>
       <div class="sub">Anthropic SKILL.md spec · authored, adopters from Trace</div>
-      <div v-if="skills.err" class="err">{{ skills.err }}</div>
+
+      <div v-if="skills.loading" class="skel" style="height: 60px"></div>
+      <div v-else-if="skills.err" class="err">
+        <button @click="reload('skills')">retry</button>
+        {{ skills.err }}
+      </div>
+      <div v-else-if="!skills.count" class="empty">
+        No SKILL.md yet · seed with <code>cp -r vault.example/Skills/* ./Skills/</code>
+      </div>
       <div v-else>
         <div class="stat"><span class="k">total skills</span><span class="v">{{ skills.count }}</span></div>
         <div class="stat"><span class="k">authors</span><span class="v">{{ skills.authors.size }}</span></div>
-        <div style="margin-top:10px">
+        <div style="margin-top: 12px">
           <div class="row" v-for="s in skills.list" :key="s.name">
-            <span class="name">{{ s.name }}</span>
+            <span class="name" :title="s.name">{{ s.name }}</span>
             <span class="num">@{{ s.author }}</span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 3. FinOps card -->
+    <!-- ③ FinOps -->
     <div class="card">
-      <h2>③ Cost-per-Outcome · FinOps</h2>
+      <h2>
+        ③ Cost-per-Outcome · FinOps
+        <span class="actions">
+          <button @click="copyCurl('/api/eval/finops/dashboard')" title="copy curl">curl</button>
+        </span>
+      </h2>
       <div class="sub">Reads Trace/monthly/*.summary.json + rolling window</div>
-      <div v-if="finops.err" class="err">{{ finops.err }}</div>
-      <div v-else-if="!finops.data">
-        <div class="sub">loading…</div>
+
+      <div v-if="finops.loading" class="skel" style="height: 100px"></div>
+      <div v-else-if="finops.err" class="err">
+        <button @click="reload('finops')">retry</button>
+        {{ finops.err }}
+      </div>
+      <div v-else-if="!finops.data || !Object.keys(finops.data.by_actor || {}).length" class="empty">
+        No traces in this window · widen the window or
+        <code>./ome365 trace add --actor you --cost 0.01</code>
       </div>
       <div v-else>
         <div class="stat" v-for="(s, k) in finops.data.by_scope" :key="k">
-          <span class="k">{{ k.replace(/_/g, ' ') }}</span>
-          <span class="v">${{ s.value.toFixed(3) }} <span style="color:var(--muted);font-size:10px">/ {{ s.unit.split(' ').slice(2).join(' ') }}</span></span>
+          <span class="k">{{ humanScope(k) }}</span>
+          <span class="v">${{ s.value.toFixed(3) }}
+            <span style="color: var(--muted); font-size: 10px">/ {{ s.unit.split(' ').slice(2).join(' ') }}</span>
+          </span>
         </div>
-        <div style="margin-top:12px">
-          <div class="sub">by actor (window)</div>
+        <div style="margin-top: 12px">
+          <div class="sub">by actor (window {{ window_days }}d)</div>
           <div class="row" v-for="(stats, name) in finops.data.by_actor" :key="name">
             <span class="name">{{ name }}</span>
-            <span class="num">{{ stats.requests }} req · ${{ stats.cost_usd.toFixed(3) }}</span>
+            <span class="num">{{ stats.requests }} req · ${{ stats.cost_usd.toFixed(3) }} → ${{ stats.value_usd.toFixed(2) }}</span>
           </div>
         </div>
       </div>
-      <div class="warning" v-if="finops.data?.anti_tokenmaxxing_note">
-        ⚠️ {{ finops.data.anti_tokenmaxxing_note }}
+      <div class="warning" v-if="finops.data && finops.data.anti_tokenmaxxing_note">
+        ⚠ {{ finops.data.anti_tokenmaxxing_note }}
       </div>
     </div>
 
-    <!-- 4. Eval card -->
+    <!-- ④ Member Eval -->
     <div class="card">
-      <h2>④ Member Eval · {{ actor }}</h2>
-      <div class="sub">7-dim · weights from preset «{{ preset }}»</div>
-      <div v-if="eval_.err" class="err">{{ eval_.err }}</div>
-      <div v-else-if="!eval_.data">
-        <div class="sub">loading…</div>
+      <h2>
+        ④ Member Eval · {{ actor }}
+        <span class="actions">
+          <button @click="copyCurl('/api/eval/member/' + actor)" title="copy curl">curl</button>
+        </span>
+      </h2>
+      <div class="sub">7-dim · weights from preset «{{ preset }}» · weighted total</div>
+
+      <div v-if="eval_.loading" class="skel" style="height: 140px"></div>
+      <div v-else-if="eval_.err" class="err">
+        <button @click="reload('eval_')">retry</button>
+        {{ eval_.err }}
+      </div>
+      <div v-else-if="!eval_.data" class="empty">
+        No eval available · check actor exists in vault
       </div>
       <div v-else>
-        <div class="row" v-for="(s, dim) in eval_.data.dimensions" :key="dim">
-          <span class="name">{{ dim.replace('_', ' ') }}</span>
-          <span class="num">
-            <template v-if="s.score !== null">{{ s.score.toFixed(2) }} / 5 (n={{ s.n }})</template>
-            <template v-else>{{ s.reason }} (n={{ s.n }})</template>
-          </span>
+        <div class="stat" v-if="eval_.data.total_score !== null">
+          <span class="k">total · preset {{ preset }}</span>
+          <span class="v">{{ eval_.data.total_score.toFixed(2) }} / 5.00</span>
+        </div>
+        <div v-for="(s, dim) in eval_.data.dimensions" :key="dim" style="padding: 6px 0">
+          <div class="row">
+            <span class="name">{{ humanDim(dim) }}</span>
+            <span class="num" v-if="s.score !== null">{{ s.score.toFixed(2) }} (n={{ s.n }})</span>
+            <span class="num" v-else style="font-style: italic">{{ s.reason }} (n={{ s.n }})</span>
+          </div>
+          <div class="bar" v-if="s.score !== null" style="flex: 1">
+            <div class="fill" :class="scoreClass(s.score)" :style="{ width: (s.score * 20) + '%' }"></div>
+          </div>
         </div>
         <div class="warning">
-          ⚠️ {{ eval_.data.warning }}<br>
-          {{ eval_.data.anti_tokenmaxxing_note }}
+          ⚠ {{ eval_.data.warning }}<br>
+          <small>{{ eval_.data.anti_tokenmaxxing_note }}</small>
         </div>
+        <details>
+          <summary>raw JSON</summary>
+          <code>{{ JSON.stringify(eval_.data, null, 2) }}</code>
+        </details>
       </div>
     </div>
 
@@ -183,42 +304,91 @@
 
   <footer>
     Ome365 v1.1 · Team Brain · GDPR Art. 22 + PIPL §13/§24 enforced ·
-    <a style="color:var(--accent)" href="/">back to main cockpit</a>
+    <a href="/docs/TEAM_ONBOARDING.md">5-min onboarding</a> ·
+    <a href="/">main cockpit</a> ·
+    <a href="/.well-known/agent-card.json">agent-card</a>
   </footer>
+
+  <div class="toast" :class="[toast.kind, { show: toast.show }]" @click="toast.show = false">
+    {{ toast.text }}
+  </div>
 </div>
 
 <script type="module">
-import { createApp, reactive, onMounted } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.prod.js';
+import { createApp, reactive, computed, onMounted, onUnmounted } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.prod.js';
 
-// 5 role preset weights (client-side display hint · server source-of-truth in eval-config.yml)
 const PRESET_WEIGHTS = {
-  engineer: { delivery:0.15, cost_per_outcome:0.15, quality:0.15, judgment:0.10, ecosystem:0.20, revenue_per_workflow:0.15, learning:0.10 },
-  pm:       { delivery:0.20, cost_per_outcome:0.10, quality:0.10, judgment:0.20, ecosystem:0.15, revenue_per_workflow:0.15, learning:0.10 },
-  sales:    { delivery:0.15, cost_per_outcome:0.10, quality:0.10, judgment:0.15, ecosystem:0.10, revenue_per_workflow:0.30, learning:0.10 },
+  engineer: { delivery:0.20, cost_per_outcome:0.15, quality:0.20, judgment:0.15, ecosystem:0.10, revenue_per_workflow:0.10, learning:0.10 },
+  pm:       { delivery:0.15, cost_per_outcome:0.10, quality:0.10, judgment:0.20, ecosystem:0.20, revenue_per_workflow:0.15, learning:0.10 },
+  sales:    { delivery:0.10, cost_per_outcome:0.10, quality:0.10, judgment:0.10, ecosystem:0.10, revenue_per_workflow:0.40, learning:0.10 },
   ops:      { delivery:0.25, cost_per_outcome:0.20, quality:0.20, judgment:0.10, ecosystem:0.05, revenue_per_workflow:0.10, learning:0.10 },
   mixed:    { delivery:0.15, cost_per_outcome:0.15, quality:0.15, judgment:0.10, ecosystem:0.20, revenue_per_workflow:0.15, learning:0.10 },
 };
 
+const SCOPE_LABEL = {
+  cost_per_resolved_decision: "cost / decision",
+  human_equivalent_hourly: "cost / hour",
+  revenue_per_workflow: "revenue / workflow",
+};
+
+const DIM_LABEL = {
+  D1_delivery: "D1 delivery",
+  D2_cost_per_outcome: "D2 cost-per-outcome",
+  D3_quality: "D3 quality",
+  D4_judgment: "D4 judgment",
+  D5_ecosystem: "D5 ecosystem",
+  D6_revenue_per_workflow: "D6 revenue",
+  D7_learning: "D7 learning",
+};
+
 createApp({
   setup() {
+    const initialActor = new URL(location).searchParams.get('actor') || localStorage.getItem('ome365_actor') || 'alice';
+    const initialWindow = +(new URL(location).searchParams.get('window_days') || localStorage.getItem('ome365_window') || 90);
+    const initialTheme = localStorage.getItem('ome365_theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', initialTheme);
+
     const state = reactive({
-      actor: 'alice',
-      window_days: 365,
-      preset: 'engineer',
-      decisions: { list: [], closed: 0, open: 0, err: null },
-      skills:    { list: [], count: 0, authors: new Set(), err: null },
-      finops:    { data: null, err: null },
-      eval_:     { data: null, err: null },
+      actor: initialActor,
+      actors: ['alice', 'bob', 'carol', 'dan', 'erin'],
+      window_days: initialWindow,
+      preset: localStorage.getItem('ome365_preset') || 'engineer',
+      theme: initialTheme,
+      loading: false,
+      lastLoaded: null,
+      now: Date.now(),
+      decisions: { loading: true, list: [], closed: 0, open: 0, err: null },
+      skills:    { loading: true, list: [], count: 0, authors: new Set(), err: null },
+      finops:    { loading: true, data: null, err: null },
+      eval_:     { loading: true, data: null, err: null },
+      toast:     { show: false, kind: 'ok', text: '', timer: null },
     });
+
+    const ago = computed(() => state.lastLoaded ? Math.floor((state.now - state.lastLoaded) / 1000) : 0);
+
+    function showToast(text, kind = 'ok') {
+      if (state.toast.timer) clearTimeout(state.toast.timer);
+      state.toast.text = text; state.toast.kind = kind; state.toast.show = true;
+      state.toast.timer = setTimeout(() => { state.toast.show = false; }, 2400);
+    }
+
+    function toggleTheme() {
+      state.theme = state.theme === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', state.theme);
+      localStorage.setItem('ome365_theme', state.theme);
+    }
 
     async function fetchJson(url) {
       const r = await fetch(url);
-      if (!r.ok) throw new Error(`${url} → ${r.status}`);
+      if (!r.ok) {
+        const body = await r.text().catch(() => '');
+        throw new Error(`${url} → ${r.status}${body ? ': ' + body.slice(0, 120) : ''}`);
+      }
       return r.json();
     }
 
-    async function loadAll() {
-      // Decisions
+    async function loadDecisions() {
+      state.decisions.loading = true;
       try {
         const j = await fetchJson('/api/decision/list');
         state.decisions.list = j.decisions || [];
@@ -226,8 +396,11 @@ createApp({
         state.decisions.open   = state.decisions.list.filter(d => d.status === 'open').length;
         state.decisions.err = null;
       } catch (e) { state.decisions.err = e.message; }
+      finally { state.decisions.loading = false; }
+    }
 
-      // Skills
+    async function loadSkills() {
+      state.skills.loading = true;
       try {
         const j = await fetchJson('/api/eval/skills');
         state.skills.list = j.skills || [];
@@ -235,23 +408,98 @@ createApp({
         state.skills.authors = new Set(state.skills.list.map(s => s.author));
         state.skills.err = null;
       } catch (e) { state.skills.err = e.message; }
+      finally { state.skills.loading = false; }
+    }
 
-      // FinOps dashboard
+    async function loadFinops() {
+      state.finops.loading = true;
       try {
         state.finops.data = await fetchJson(`/api/eval/finops/dashboard?since_days=${state.window_days}`);
         state.finops.err = null;
       } catch (e) { state.finops.err = e.message; state.finops.data = null; }
+      finally { state.finops.loading = false; }
+    }
 
-      // Eval member
+    async function loadEval() {
+      state.eval_.loading = true;
       try {
         state.eval_.data = await fetchJson(`/api/eval/member/${encodeURIComponent(state.actor)}?window_days=${state.window_days}`);
         state.eval_.err = null;
       } catch (e) { state.eval_.err = e.message; state.eval_.data = null; }
+      finally { state.eval_.loading = false; }
     }
 
-    onMounted(loadAll);
-    return { ...state, loadAll };
-  }
+    async function loadAll() {
+      state.loading = true;
+      // Persist user prefs
+      localStorage.setItem('ome365_actor', state.actor);
+      localStorage.setItem('ome365_window', state.window_days);
+      localStorage.setItem('ome365_preset', state.preset);
+      // Update URL for shareable link
+      const url = new URL(location);
+      url.searchParams.set('actor', state.actor);
+      url.searchParams.set('window_days', state.window_days);
+      history.replaceState(null, '', url);
+
+      await Promise.all([loadDecisions(), loadSkills(), loadFinops(), loadEval()]);
+      state.lastLoaded = Date.now();
+      state.loading = false;
+    }
+
+    function reload(which) {
+      if (which === 'decisions') return loadDecisions();
+      if (which === 'skills')    return loadSkills();
+      if (which === 'finops')    return loadFinops();
+      if (which === 'eval_')     return loadEval();
+    }
+
+    function exportCsv(which) {
+      if (which === 'decisions' && state.decisions.list.length) {
+        const rows = [['id', 'owner', 'status', 'value_anchors', 'closed_at']];
+        for (const d of state.decisions.list) {
+          rows.push([d.id, d.owner, d.status, (d.value_anchors || []).join('|'), d.closed_at || '']);
+        }
+        const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `ome365-decisions-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        showToast(`exported ${state.decisions.list.length} decisions`, 'ok');
+      }
+    }
+
+    function copyCurl(path) {
+      const url = `${location.origin}${path}`;
+      const cmd = `curl -s ${url} | jq`;
+      navigator.clipboard.writeText(cmd).then(
+        () => showToast(`copied: ${cmd}`, 'ok'),
+        () => showToast('clipboard denied', 'err'),
+      );
+    }
+
+    function humanScope(k) { return SCOPE_LABEL[k] || k.replace(/_/g, ' '); }
+    function humanDim(d) { return DIM_LABEL[d] || d.replace(/_/g, ' '); }
+    function scoreClass(s) {
+      if (s >= 4) return 'good';
+      if (s < 2) return 'bad';
+      return '';
+    }
+
+    onMounted(() => {
+      loadAll();
+      const tickHandle = setInterval(() => { state.now = Date.now(); }, 1000);
+      onUnmounted(() => clearInterval(tickHandle));
+    });
+
+    return {
+      ...state,
+      ago,
+      loadAll, reload, exportCsv, copyCurl, toggleTheme,
+      humanScope, humanDim, scoreClass,
+      JSON,
+    };
+  },
 }).mount('#app');
 </script>
 </body>
