@@ -30,6 +30,9 @@
 !/Knowledge/.sample/
 !/Knowledge/README.md
 
+# ── vault.example/ generated artifacts (wiki update output) ──
+vault.example/Knowledge/L2-distilled/
+
 # ── Sensitive root files ──
 /agent-plan.md
 /agent-mem-evo-need.png
