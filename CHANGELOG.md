@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.1.8 — Full v1.1 lifecycle integration test (2026-05-09)
+
+### What v1.1.8 ships
+
+- **`tests/test_v1_1_integration.py`** · 2 new tests that exercise every
+  v1.1 module end-to-end in one realistic scenario:
+  - **Test 1: full lifecycle** — RBAC enforcement → 5 decisions create+close
+    → audit log fired → trace sync+async → wiki update → wiki query → eval
+    7-dim → team_distribution cache → 3 finops scopes → /metrics render →
+    ed25519 sign+verify → archive → backup → restore → verify intact
+  - **Test 2: HTTP routes** — same flow via FastAPI TestClient ·
+    `/api/decision/list`, `/api/eval/whoami`, `/api/eval/role/alice`,
+    `/api/eval/finops/dashboard`, `/.well-known/agent-card.json` (signed)
+- This catches integration regressions that 12 module-level test suites
+  miss: a wiki update breaking audit log; a backup tarball excluding
+  Audit/; a sign payload mutation breaking verification.
+
+### Quality gates
+
+- 443 pytest tests · 100% pass (was 441)
+- 0 PII hits · 267 tracked files
+- Integration smoke: 12 modules cooperate cleanly in one tmp_path
+
+---
+
 ## v1.1.7 — ARCHITECTURE v1.1 + install.sh hints + Show HN v0.3 (2026-05-09)
 
 ### What v1.1.7 ships
