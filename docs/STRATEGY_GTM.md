@@ -9,7 +9,7 @@
 > - **Sub**: Your AI follows the employee, not the employer.
 > - **5 真空带 V1-V5** 已验证（V1 跨公司可携带 · V2 file-first 多租户 + 自学习 · V3 三层并存 · V4 决策蒸馏 · V5 跨企业一体协同 = Ome365 王牌主战场）
 > - **协议分层**: AGPLv3 OSS + BSL 1.1 Enterprise（防 hyperscaler 白嫖 · MongoDB/Elastic/Sentry 模式）
-> - **5 灯塔客户**: example-corp集团 + 连锁零售 + 头部寿险 + 一线 PE + 工业制造（vs Glean 真空带）
+> - **5 灯塔客户行业**: 不动产服务 + 连锁零售 + 头部寿险 + 一线 PE + 工业制造（vs Glean 真空带）
 > - 完整 v1.0 战略 见 [`../README.md`](../README.md) + 90-day roadmap
 
 ---
