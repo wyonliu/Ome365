@@ -80,6 +80,10 @@ notify_webhooks.json
 # ── Truthguard live truth.yml（含真实人名/组织 PII 字典 · 只推 truth.sample.yml）──
 skills/truthguard/truth.yml
 
+# ── /ppt-html skill: core OK · example-brand theme + private examples 不进 ──
+skills/ppt-html/templates/example-brand/
+skills/ppt-html/examples/product-matrix.md
+
 # ── Internal handoff briefs / 内部设计文档（不进 public）──
 docs/WORK_ASSISTANT_BRIEF.md
 docs/SHARE_PASSWORD_UX_DESIGN.md

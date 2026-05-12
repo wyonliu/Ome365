@@ -1,5 +1,47 @@
 # Changelog
 
+## v1.1.42 — /ppt-html skill: Markdown → self-contained HTML deck (2026-05-12)
+
+### What v1.1.42 ships
+
+New built-in skill at `skills/ppt-html/` — a deterministic Markdown-to-HTML
+deck renderer. The output is a single self-contained `.html` file: inline CSS,
+inline JS, no CDN, no build step, no webfont fetches. Open in any browser and
+present. Print to PDF with `P`. Drop into any static host.
+
+**Why now**: LLM-assisted slide authoring outputs Markdown — the right source
+format (diffable, regenerable). Markdown alone doesn't *present*; `/ppt-html`
+is the rendering layer that turns Markdown deck specs into something you'd
+actually show a customer.
+
+**Surface**:
+
+- `skills/ppt-html/render.py` · theme-agnostic CLI
+  (`python3 render.py deck.md -o out.html --theme default`)
+- `skills/ppt-html/SKILL.md` · Anthropic-spec compatible frontmatter (name +
+  description), DSL documented
+- `skills/ppt-html/templates/default/` · brand-neutral starter theme
+  (slate/indigo, system fonts, 8 layouts: cover/agenda/section/bullets/
+  two-col/matrix/kpi/close)
+- `skills/ppt-html/examples/sample-deck.md` · 11-slide demo covering all
+  8 layouts (generic Acme Corp content)
+- `tests/test_ppt_html.py` · 9 new tests (frontmatter compliance, no-PII leak
+  guard, smoke render, self-contained check, CLI behavior)
+
+**Theme architecture**: each theme is `templates/<name>/` with
+`engine.html + layouts.py + (optional) logo.png`. Private corporate themes go
+into additional theme directories that are `.gitignore`d — same code/data
+separation pattern we use for `cockpit_config.json` and `truth.yml`.
+
+**Decision**: [`vault.example/Decisions/2026-05-12-ppt-html-skill.md`](vault.example/Decisions/2026-05-12-ppt-html-skill.md)
+
+### Test status
+
+- 533/533 tests green (was 524 + 9 new in `test_ppt_html.py`)
+- PII scanner: 0 hits clean
+
+---
+
 ## v1.1.41 — agent-card capabilities catch up with v1.1.24-37 CLIs (2026-05-09)
 
 ### What v1.1.41 ships
