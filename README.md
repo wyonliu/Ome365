@@ -137,6 +137,7 @@ curl -fsS http://localhost:3650/.well-known/agent-card.json | jq .name  # → "O
 | Multi-user share | argon2 + 3-word codes | workspaces | single-vault | — | ✅ |
 | Visual cockpit / dashboards | config-driven | databases | plugins | graph | — |
 | Data-hygiene lint (truthguard) | ✅ | — | plugins | — | — |
+| Markdown → self-contained HTML deck (ppt-html) | ✅ | — | plugins | plugins | — |
 | No-build frontend | ✅ Vue CDN | — | n/a | n/a | — |
 | Cross-meeting entity graph (Hike) | ✅ v0.1 / v2 alpha | — | — | partial | — |
 | License | Apache 2.0 | proprietary | proprietary | AGPL | proprietary |
@@ -290,6 +291,22 @@ docker compose up -d
 
 > 反思质量与模型强相关。DeepSeek Chat 性价比最高；Claude Sonnet 质量最好。
 
+## Built-in skills · `skills/`
+
+Three opinionated CLI skills ship with Ome365 — each is a self-contained
+Python tool with its own `SKILL.md` (Anthropic Agent Skills spec compatible)
+plus tests in `tests/`. Use them standalone or wire them into your CI.
+
+| Skill | What it does | Public theme / scope |
+|---|---|---|
+| [`skills/ppt-html`](skills/ppt-html/SKILL.md) | Markdown → single self-contained HTML deck (inline CSS+JS · zero CDN · works offline) | Brand-neutral starter theme + theme-plugin architecture |
+| [`skills/truthguard`](skills/truthguard/SKILL.md) | Data-hygiene lint (PII / hallucinated names / cross-doc consistency) for vault content | Sample `truth.sample.yml` · users supply their own canonical dictionary |
+| [`skills/ticnote-clean`](skills/ticnote-clean/SKILL.md) | Interview / call-transcript cleaner (drops UI residue · normalizes speaker blocks) | Self-contained · operates on stdin/stdout |
+
+Each skill is fork-friendly: `cp -r skills/<name> ../my-org-skills/<name>` and
+edit. The `templates/`, `truth.yml`, blocklist files etc. are all designed to be
+overridden locally without modifying the public surface.
+
 ## 目录结构
 
 ```
@@ -304,6 +321,10 @@ Ome365/
 │   └── *.md                 # 手动记忆文件
 ├── Decisions/               # 决策日志
 ├── Contacts/people/         # 联系人档案
+├── skills/                  # Built-in CLI skills (ppt-html · truthguard · ticnote-clean)
+├── tests/                   # Pytest suite (533+ tests · CI green)
+├── docs/                    # Architecture / strategy / policy docs
+├── vault.example/           # Sample multi-tenant vault (Decisions / Skills demo)
 ├── 000-365-PLAN.md          # 年度计划
 └── CLAUDE.md                # AI 集成桥接
 ```

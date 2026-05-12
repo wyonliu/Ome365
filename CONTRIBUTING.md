@@ -203,7 +203,7 @@ We label issues automatically (Claude AI Reviewer GitHub Action triages on file)
 
 - **Priority**: `p0` (security/data-loss) · `p1` (regression/major-feature) · `p2` (nice-to-have)
 - **Type**: `bug` · `feature` · `docs` · `question` · `discussion`
-- **Area**: `area:hike` · `area:cockpit` · `area:share` · `area:auth` · `area:ticnote` · `area:plan` · `area:memory` · `area:mcp` · `area:cognition-loop`
+- **Area**: `area:hike` · `area:cockpit` · `area:share` · `area:auth` · `area:ticnote` · `area:plan` · `area:memory` · `area:mcp` · `area:cognition-loop` · `area:skills` (ppt-html / truthguard / ticnote-clean)
 - **Status**: `good-first-issue` · `help-wanted` · `wontfix` · `needs-info` · `needs-triage`
 
 ## Contact
