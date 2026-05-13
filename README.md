@@ -21,9 +21,9 @@
 
 **Ome365** is **the file-first vault for the Agentic Web** — your team's `SKILL.md` is **spec-compatible** with 32 tools that adopted [Anthropic's open Agent Skills standard](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills) (Claude Code · Codex · Cursor · Gemini CLI · JetBrains Junie · AWS Kiro · Block Goose · etc). **Runtime-tested** in CI on 3-4 headless CLIs (Claude Code · Codex CLI · Gemini CLI · Continue.dev) — IDE hosts are community-verified, not CI-gated (we don't pretend to spin up GUIs in GitHub Actions). Multi-tenant Markdown vault · self-learning **Hike** (Hive Intelligence Knowledge Engine · L4 Wiki Maintainer follows [Karpathy's LLM Wiki Pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)) · cross-company portability via W3C DID. FastAPI + Vue 3 CDN (zero build).
 
-> **🚀 v1.1.x ships team-brain + productization (2026-05-09).**
+> **🚀 v1.1.x ships team-brain + productization** · latest: **v1.1.42 (2026-05-12)** · adds `/ppt-html` skill
 >
-> 12 modules · 469 pytest tests · 0 PII · ed25519-signed agent-card · RBAC ·
+> 12 modules · 533 pytest tests · 0 PII · ed25519-signed agent-card · RBAC ·
 > i18n · async trace · perf 194× cache speedup proven · 21 micro-releases.
 >
 > Quick tour:
