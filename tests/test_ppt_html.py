@@ -49,11 +49,23 @@ def test_skill_md_frontmatter_anthropic_compatible():
 
 
 def test_skill_md_no_pii_leak():
-    """SKILL.md must not leak any of the project author's private brand/people refs."""
-    text = SKILL_MD.read_text("utf-8")
-    banned = ["example-brand", "example-corp", "example-org", "Alice Smith", "Alice Smith"]
-    for b in banned:
-        assert b.lower() not in text.lower(), f"SKILL.md leaks banned token: {b!r}"
+    """SKILL.md must not leak any fork-local brand/people refs.
+
+    Banlist lives at .ppt-html-banlist (gitignored, one regex per line). Fork users
+    add their own org-private terms. Empty / missing file → test passes vacuously.
+    """
+    banlist_path = ROOT / ".ppt-html-banlist"
+    if not banlist_path.exists():
+        pytest.skip("no local .ppt-html-banlist configured (fork-local guard, opt-in)")
+    text = SKILL_MD.read_text("utf-8").lower()
+    failures = []
+    for line in banlist_path.read_text("utf-8").splitlines():
+        token = line.strip()
+        if not token or token.startswith("#"):
+            continue
+        if token.lower() in text:
+            failures.append(token)
+    assert not failures, f"SKILL.md leaks banned tokens: {failures}"
 
 
 def test_default_theme_exists():
