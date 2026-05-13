@@ -26,7 +26,7 @@ from ome365_eval import (
 )
 
 
-# Valid value_anchors (5-08 example-vendor范式 · A4S §3.2.3)
+# Valid value_anchors (5-08 industry pattern · A4S §3.2.3)
 VALID_ANCHORS = {"P", "XL", "L", "M", "维护性", "Revert"}
 
 

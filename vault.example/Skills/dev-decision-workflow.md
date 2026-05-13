@@ -1,7 +1,7 @@
 ---
 name: dev-decision-workflow
 description: |
-  Force "create-decision-before-code" workflow per Kevin SKILL spec (example-vendor 2026-04 范式).
+  Force "create-decision-before-code" workflow per Kevin SKILL spec (industry 2026-04 pattern).
   Every code commit must cite a Decision via [decision: <id>] in commit message.
 allowed-tools: [Bash, Write]
 license: Apache-2.0
@@ -16,7 +16,7 @@ ome365:
 
 # Skill: dev-decision-workflow (Kevin 范式)
 
-> "先建文件再改代码" — example-vendor Kevin SKILL 规范，by way of A4S v2.0 §6.3.
+> "先建文件再改代码" — industry Kevin SKILL convention, by way of A4S v2.0 §6.3.
 
 ## When to use
 

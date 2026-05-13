@@ -129,7 +129,7 @@ def test_valid_anchors_set():
     assert "维护性" in VALID_ANCHORS
     assert "Revert" in VALID_ANCHORS
     assert "Bogus" not in VALID_ANCHORS
-    # 6 anchors total (example-vendor范式)
+    # 6 anchors total (industry pattern)
     assert len(VALID_ANCHORS) == 6
 
 
